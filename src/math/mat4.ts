@@ -560,6 +560,15 @@ export class Mat4 {
     return out;
   }
 
+  static compose(
+    translation: Vec3,
+    rotation: Quat,
+    scale: Vec3,
+    out?: Mat4,
+  ): Mat4 {
+    return Mat4.fromRotationTranslationScale(rotation, translation, scale, out);
+  }
+
   static fromRotationTranslationScaleOrigin(
     q: Quat,
     v: Vec3,
