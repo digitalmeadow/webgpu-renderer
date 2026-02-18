@@ -3,6 +3,8 @@ export class GeometryBuffer {
   albedoView: GPUTextureView;
   normalTexture: GPUTexture;
   normalView: GPUTextureView;
+  metalRoughnessTexture: GPUTexture;
+  metalRoughnessView: GPUTextureView;
   depthTexture: GPUTexture;
   depthView: GPUTextureView;
   sampler: GPUSampler;
@@ -27,6 +29,15 @@ export class GeometryBuffer {
         GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.normalView = this.normalTexture.createView();
+
+    this.metalRoughnessTexture = device.createTexture({
+      label: "G-Buffer Metal/Roughness Texture",
+      size: [width, height],
+      format: "rgba8unorm",
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    this.metalRoughnessView = this.metalRoughnessTexture.createView();
 
     this.depthTexture = device.createTexture({
       label: "G-Buffer Depth Texture",
@@ -67,6 +78,11 @@ export class GeometryBuffer {
         {
           binding: 3,
           visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: "float", viewDimension: "2d" },
+        },
+        {
+          binding: 4,
+          visibility: GPUShaderStage.FRAGMENT,
           texture: { sampleType: "depth", viewDimension: "2d" },
         },
       ],
@@ -90,6 +106,10 @@ export class GeometryBuffer {
         },
         {
           binding: 3,
+          resource: this.metalRoughnessView,
+        },
+        {
+          binding: 4,
           resource: this.depthView,
         },
       ],
@@ -99,6 +119,7 @@ export class GeometryBuffer {
   resize(device: GPUDevice, width: number, height: number): void {
     this.albedoTexture.destroy();
     this.normalTexture.destroy();
+    this.metalRoughnessTexture.destroy();
     this.depthTexture.destroy();
 
     this.albedoTexture = device.createTexture({
@@ -118,6 +139,15 @@ export class GeometryBuffer {
         GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.normalView = this.normalTexture.createView();
+
+    this.metalRoughnessTexture = device.createTexture({
+      label: "G-Buffer Metal/Roughness Texture",
+      size: [width, height],
+      format: "rgba8unorm",
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    this.metalRoughnessView = this.metalRoughnessTexture.createView();
 
     this.depthTexture = device.createTexture({
       label: "G-Buffer Depth Texture",
@@ -146,6 +176,10 @@ export class GeometryBuffer {
         },
         {
           binding: 3,
+          resource: this.metalRoughnessView,
+        },
+        {
+          binding: 4,
           resource: this.depthView,
         },
       ],

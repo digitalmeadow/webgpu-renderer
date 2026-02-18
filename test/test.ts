@@ -5,7 +5,7 @@ import {
   Camera,
   Time,
   Cube,
-  Material,
+  MaterialStandard,
   Texture,
 } from "../src/index";
 
@@ -28,11 +28,15 @@ async function main() {
 
   const plane = new Cube(device);
 
-  const texture = new Texture(
+  const albedoTexture = new Texture(
     "https://upload.wikimedia.org/wikipedia/commons/b/b6/Image_created_with_a_mobile_phone.png",
   );
-  await materialManager.loadMaterial(new Material(texture));
-  plane.material = new Material(texture);
+
+  const material = new MaterialStandard("standard-material", {
+    albedoTexture,
+  });
+  await materialManager.loadMaterial(material);
+  plane.material = material;
 
   scene.add(plane);
 

@@ -6,7 +6,6 @@ import { MaterialManager } from "./MaterialManager";
 
 export class GeometryPass {
   private pipeline: GPURenderPipeline;
-  public materialBindGroupLayout: GPUBindGroupLayout;
   public cameraBindGroupLayout: GPUBindGroupLayout;
 
   constructor(
@@ -40,34 +39,14 @@ export class GeometryPass {
       ],
     });
 
-    this.materialBindGroupLayout = device.createBindGroupLayout({
-      label: "Material Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.FRAGMENT,
-          texture: { sampleType: "float", viewDimension: "2d" },
-        },
-        {
-          binding: 1,
-          visibility: GPUShaderStage.FRAGMENT,
-          sampler: { type: "filtering" },
-        },
-      ],
-    });
-
-    materialManager.setMaterialBindGroupLayout(this.materialBindGroupLayout);
-
-    const bindGroupLayouts: GPUBindGroupLayout[] = [
-      this.cameraBindGroupLayout,
-      meshBindGroupLayout,
-      this.materialBindGroupLayout,
-    ];
-
     this.pipeline = device.createRenderPipeline({
       label: "Geometry Pass Pipeline",
       layout: device.createPipelineLayout({
-        bindGroupLayouts: bindGroupLayouts,
+        bindGroupLayouts: [
+          this.cameraBindGroupLayout,
+          meshBindGroupLayout,
+          materialManager.materialBindGroupLayout,
+        ],
       }),
       vertex: {
         module: shaderModule,
@@ -78,12 +57,9 @@ export class GeometryPass {
         module: shaderModule,
         entryPoint: "fs_main",
         targets: [
-          {
-            format: "rgba8unorm",
-          },
-          {
-            format: "rgba16float",
-          },
+          { format: "rgba8unorm" }, // Albedo
+          { format: "rgba16float" }, // Normal
+          { format: "rgba8unorm" }, // Metal/Roughness
         ],
       },
       primitive: {
@@ -117,6 +93,12 @@ export class GeometryPass {
         },
         {
           view: geometryBuffer.normalView,
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          loadOp: "clear",
+          storeOp: "store",
+        },
+        {
+          view: geometryBuffer.metalRoughnessView,
           clearValue: { r: 0, g: 0, b: 0, a: 0 },
           loadOp: "clear",
           storeOp: "store",
