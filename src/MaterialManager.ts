@@ -1,7 +1,9 @@
 import { BaseMaterial } from "./materials/BaseMaterial";
 import { MaterialStandard } from "./materials/MaterialStandard";
 import { MaterialCustom } from "./materials/MaterialCustom";
+import { Vertex } from "./Mesh";
 import { Texture } from "./Texture";
+import baseGeometryShader from "./shaders/geometry.wgsl?raw";
 
 export class MaterialManager {
   private device: GPUDevice;
@@ -11,6 +13,9 @@ export class MaterialManager {
   public readonly materialBindGroupLayout: GPUBindGroupLayout;
   private placeholderNormalTexture: GPUTexture;
   private placeholderMetalRoughnessTexture: GPUTexture;
+  private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> =
+    new Map();
+  private baseShader: string;
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -27,6 +32,7 @@ export class MaterialManager {
       0, 255, 0, 255,
     ]); // 0 metal, 1 rough
 
+    this.baseShader = baseGeometryShader;
     this.materialBindGroupLayout = device.createBindGroupLayout({
       label: "Material Bind Group Layout",
       entries: [
@@ -72,6 +78,70 @@ export class MaterialManager {
     return texture;
   }
 
+  getCustomPipeline(
+    material: MaterialCustom,
+    cameraBindGroupLayout: GPUBindGroupLayout,
+    meshBindGroupLayout: GPUBindGroupLayout,
+  ): GPURenderPipeline | null {
+    if (this.customPipelineCache.has(material)) {
+      return this.customPipelineCache.get(material)!;
+    }
+
+    let shader = this.baseShader;
+    if (material.hooks.albedo) {
+      const albedoFunctionRegex =
+        /fn\s+get_albedo_color\s*\([^)]*\)\s*->\s*vec4<f32>\s*\{[^}]*}/;
+      shader = shader.replace(albedoFunctionRegex, material.hooks.albedo);
+    }
+    if (material.hooks.uniforms) {
+      shader = shader.replace(
+        "//--HOOK_PLACEHOLDER_UNIFORMS--//",
+        material.hooks.uniforms,
+      );
+    }
+
+    const shaderModule = this.device.createShaderModule({
+      code: shader,
+    });
+
+    const pipeline = this.device.createRenderPipeline({
+      label: `Custom Material Pipeline: ${material.name}`,
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [
+          cameraBindGroupLayout,
+          meshBindGroupLayout,
+          this.materialBindGroupLayout,
+        ],
+      }),
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vs_main",
+        buffers: [Vertex.getBufferLayout()],
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fs_main",
+        targets: [
+          { format: "rgba8unorm" }, // Albedo
+          { format: "rgba16float" }, // Normal
+          { format: "rgba8unorm" }, // Metal/Roughness
+        ],
+      },
+      primitive: {
+        topology: "triangle-list",
+        cullMode: "back",
+      },
+      depthStencil: {
+        format: "depth32float",
+        depthWriteEnabled: true,
+        depthCompare: "less",
+      },
+    });
+
+    this.customPipelineCache.set(material, pipeline);
+    return pipeline;
+  }
+
   async loadMaterial(material: BaseMaterial): Promise<void> {
     if (material instanceof MaterialStandard) {
       const textures = [
@@ -85,6 +155,8 @@ export class MaterialManager {
           this.createTextureResources(texture);
         }
       }
+    } else if (material instanceof MaterialCustom) {
+      // Future: Handle textures for custom materials if they have any
     }
   }
 

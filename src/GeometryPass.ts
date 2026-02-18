@@ -3,10 +3,13 @@ import { Mesh, Vertex } from "./Mesh";
 import { Camera } from "./Camera";
 import { GeometryBuffer } from "./GeometryBuffer";
 import { MaterialManager } from "./MaterialManager";
+import { MaterialCustom } from "./materials/MaterialCustom";
+import { MaterialStandard } from "./materials/MaterialStandard";
 
 export class GeometryPass {
   private pipeline: GPURenderPipeline;
   public cameraBindGroupLayout: GPUBindGroupLayout;
+  public meshBindGroupLayout: GPUBindGroupLayout;
 
   constructor(
     device: GPUDevice,
@@ -28,7 +31,7 @@ export class GeometryPass {
       ],
     });
 
-    const meshBindGroupLayout = device.createBindGroupLayout({
+    this.meshBindGroupLayout = device.createBindGroupLayout({
       label: "Mesh Bind Group Layout",
       entries: [
         {
@@ -44,7 +47,7 @@ export class GeometryPass {
       layout: device.createPipelineLayout({
         bindGroupLayouts: [
           this.cameraBindGroupLayout,
-          meshBindGroupLayout,
+          this.meshBindGroupLayout,
           materialManager.materialBindGroupLayout,
         ],
       }),
@@ -112,16 +115,37 @@ export class GeometryPass {
       },
     });
 
-    passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, camera.uniforms.bindGroup);
 
+    let currentPipeline: GPURenderPipeline | null = null;
+
     for (const mesh of meshes) {
-      if (!mesh.uniforms) continue;
+      if (!mesh.uniforms || !mesh.material) continue;
+
+      // Determine which pipeline to use
+      let pipelineToUse: GPURenderPipeline | null = null;
+      if (mesh.material instanceof MaterialCustom) {
+        pipelineToUse = materialManager.getCustomPipeline(
+          mesh.material,
+          this.cameraBindGroupLayout,
+          this.meshBindGroupLayout,
+        );
+      } else {
+        pipelineToUse = this.pipeline;
+      }
+
+      if (!pipelineToUse) continue;
+
+      // Set pipeline if it has changed
+      if (pipelineToUse !== currentPipeline) {
+        passEncoder.setPipeline(pipelineToUse);
+        currentPipeline = pipelineToUse;
+      }
 
       mesh.uniforms.update(device, mesh.transform.getWorldMatrix());
       passEncoder.setBindGroup(1, mesh.uniforms.bindGroup);
 
-      if (mesh.material) {
+      if (mesh.material instanceof MaterialStandard) {
         const materialBindGroup = materialManager.getBindGroup(mesh.material);
         if (materialBindGroup) {
           passEncoder.setBindGroup(2, materialBindGroup);
