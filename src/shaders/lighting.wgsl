@@ -55,10 +55,38 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let normal = normal_roughness.rgb;
     let roughness = normal_roughness.a;
 
+    var color = albedo * scene_uniforms.ambient_light_color.rgb;
+
+    // TODO: move to a separate directional light loop
+    let N = normalize(normal);
+    let L = normalize(light_uniforms.lights[0].direction.xyz);
+    let diffuse = max(dot(N, L), 0.0);
+    color += albedo * light_uniforms.lights[0].color.rgb * light_uniforms.lights[0].intensity * diffuse;
+    
     // Simple ambient light
-    let ambient = vec3(1.0, 1.0, 1.0);
-    var color = ambient * albedo;
+    // let ambient = vec3(1.0, 1.0, 1.0);
+    // var color = ambient * albedo;
 
     output.color = vec4<f32>(color, 1.0);
     return output;
 }
+
+struct Light {
+    color: vec4<f32>,
+    direction: vec4<f32>,
+    intensity: f32,
+    light_type: u32,
+    _padding: vec2<f32>,
+};
+
+struct LightUniforms {
+    lights: array<Light, 1>,
+};
+
+@group(2) @binding(0) var<uniform> light_uniforms: LightUniforms;
+
+struct SceneUniforms {
+    ambient_light_color: vec4<f32>,
+}
+
+@group(3) @binding(0) var<uniform> scene_uniforms: SceneUniforms;

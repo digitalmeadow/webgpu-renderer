@@ -182,7 +182,6 @@ export class MaterialManager {
   }
 
   getBindGroup(material: BaseMaterial): GPUBindGroup | null {
-    // TODO: CustomMaterial pipeline generation and caching
     if (this.bindGroupCache.has(material)) {
       return this.bindGroupCache.get(material)!;
     }

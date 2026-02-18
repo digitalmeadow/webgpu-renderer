@@ -11,6 +11,8 @@ export class LightingPass {
     device: GPUDevice,
     geometryBuffer: GeometryBuffer,
     cameraBindGroupLayout: GPUBindGroupLayout,
+    lightBindGroupLayout: GPUBindGroupLayout,
+    sceneBindGroupLayout: GPUBindGroupLayout,
     width: number,
     height: number,
   ) {
@@ -36,6 +38,8 @@ export class LightingPass {
         bindGroupLayouts: [
           geometryBuffer.bindGroupLayout,
           cameraBindGroupLayout,
+          lightBindGroupLayout,
+          sceneBindGroupLayout,
         ],
       }),
       vertex: {
@@ -76,6 +80,8 @@ export class LightingPass {
     encoder: GPUCommandEncoder,
     geometryBuffer: GeometryBuffer,
     camera: Camera,
+    lightBindGroup: GPUBindGroup,
+    sceneBindGroup: GPUBindGroup,
   ): void {
     const passEncoder = encoder.beginRenderPass({
       label: "Lighting Pass",
@@ -92,6 +98,8 @@ export class LightingPass {
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, geometryBuffer.bindGroup);
     passEncoder.setBindGroup(1, camera.uniforms.bindGroup);
+    passEncoder.setBindGroup(2, lightBindGroup);
+    passEncoder.setBindGroup(3, sceneBindGroup);
     passEncoder.draw(3);
     passEncoder.end();
   }

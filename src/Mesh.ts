@@ -1,7 +1,6 @@
-import { Entity } from "./World";
-import { Mat4 } from "./math/mat4";
 import { MeshUniforms } from "./MeshUniforms";
 import { BaseMaterial } from "./materials/BaseMaterial";
+import { Entity } from "./Entity";
 
 export class Vertex {
   static getBufferLayout(): GPUVertexBufferLayout {

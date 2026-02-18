@@ -1,6 +1,7 @@
 export * from "./math";
 export * from "./Time";
 export * from "./Transform";
+export * from "./Entity";
 export * from "./World";
 export * from "./Camera";
 export * from "./MeshUniforms";
@@ -15,3 +16,4 @@ export * from "./materials/MaterialStandard";
 export * from "./materials/MaterialCustom";
 export * from "./Texture";
 export * from "./MaterialManager";
+export * from "./lights";

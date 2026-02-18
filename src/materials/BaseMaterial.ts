@@ -13,6 +13,7 @@ export interface MaterialSpecialization {
 export abstract class BaseMaterial {
   name: string;
   alphaMode: AlphaMode = AlphaMode.Opaque;
+  alphaCutoff: number = 0.5;
   doubleSided: boolean = false;
   specialization: MaterialSpecialization = {};
 

@@ -79,6 +79,12 @@ export class Transform {
     }
   }
 
+  public getForward(): Vec3 {
+    const forward = new Vec3(0, 0, 1);
+    Vec3.transformQuat(forward, this.rotation, forward);
+    return forward;
+  }
+
   getWorldMatrix(): Mat4 {
     return this.worldMatrix;
   }

@@ -1,22 +1,15 @@
 import { Transform } from "./Transform";
+import { Vec3 } from "./math";
 
-export abstract class Entity {
-  name: string;
-  transform: Transform;
-  enabled: boolean = true;
-
-  constructor(name: string = "Entity") {
-    this.name = name;
-    this.transform = new Transform();
-  }
-
-  update(): void {}
-}
+import { Entity } from "./Entity";
+import type { Light } from "./lights";
+import { isLight } from "./lights/Light";
 
 export class Scene {
   name: string;
   root: Transform;
   entities: Entity[] = [];
+  lights: Light[] = [];
 
   constructor(name: string = "Scene") {
     this.name = name;
@@ -26,6 +19,9 @@ export class Scene {
   add(entity: Entity): void {
     this.entities.push(entity);
     this.root.addChild(entity.transform);
+    if (isLight(entity)) {
+      this.lights.push(entity);
+    }
   }
 
   remove(entity: Entity): void {
@@ -33,6 +29,13 @@ export class Scene {
     if (index !== -1) {
       this.entities.splice(index, 1);
       entity.transform.remove();
+    }
+
+    if (isLight(entity)) {
+      const lightIndex = this.lights.indexOf(entity);
+      if (lightIndex !== -1) {
+        this.lights.splice(lightIndex, 1);
+      }
     }
   }
 
@@ -48,6 +51,7 @@ export class Scene {
 
 export class World {
   scenes: Scene[] = [];
+  ambientLightColor: Vec3 = new Vec3(0.05, 0.05, 0.05);
 
   constructor() {}
 

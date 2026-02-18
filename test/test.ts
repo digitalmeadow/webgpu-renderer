@@ -8,6 +8,7 @@ import {
   MaterialStandard,
   MaterialCustom,
   Texture,
+  DirectionalLight,
 } from "../src/index";
 
 async function main() {
@@ -26,6 +27,11 @@ async function main() {
   const world = new World();
   const scene = new Scene("Main Scene");
   world.addScene(scene);
+
+  const light = new DirectionalLight("main light");
+  light.transform.setPosition(0, 10, 0);
+  light.transform.setRotation(-90, 0, 0);
+  scene.add(light);
 
   // Standard Material Cube
   const standardCube = new Cube(device);

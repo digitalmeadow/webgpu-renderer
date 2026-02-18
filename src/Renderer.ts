@@ -8,6 +8,10 @@ import { OutputPass } from "./OutputPass";
 import { MaterialManager } from "./MaterialManager";
 import { Mesh } from "./Mesh";
 
+import { LightManager } from "./LightManager";
+import { Light } from "./lights";
+import { SceneUniforms } from "./SceneUniforms";
+
 export class Renderer {
   private canvas: HTMLCanvasElement;
   private device: GPUDevice;
@@ -19,6 +23,8 @@ export class Renderer {
   private lightingPass: LightingPass;
   private outputPass: OutputPass;
   private materialManager: MaterialManager;
+  private lightManager: LightManager;
+  private sceneUniforms: SceneUniforms;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -31,6 +37,8 @@ export class Renderer {
     this.lightingPass = null as unknown as LightingPass;
     this.outputPass = null as unknown as OutputPass;
     this.materialManager = null as unknown as MaterialManager;
+    this.lightManager = null as unknown as LightManager;
+    this.sceneUniforms = null as unknown as SceneUniforms;
   }
 
   async init(): Promise<void> {
@@ -58,6 +66,8 @@ export class Renderer {
     });
 
     this.materialManager = new MaterialManager(this.device);
+    this.lightManager = new LightManager(this.device);
+    this.sceneUniforms = new SceneUniforms(this.device);
 
     const rect = this.canvas.getBoundingClientRect();
     this.resize(rect.width, rect.height);
@@ -104,6 +114,8 @@ export class Renderer {
         this.device,
         this.geometryBuffer,
         this.geometryPass.cameraBindGroupLayout,
+        this.lightManager.lightBindGroupLayout,
+        this.sceneUniforms.bindGroupLayout,
         this.canvas.width,
         this.canvas.height,
       );
@@ -140,6 +152,10 @@ export class Renderer {
     camera.update(this.device);
 
     const meshes = this.collectMeshes(world);
+    const lights = this.collectLights(world);
+    this.lightManager.update(lights);
+    this.sceneUniforms.ambientLightColor = world.ambientLightColor;
+    this.sceneUniforms.update();
 
     const commandEncoder = this.device.createCommandEncoder();
 
@@ -154,7 +170,13 @@ export class Renderer {
     );
 
     // Lighting Pass
-    this.lightingPass.render(commandEncoder, this.geometryBuffer, camera);
+    this.lightingPass.render(
+      commandEncoder,
+      this.geometryBuffer,
+      camera,
+      this.lightManager.lightBindGroup,
+      this.sceneUniforms.bindGroup,
+    );
 
     // Output Pass
     const swapChainView = this.context.getCurrentTexture().createView();
@@ -165,6 +187,14 @@ export class Renderer {
     );
 
     this.device.queue.submit([commandEncoder.finish()]);
+  }
+
+  getDevice(): GPUDevice {
+    return this.device;
+  }
+
+  getMaterialManager(): MaterialManager {
+    return this.materialManager;
   }
 
   private collectMeshes(world: World): Mesh[] {
@@ -179,15 +209,11 @@ export class Renderer {
     return meshes;
   }
 
-  getDevice(): GPUDevice {
-    return this.device;
-  }
-
-  getCanvas(): HTMLCanvasElement {
-    return this.canvas;
-  }
-
-  getMaterialManager(): MaterialManager {
-    return this.materialManager;
+  private collectLights(world: World): Light[] {
+    const lights: Light[] = [];
+    for (const scene of world.scenes) {
+      lights.push(...scene.lights);
+    }
+    return lights;
   }
 }
