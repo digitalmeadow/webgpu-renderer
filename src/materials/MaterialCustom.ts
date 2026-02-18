@@ -1,4 +1,4 @@
-import { BaseMaterial } from "./BaseMaterial";
+import { AlphaMode, BaseMaterial } from "./BaseMaterial";
 
 export interface ShaderHooks {
   uniforms?: string;
@@ -8,13 +8,20 @@ export interface ShaderHooks {
   metal_rough_logic?: string;
 }
 
+export interface MaterialCustomOptions extends ShaderHooks {
+  alphaMode?: AlphaMode;
+  alphaCutoff?: number;
+  doubleSided?: boolean;
+  opacity?: number;
+}
+
 export class MaterialCustom extends BaseMaterial {
   public hooks: ShaderHooks = {};
   public uniforms: Record<string, any> = {};
 
-  constructor(name: string, hooks: ShaderHooks) {
-    super(name);
-    this.hooks = hooks;
+  constructor(name: string, options: MaterialCustomOptions) {
+    super(name, options);
+    this.hooks = options;
     this.specialization.isCustom = true;
   }
 }

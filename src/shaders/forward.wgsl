@@ -1,70 +1,70 @@
-// A simplified forward uber-shader for transparent objects.
+struct Scene {
+    @builtin(frag_depth) depth: f32,
+    @location(0) normal: vec4<f32>,
+    @location(1) albedo: vec4<f32>,
+    @location(2) motion: vec4<f32>,
+};
 
-//--HOOK_PLACEHOLDER_UNIFORMS--//
+@group(0) @binding(0) var<uniform> model: mat4x4<f32>;
 
-// Default (weak) function that will be overridden if a hook is provided.
-fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
-    return textureSample(albedoTexture, defaultSampler, uv);
-}
+struct Camera {
+    view_projection_matrix: mat4x4<f32>,
+};
+@group(1) @binding(0) var<uniform> camera: Camera;
 
-//--HOOK_PLACEHOLDER_ALBEDO--//
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) uv: vec2<f32>,
+};
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) uv_coords: vec2<f32>,
-    @location(1) world_normal: vec3<f32>,
+    @location(0) normal: vec3<f32>,
+    @location(1) uv: vec2<f32>,
 };
 
-struct CameraUniforms {
-    view_projection_matrix: mat4x4<f32>,
-    position: vec4<f32>,
-}
-
-struct MeshUniforms {
-    model_transform_matrix: mat4x4<f32>,
-}
-
-// A simple directional light.
-struct LightUniforms {
-    direction: vec3<f32>,
-    color: vec3<f32>,
-    intensity: f32,
-}
-
-@group(0) @binding(0) var<uniform> camera_uniforms: CameraUniforms;
-@group(1) @binding(0) var<uniform> mesh_uniforms: MeshUniforms;
-@group(2) @binding(0) var<uniform> light_uniforms: LightUniforms;
-
-@group(3) @binding(0) var defaultSampler: sampler;
-@group(3) @binding(1) var albedoTexture: texture_2d<f32>;
-// Note: normal and metal/rough are not used in this simple forward shader for now
-
 @vertex
-fn vs_main(
-    @location(0) position: vec4<f32>,
-    @location(1) normal: vec3<f32>,
-    @location(2) uv: vec2<f32>
-) -> VertexOutput {
-    var output: VertexOutput;
-    let model_matrix = mesh_uniforms.model_transform_matrix;
-    output.position = camera_uniforms.view_projection_matrix * model_matrix * position;
-    output.world_normal = (model_matrix * vec4<f32>(normal, 0.0)).xyz;
-    output.uv_coords = uv;
-    return output;
+fn vs_main(in: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
+    out.position = camera.view_projection_matrix * model * vec4<f32>(in.position, 1.0);
+    out.normal = (model * vec4<f32>(in.normal, 0.0)).xyz;
+    out.uv = in.uv;
+    return out;
 }
+
+@group(2) @binding(0) var base_color_texture: texture_2d<f32>;
+@group(2) @binding(1) var base_color_sampler: sampler;
+
+struct Light {
+    color: vec4<f32>,
+    direction: vec4<f32>,
+    intensity: f32,
+    light_type: u32, // 0: Directional, 1: Point, 2: Spot
+    _padding: vec2<f32>,
+};
+
+struct LightUniforms {
+    lights: array<Light, 1>,
+};
+@group(3) @binding(0) var<uniform> light_uniforms: LightUniforms;
+
+struct SceneUniforms {
+  ambient_light_color: vec4<f32>,
+}
+@group(4) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
+
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var albedo = get_albedo_color(in.uv_coords);
+    let albedo = textureSample(base_color_texture, base_color_sampler, in.uv);
+    var color = albedo.rgb * scene_uniforms.ambient_light_color.rgb;
 
-    // Simple directional lighting
-    let light_dir = normalize(light_uniforms.direction);
-    let normal = normalize(in.world_normal);
-    let diffuse_strength = max(dot(normal, -light_dir), 0.0);
-    let diffuse_color = light_uniforms.color * light_uniforms.intensity * diffuse_strength;
-
-    // Combine lighting and albedo
-    let final_color = albedo.rgb * diffuse_color + (albedo.rgb * 0.1); // ambient term
+    // Directional light
+    let N = normalize(in.normal);
+    let L = normalize(light_uniforms.lights[0].direction.xyz);
+    let diffuse = max(dot(N, L), 0.0);
+    color += albedo.rgb * light_uniforms.lights[0].color.rgb * light_uniforms.lights[0].intensity * diffuse;
     
-    return vec4<f32>(final_color, albedo.a);
+    return vec4<f32>(color, albedo.a);
 }

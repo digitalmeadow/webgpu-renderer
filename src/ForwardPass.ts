@@ -1,0 +1,109 @@
+import { Mesh } from "./Mesh";
+import { LightManager } from "./LightManager";
+import { MaterialManager } from "./MaterialManager";
+import { Camera } from "./Camera";
+import { Vertex } from "./Vertex";
+import { SceneUniforms } from "./SceneUniforms";
+import forwardShader from "./shaders/forward.wgsl?raw";
+
+export class ForwardPass {
+  private pipeline: GPURenderPipeline;
+
+  constructor(
+    private device: GPUDevice,
+    private camera: Camera,
+    private sceneUniforms: SceneUniforms,
+    private lightManager: LightManager,
+    private materialManager: MaterialManager,
+  ) {
+    const shaderModule = this.device.createShaderModule({
+      code: forwardShader,
+    });
+
+    this.pipeline = this.device.createRenderPipeline({
+      label: "Forward Pass Pipeline",
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [
+          this.camera.uniforms.bindGroupLayout,
+          this.sceneUniforms.bindGroupLayout,
+          this.lightManager.lightBindGroupLayout,
+          this.materialManager.materialBindGroupLayout,
+        ],
+      }),
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vs_main",
+        buffers: [Vertex.getBufferLayout()],
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fs_main",
+        targets: [
+          {
+            format: navigator.gpu.getPreferredCanvasFormat(),
+            blend: {
+              color: {
+                srcFactor: "src-alpha",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
+              alpha: {
+                srcFactor: "one",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
+            },
+          },
+        ],
+      },
+      primitive: {
+        topology: "triangle-list",
+      },
+      depthStencil: {
+        depthWriteEnabled: false,
+        depthCompare: "less",
+        format: "depth32float",
+      },
+    });
+  }
+
+  render(
+    encoder: GPUCommandEncoder,
+    meshes: Mesh[],
+    swapChainView: GPUTextureView,
+    depthTextureView: GPUTextureView,
+  ) {
+    const passEncoder = encoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: swapChainView,
+          loadOp: "load",
+          storeOp: "store",
+        },
+      ],
+      depthStencilAttachment: {
+        view: depthTextureView,
+        depthReadOnly: true,
+      },
+    });
+
+    passEncoder.setPipeline(this.pipeline);
+    passEncoder.setBindGroup(0, this.camera.uniforms.bindGroup);
+    passEncoder.setBindGroup(1, this.sceneUniforms.bindGroup);
+    passEncoder.setBindGroup(2, this.lightManager.lightBindGroup);
+
+    for (const mesh of meshes) {
+      if (!mesh.material) continue;
+      const materialBindGroup = this.materialManager.getBindGroup(
+        mesh.material,
+      );
+      if (!materialBindGroup) continue;
+
+      passEncoder.setBindGroup(3, materialBindGroup);
+      passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
+      passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
+      passEncoder.drawIndexed(mesh.geometry.indexCount);
+    }
+    passEncoder.end();
+  }
+}

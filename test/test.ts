@@ -4,12 +4,13 @@ import {
   Scene,
   Camera,
   Time,
-  Cube,
+  Mesh,
   MaterialStandard,
   MaterialCustom,
   Texture,
   DirectionalLight,
 } from "../src/index";
+import { createCubeGeometry } from "../src/primitives/Cube";
 
 async function main() {
   const canvas = document.getElementById("gpu-canvas") as HTMLCanvasElement;
@@ -33,21 +34,25 @@ async function main() {
   light.transform.setRotation(-90, 0, 0);
   scene.add(light);
 
-  // Standard Material Cube
-  const standardCube = new Cube(device);
   const albedoTexture = new Texture(
     "https://upload.wikimedia.org/wikipedia/commons/b/b6/Image_created_with_a_mobile_phone.png",
   );
+  const cubeGeometry = createCubeGeometry(device);
+
+  // Standard Material Cube
   const standardMaterial = new MaterialStandard("standard-material", {
     albedoTexture,
   });
   await materialManager.loadMaterial(standardMaterial);
-  standardCube.material = standardMaterial;
+  const standardCube = new Mesh(
+    device,
+    "standard-cube",
+    cubeGeometry,
+    standardMaterial,
+  );
   scene.add(standardCube);
 
   // Custom Material Cube
-  const customCube = new Cube(device);
-  customCube.transform.setPosition(2.5, 0, 0);
   const customMaterial = new MaterialCustom("custom-material", {
     albedo: `
       fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
@@ -64,7 +69,13 @@ async function main() {
     `,
   });
   await materialManager.loadMaterial(customMaterial);
-  customCube.material = customMaterial;
+  const customCube = new Mesh(
+    device,
+    "custom-cube",
+    cubeGeometry,
+    customMaterial,
+  );
+  customCube.transform.setPosition(2.5, 0, 0);
   scene.add(customCube);
 
   const camera = new Camera(

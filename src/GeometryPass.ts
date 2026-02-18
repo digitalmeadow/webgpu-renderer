@@ -1,5 +1,6 @@
 import geometryShader from "./shaders/geometry.wgsl?raw";
-import { Mesh, Vertex } from "./Mesh";
+import { Mesh } from "./Mesh";
+import { Vertex } from "./Vertex";
 import { Camera } from "./Camera";
 import { GeometryBuffer } from "./GeometryBuffer";
 import { MaterialManager } from "./MaterialManager";
@@ -152,9 +153,9 @@ export class GeometryPass {
         }
       }
 
-      passEncoder.setVertexBuffer(0, mesh.vertexBuffer);
-      passEncoder.setIndexBuffer(mesh.indexBuffer, "uint32");
-      passEncoder.drawIndexed(mesh.indexCount);
+      passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
+      passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
+      passEncoder.drawIndexed(mesh.geometry.indexCount);
     }
 
     passEncoder.end();

@@ -1,7 +1,7 @@
 import { BaseMaterial } from "./materials/BaseMaterial";
 import { MaterialStandard } from "./materials/MaterialStandard";
 import { MaterialCustom } from "./materials/MaterialCustom";
-import { Vertex } from "./Mesh";
+import { Vertex } from "./Vertex";
 import { Texture } from "./Texture";
 import baseGeometryShader from "./shaders/geometry.wgsl?raw";
 

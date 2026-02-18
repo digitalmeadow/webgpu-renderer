@@ -1,10 +1,14 @@
 import { Texture } from "../Texture";
-import { BaseMaterial } from "./BaseMaterial";
+import { AlphaMode, BaseMaterial } from "./BaseMaterial";
 
 interface MaterialStandardOptions {
   albedoTexture?: Texture | null;
   normalTexture?: Texture | null;
   metalnessRoughnessTexture?: Texture | null;
+  alphaMode?: AlphaMode;
+  alphaCutoff?: number;
+  doubleSided?: boolean;
+  opacity?: number;
 }
 
 export class MaterialStandard extends BaseMaterial {
@@ -13,7 +17,7 @@ export class MaterialStandard extends BaseMaterial {
   metalnessRoughnessTexture: Texture | null = null;
 
   constructor(name: string, options: MaterialStandardOptions) {
-    super(name);
+    super(name, options);
     this.albedoTexture = options.albedoTexture ?? null;
     this.normalTexture = options.normalTexture ?? null;
     this.metalnessRoughnessTexture = options.metalnessRoughnessTexture ?? null;
