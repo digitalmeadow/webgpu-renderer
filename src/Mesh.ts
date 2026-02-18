@@ -1,6 +1,7 @@
 import { Entity } from "./World";
 import { Mat4 } from "./math/mat4";
 import { MeshUniforms } from "./MeshUniforms";
+import { Material } from "./Material";
 
 export class Vertex {
   static getBufferLayout(): GPUVertexBufferLayout {
@@ -52,6 +53,7 @@ export abstract class Mesh extends Entity {
   abstract indexBuffer: GPUBuffer;
 
   uniforms: MeshUniforms | null = null;
+  material: Material | null = null;
 }
 
 export class Plane extends Mesh {

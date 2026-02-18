@@ -2,16 +2,23 @@ import geometryShader from "./shaders/geometry.wgsl?raw";
 import { Mesh, Vertex } from "./Mesh";
 import { Camera } from "./Camera";
 import { GeometryBuffer } from "./GeometryBuffer";
+import { MaterialManager } from "./MaterialManager";
 
 export class GeometryPass {
   private pipeline: GPURenderPipeline;
+  public materialBindGroupLayout: GPUBindGroupLayout;
+  public cameraBindGroupLayout: GPUBindGroupLayout;
 
-  constructor(device: GPUDevice, geometryBuffer: GeometryBuffer) {
+  constructor(
+    device: GPUDevice,
+    geometryBuffer: GeometryBuffer,
+    materialManager: MaterialManager,
+  ) {
     const shaderModule = device.createShaderModule({
       code: geometryShader,
     });
 
-    const cameraBindGroupLayout = device.createBindGroupLayout({
+    this.cameraBindGroupLayout = device.createBindGroupLayout({
       label: "Camera Bind Group Layout",
       entries: [
         {
@@ -33,9 +40,28 @@ export class GeometryPass {
       ],
     });
 
+    this.materialBindGroupLayout = device.createBindGroupLayout({
+      label: "Material Bind Group Layout",
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: "float", viewDimension: "2d" },
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "filtering" },
+        },
+      ],
+    });
+
+    materialManager.setMaterialBindGroupLayout(this.materialBindGroupLayout);
+
     const bindGroupLayouts: GPUBindGroupLayout[] = [
-      cameraBindGroupLayout,
+      this.cameraBindGroupLayout,
       meshBindGroupLayout,
+      this.materialBindGroupLayout,
     ];
 
     this.pipeline = device.createRenderPipeline({
@@ -53,10 +79,10 @@ export class GeometryPass {
         entryPoint: "fs_main",
         targets: [
           {
-            format: "rgba32float",
+            format: "rgba8unorm",
           },
           {
-            format: "rgba32float",
+            format: "rgba16float",
           },
         ],
       },
@@ -65,7 +91,7 @@ export class GeometryPass {
         cullMode: "back",
       },
       depthStencil: {
-        format: "depth24plus",
+        format: "depth32float",
         depthWriteEnabled: true,
         depthCompare: "less",
       },
@@ -78,12 +104,13 @@ export class GeometryPass {
     geometryBuffer: GeometryBuffer,
     meshes: Mesh[],
     camera: Camera,
+    materialManager: MaterialManager,
   ): void {
     const passEncoder = encoder.beginRenderPass({
       label: "Geometry Pass",
       colorAttachments: [
         {
-          view: geometryBuffer.positionView,
+          view: geometryBuffer.albedoView,
           clearValue: { r: 0, g: 0, b: 0, a: 0 },
           loadOp: "clear",
           storeOp: "store",
@@ -111,6 +138,14 @@ export class GeometryPass {
 
       mesh.uniforms.update(device, mesh.transform.getWorldMatrix());
       passEncoder.setBindGroup(1, mesh.uniforms.bindGroup);
+
+      if (mesh.material) {
+        const materialBindGroup = materialManager.getBindGroup(mesh.material);
+        if (materialBindGroup) {
+          passEncoder.setBindGroup(2, materialBindGroup);
+        }
+      }
+
       passEncoder.setVertexBuffer(0, mesh.vertexBuffer);
       passEncoder.setIndexBuffer(mesh.indexBuffer, "uint32");
       passEncoder.drawIndexed(mesh.indexCount);

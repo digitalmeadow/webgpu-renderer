@@ -3,7 +3,9 @@ import { Camera } from "./Camera";
 import { Time } from "./Time";
 import { GeometryBuffer } from "./GeometryBuffer";
 import { GeometryPass } from "./GeometryPass";
+import { LightingPass } from "./LightingPass";
 import { OutputPass } from "./OutputPass";
+import { MaterialManager } from "./MaterialManager";
 import { Mesh } from "./Mesh";
 
 export class Renderer {
@@ -14,7 +16,9 @@ export class Renderer {
 
   private geometryBuffer: GeometryBuffer;
   private geometryPass: GeometryPass;
+  private lightingPass: LightingPass;
   private outputPass: OutputPass;
+  private materialManager: MaterialManager;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -24,7 +28,9 @@ export class Renderer {
 
     this.geometryBuffer = null as unknown as GeometryBuffer;
     this.geometryPass = null as unknown as GeometryPass;
+    this.lightingPass = null as unknown as LightingPass;
     this.outputPass = null as unknown as OutputPass;
+    this.materialManager = null as unknown as MaterialManager;
   }
 
   async init(): Promise<void> {
@@ -50,6 +56,8 @@ export class Renderer {
       format: this.format,
       alphaMode: "premultiplied",
     });
+
+    this.materialManager = new MaterialManager(this.device);
 
     const rect = this.canvas.getBoundingClientRect();
     this.resize(rect.width, rect.height);
@@ -86,10 +94,29 @@ export class Renderer {
         this.canvas.height,
       );
 
-      this.geometryPass = new GeometryPass(this.device, this.geometryBuffer);
-      this.outputPass = new OutputPass(this.device, this.geometryBuffer);
+      this.geometryPass = new GeometryPass(
+        this.device,
+        this.geometryBuffer,
+        this.materialManager,
+      );
+
+      this.lightingPass = new LightingPass(
+        this.device,
+        this.geometryBuffer,
+        this.geometryPass.cameraBindGroupLayout,
+        this.canvas.width,
+        this.canvas.height,
+      );
+
+      this.outputPass = new OutputPass(this.device);
     } else {
       this.geometryBuffer.resize(
+        this.device,
+        this.canvas.width,
+        this.canvas.height,
+      );
+
+      this.lightingPass.resize(
         this.device,
         this.canvas.width,
         this.canvas.height,
@@ -98,7 +125,14 @@ export class Renderer {
   }
 
   render(world: World, camera: Camera, time: Time): void {
-    if (!this.device || !this.context || !this.geometryBuffer) {
+    if (
+      !this.device ||
+      !this.context ||
+      !this.geometryBuffer ||
+      !this.geometryPass ||
+      !this.lightingPass ||
+      !this.outputPass
+    ) {
       return;
     }
 
@@ -109,16 +143,26 @@ export class Renderer {
 
     const commandEncoder = this.device.createCommandEncoder();
 
+    // Geometry Pass
     this.geometryPass.render(
       this.device,
       commandEncoder,
       this.geometryBuffer,
       meshes,
       camera,
+      this.materialManager,
     );
 
-    const textureView = this.context.getCurrentTexture().createView();
-    this.outputPass.render(commandEncoder, this.geometryBuffer, textureView);
+    // Lighting Pass
+    this.lightingPass.render(commandEncoder, this.geometryBuffer, camera);
+
+    // Output Pass
+    const swapChainView = this.context.getCurrentTexture().createView();
+    this.outputPass.render(
+      commandEncoder,
+      this.lightingPass.outputView,
+      swapChainView,
+    );
 
     this.device.queue.submit([commandEncoder.finish()]);
   }
@@ -141,5 +185,9 @@ export class Renderer {
 
   getCanvas(): HTMLCanvasElement {
     return this.canvas;
+  }
+
+  getMaterialManager(): MaterialManager {
+    return this.materialManager;
   }
 }

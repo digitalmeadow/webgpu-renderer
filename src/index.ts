@@ -8,4 +8,8 @@ export * from "./Renderer";
 export * from "./Mesh";
 export * from "./GeometryBuffer";
 export * from "./GeometryPass";
+export * from "./LightingPass";
 export * from "./OutputPass";
+export * from "./Material";
+export * from "./Texture";
+export * from "./MaterialManager";

@@ -1,6 +1,6 @@
 export class GeometryBuffer {
-  positionTexture: GPUTexture;
-  positionView: GPUTextureView;
+  albedoTexture: GPUTexture;
+  albedoView: GPUTextureView;
   normalTexture: GPUTexture;
   normalView: GPUTextureView;
   depthTexture: GPUTexture;
@@ -10,19 +10,19 @@ export class GeometryBuffer {
   bindGroup: GPUBindGroup;
 
   constructor(device: GPUDevice, width: number, height: number) {
-    this.positionTexture = device.createTexture({
-      label: "G-Buffer Position Texture",
+    this.albedoTexture = device.createTexture({
+      label: "G-Buffer Albedo Texture",
       size: [width, height],
-      format: "rgba32float",
+      format: "rgba8unorm",
       usage:
         GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
-    this.positionView = this.positionTexture.createView();
+    this.albedoView = this.albedoTexture.createView();
 
     this.normalTexture = device.createTexture({
       label: "G-Buffer Normal Texture",
       size: [width, height],
-      format: "rgba32float",
+      format: "rgba16float",
       usage:
         GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
@@ -31,8 +31,9 @@ export class GeometryBuffer {
     this.depthTexture = device.createTexture({
       label: "G-Buffer Depth Texture",
       size: [width, height],
-      format: "depth24plus",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      format: "depth32float",
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.depthView = this.depthTexture.createView();
 
@@ -51,17 +52,22 @@ export class GeometryBuffer {
         {
           binding: 0,
           visibility: GPUShaderStage.FRAGMENT,
-          texture: { sampleType: "unfilterable-float" },
+          sampler: { type: "filtering" },
         },
         {
           binding: 1,
           visibility: GPUShaderStage.FRAGMENT,
-          texture: { sampleType: "unfilterable-float" },
+          texture: { sampleType: "float", viewDimension: "2d" },
         },
         {
           binding: 2,
           visibility: GPUShaderStage.FRAGMENT,
-          sampler: { type: "non-filtering" },
+          texture: { sampleType: "float", viewDimension: "2d" },
+        },
+        {
+          binding: 3,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: "depth", viewDimension: "2d" },
         },
       ],
     });
@@ -72,38 +78,42 @@ export class GeometryBuffer {
       entries: [
         {
           binding: 0,
-          resource: this.positionView,
+          resource: this.sampler,
         },
         {
           binding: 1,
-          resource: this.normalView,
+          resource: this.albedoView,
         },
         {
           binding: 2,
-          resource: this.sampler,
+          resource: this.normalView,
+        },
+        {
+          binding: 3,
+          resource: this.depthView,
         },
       ],
     });
   }
 
   resize(device: GPUDevice, width: number, height: number): void {
-    this.positionTexture.destroy();
+    this.albedoTexture.destroy();
     this.normalTexture.destroy();
     this.depthTexture.destroy();
 
-    this.positionTexture = device.createTexture({
-      label: "G-Buffer Position Texture",
+    this.albedoTexture = device.createTexture({
+      label: "G-Buffer Albedo Texture",
       size: [width, height],
-      format: "rgba32float",
+      format: "rgba8unorm",
       usage:
         GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
-    this.positionView = this.positionTexture.createView();
+    this.albedoView = this.albedoTexture.createView();
 
     this.normalTexture = device.createTexture({
       label: "G-Buffer Normal Texture",
       size: [width, height],
-      format: "rgba32float",
+      format: "rgba16float",
       usage:
         GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
@@ -112,8 +122,9 @@ export class GeometryBuffer {
     this.depthTexture = device.createTexture({
       label: "G-Buffer Depth Texture",
       size: [width, height],
-      format: "depth24plus",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      format: "depth32float",
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.depthView = this.depthTexture.createView();
 
@@ -123,15 +134,19 @@ export class GeometryBuffer {
       entries: [
         {
           binding: 0,
-          resource: this.positionView,
+          resource: this.sampler,
         },
         {
           binding: 1,
-          resource: this.normalView,
+          resource: this.albedoView,
         },
         {
           binding: 2,
-          resource: this.sampler,
+          resource: this.normalView,
+        },
+        {
+          binding: 3,
+          resource: this.depthView,
         },
       ],
     });

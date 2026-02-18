@@ -71,7 +71,7 @@ export class CameraUniforms {
 }
 
 export class Camera {
-  uniforms: CameraUniforms;
+  public uniforms: CameraUniforms;
   viewMatrix: Mat4;
   projectionMatrix: Mat4;
   viewProjectionMatrix: Mat4;

@@ -1,4 +1,13 @@
-import { Renderer, World, Scene, Camera, Time, Cube } from "../src/index";
+import {
+  Renderer,
+  World,
+  Scene,
+  Camera,
+  Time,
+  Cube,
+  Material,
+  Texture,
+} from "../src/index";
 
 async function main() {
   const canvas = document.getElementById("gpu-canvas") as HTMLCanvasElement;
@@ -11,13 +20,21 @@ async function main() {
   await renderer.init();
 
   const device = renderer.getDevice();
+  const materialManager = renderer.getMaterialManager();
 
   const world = new World();
   const scene = new Scene("Main Scene");
   world.addScene(scene);
 
-  const mesh = new Cube(device);
-  scene.add(mesh);
+  const plane = new Cube(device);
+
+  const texture = new Texture(
+    "https://upload.wikimedia.org/wikipedia/commons/b/b6/Image_created_with_a_mobile_phone.png",
+  );
+  await materialManager.loadMaterial(new Material(texture));
+  plane.material = new Material(texture);
+
+  scene.add(plane);
 
   const camera = new Camera(
     device,
@@ -42,7 +59,7 @@ async function main() {
     time.update();
 
     // Rotate the over time
-    mesh.transform.setRotation(
+    plane.transform.setRotation(
       time.elapsed * 0.5,
       time.elapsed * 0.7,
       time.elapsed * 0.3,
