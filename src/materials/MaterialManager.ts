@@ -1,10 +1,10 @@
-import { BaseMaterial } from "./materials/BaseMaterial";
-import { MaterialStandard } from "./materials/MaterialStandard";
-import { MaterialCustom } from "./materials/MaterialCustom";
-import { Camera } from "./Camera";
-import { Vertex } from "./Vertex";
-import { Texture } from "./Texture";
-import baseGeometryShader from "./shaders/geometry.wgsl?raw";
+import { BaseMaterial } from "./BaseMaterial";
+import { MaterialStandard } from "./MaterialStandard";
+import { MaterialStandardCustom } from "./MaterialStandardCustom";
+import { Camera } from "../camera/Camera";
+import { Vertex } from "../geometries/Vertex";
+import { Texture } from "../textures/Texture";
+import baseGeometryShader from "../renderer/passes/geometry.wgsl?raw";
 
 export class MaterialManager {
   private device: GPUDevice;
@@ -14,7 +14,7 @@ export class MaterialManager {
   public readonly materialBindGroupLayout: GPUBindGroupLayout;
   private placeholderNormalTexture: GPUTexture;
   private placeholderMetalRoughnessTexture: GPUTexture;
-  private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> =
+  private customPipelineCache: Map<MaterialStandardCustom, GPURenderPipeline> =
     new Map();
   private baseShader: string;
 
@@ -85,7 +85,7 @@ export class MaterialManager {
   }
 
   getCustomPipeline(
-    material: MaterialCustom,
+    material: MaterialStandardCustom,
     camera: Camera,
     meshBindGroupLayout: GPUBindGroupLayout,
   ): GPURenderPipeline | null {
@@ -161,7 +161,7 @@ export class MaterialManager {
           this.createTextureResources(texture);
         }
       }
-    } else if (material instanceof MaterialCustom) {
+    } else if (material instanceof MaterialStandardCustom) {
       // Future: Handle textures for custom materials if they have any
     }
   }
@@ -224,7 +224,7 @@ export class MaterialManager {
 
       this.bindGroupCache.set(material, bindGroup);
       return bindGroup;
-    } else if (material instanceof MaterialCustom) {
+    } else if (material instanceof MaterialStandardCustom) {
       material.uniforms.update(material);
 
       const bindGroup = this.device.createBindGroup({

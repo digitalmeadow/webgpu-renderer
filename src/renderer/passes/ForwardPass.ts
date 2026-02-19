@@ -1,10 +1,10 @@
-import { Mesh } from "./Mesh";
-import { LightManager } from "./LightManager";
-import { MaterialManager } from "./MaterialManager";
-import { Camera } from "./Camera";
-import { Vertex } from "./Vertex";
-import { SceneUniforms } from "./SceneUniforms";
-import forwardShader from "./shaders/forward.wgsl?raw";
+import { Mesh } from "../../scene/Mesh";
+import { LightManager } from "../LightManager";
+import { MaterialManager } from "../../materials/MaterialManager";
+import { Camera } from "../../camera/Camera";
+import { Vertex } from "../../geometries/Vertex";
+import { SceneUniforms } from "../../uniforms/SceneUniforms";
+import forwardShader from "./forward.wgsl?raw";
 
 export class ForwardPass {
   private pipeline: GPURenderPipeline;

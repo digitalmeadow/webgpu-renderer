@@ -1,11 +1,11 @@
-import geometryShader from "./shaders/geometry.wgsl?raw";
-import { Mesh } from "./Mesh";
-import { Vertex } from "./Vertex";
-import { Camera } from "./Camera";
-import { GeometryBuffer } from "./GeometryBuffer";
-import { MaterialManager } from "./MaterialManager";
-import { MaterialCustom } from "./materials/MaterialCustom";
-import { MaterialStandard } from "./materials/MaterialStandard";
+import geometryShader from "./geometry.wgsl?raw";
+import { Mesh } from "../../scene/Mesh";
+import { Vertex } from "../../geometries/Vertex";
+import { Camera } from "../../camera/Camera";
+import { GeometryBuffer } from "../GeometryBuffer";
+import { MaterialManager } from "../../materials/MaterialManager";
+import { MaterialStandardCustom } from "../../materials/MaterialStandardCustom";
+import { MaterialStandard } from "../../materials/MaterialStandard";
 
 export class GeometryPass {
   private pipeline: GPURenderPipeline;
@@ -125,7 +125,7 @@ export class GeometryPass {
 
       // Determine which pipeline to use
       let pipelineToUse: GPURenderPipeline | null = null;
-      if (mesh.material instanceof MaterialCustom) {
+      if (mesh.material instanceof MaterialStandardCustom) {
         pipelineToUse = materialManager.getCustomPipeline(
           mesh.material,
           camera,

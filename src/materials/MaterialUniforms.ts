@@ -1,5 +1,4 @@
-import { BaseMaterial } from "./materials/BaseMaterial";
-import { MaterialStandard } from "./materials/MaterialStandard";
+import { BaseMaterial } from "./BaseMaterial";
 
 export class MaterialUniforms {
   public readonly buffer: GPUBuffer;

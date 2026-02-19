@@ -9,19 +9,19 @@ export interface ShaderHooks {
   metal_rough_logic?: string;
 }
 
-export interface MaterialCustomOptions extends ShaderHooks {
+export interface MaterialStandardCustomOptions extends ShaderHooks {
   alphaMode?: AlphaMode;
   alphaCutoff?: number;
   doubleSided?: boolean;
   opacity?: number;
 }
 
-export class MaterialCustom extends BaseMaterial {
+export class MaterialStandardCustom extends BaseMaterial {
   public hooks: ShaderHooks = {};
   public customUniforms: Record<string, any> = {};
   public uniforms: MaterialUniforms;
 
-  constructor(device: GPUDevice, name: string, options: MaterialCustomOptions) {
+  constructor(device: GPUDevice, name: string, options: MaterialStandardCustomOptions) {
     super(name, options);
     this.hooks = options;
     this.specialization.isCustom = true;

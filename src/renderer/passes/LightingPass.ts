@@ -1,6 +1,6 @@
-import lightingShader from "./shaders/lighting.wgsl?raw";
-import { GeometryBuffer } from "./GeometryBuffer";
-import { Camera } from "./Camera";
+import lightingShader from "./lighting.wgsl?raw";
+import { GeometryBuffer } from "../GeometryBuffer";
+import { Camera } from "../../camera/Camera";
 
 export class LightingPass {
   private pipeline: GPURenderPipeline;

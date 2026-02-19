@@ -1,17 +1,17 @@
-import { ForwardPass } from "./ForwardPass";
-import { World } from "./World";
-import { Camera } from "./Camera";
-import { Time } from "./Time";
+import { ForwardPass } from "./passes/ForwardPass";
+import { World } from "../scene/World";
+import { Camera } from "../camera/Camera";
+import { Time } from "../time/Time";
 import { GeometryBuffer } from "./GeometryBuffer";
-import { GeometryPass } from "./GeometryPass";
-import { LightingPass } from "./LightingPass";
-import { OutputPass } from "./OutputPass";
-import { MaterialManager } from "./MaterialManager";
-import { Mesh } from "./Mesh";
+import { GeometryPass } from "./passes/GeometryPass";
+import { LightingPass } from "./passes/LightingPass";
+import { OutputPass } from "./passes/OutputPass";
+import { MaterialManager } from "../materials/MaterialManager";
+import { Mesh } from "../scene/Mesh";
 
 import { LightManager } from "./LightManager";
 import { Light } from "./lights";
-import { SceneUniforms } from "./SceneUniforms";
+import { SceneUniforms } from "../uniforms/SceneUniforms";
 
 export class Renderer {
   private canvas: HTMLCanvasElement;

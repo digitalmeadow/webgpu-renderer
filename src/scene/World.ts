@@ -1,10 +1,10 @@
 import { Scene } from "./Scene";
 import { Transform } from "./Transform";
-import { Vec3 } from "./math";
+import { Vec3 } from "../math";
 
 import { Entity } from "./Entity";
-import type { Light } from "./lights";
-import { isLight } from "./lights/Light";
+import type { Light } from "../lights";
+import { isLight } from "../lights/Light";
 
 export class World {
   scenes: Scene[] = [];

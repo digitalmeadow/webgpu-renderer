@@ -1,5 +1,5 @@
-import { Geometry } from "../Geometry";
-import { Vertex } from "../Vertex";
+import { Geometry } from "./Geometry";
+import { Vertex } from "./Vertex";
 
 export function createCubeGeometry(device: GPUDevice): Geometry {
   // 24 vertices (4 per face x 6 faces), flat shaded

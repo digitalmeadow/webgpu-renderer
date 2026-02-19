@@ -1,7 +1,7 @@
 import { Transform } from "./Transform";
 import { Entity } from "./Entity";
-import type { Light } from "./lights";
-import { isLight } from "./lights/Light";
+import type { Light } from "../lights";
+import { isLight } from "../lights/Light";
 
 export class Scene {
   name: string;

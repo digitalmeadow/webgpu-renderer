@@ -1,4 +1,4 @@
-import { Vec3 } from "./math";
+import { Vec3 } from "../math";
 import { Uniforms } from "./Uniforms";
 
 export class SceneUniforms extends Uniforms {

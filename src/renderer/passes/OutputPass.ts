@@ -1,4 +1,4 @@
-import outputShader from "./shaders/output.wgsl?raw";
+import outputShader from "./output.wgsl?raw";
 
 export class OutputPass {
   private device: GPUDevice;
