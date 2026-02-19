@@ -14,6 +14,7 @@ export * from "./GeometryBuffer";
 export * from "./GeometryPass";
 export * from "./LightingPass";
 export * from "./OutputPass";
+export type { AlphaMode } from "./materials/BaseMaterial";
 export * from "./materials/BaseMaterial";
 export * from "./materials/MaterialStandard";
 export * from "./materials/MaterialCustom";

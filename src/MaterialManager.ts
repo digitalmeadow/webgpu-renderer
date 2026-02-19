@@ -1,6 +1,7 @@
 import { BaseMaterial } from "./materials/BaseMaterial";
 import { MaterialStandard } from "./materials/MaterialStandard";
 import { MaterialCustom } from "./materials/MaterialCustom";
+import { Camera } from "./Camera";
 import { Vertex } from "./Vertex";
 import { Texture } from "./Texture";
 import baseGeometryShader from "./shaders/geometry.wgsl?raw";
@@ -56,6 +57,11 @@ export class MaterialManager {
           visibility: GPUShaderStage.FRAGMENT,
           texture: { sampleType: "float" },
         },
+        {
+          binding: 4,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
       ],
     });
   }
@@ -80,7 +86,7 @@ export class MaterialManager {
 
   getCustomPipeline(
     material: MaterialCustom,
-    cameraBindGroupLayout: GPUBindGroupLayout,
+    camera: Camera,
     meshBindGroupLayout: GPUBindGroupLayout,
   ): GPURenderPipeline | null {
     if (this.customPipelineCache.has(material)) {
@@ -108,7 +114,7 @@ export class MaterialManager {
       label: `Custom Material Pipeline: ${material.name}`,
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [
-          cameraBindGroupLayout,
+          camera.uniforms.bindGroupLayout,
           meshBindGroupLayout,
           this.materialBindGroupLayout,
         ],
@@ -203,6 +209,8 @@ export class MaterialManager {
         : this.placeholderMetalRoughnessTexture;
       const metalRoughnessView = metalRoughnessTexture!.createView();
 
+      material.uniforms.update(material);
+
       const bindGroup = this.device.createBindGroup({
         layout: this.materialBindGroupLayout,
         entries: [
@@ -210,6 +218,27 @@ export class MaterialManager {
           { binding: 1, resource: albedoView },
           { binding: 2, resource: normalView },
           { binding: 3, resource: metalRoughnessView },
+          { binding: 4, resource: { buffer: material.uniforms.buffer } },
+        ],
+      });
+
+      this.bindGroupCache.set(material, bindGroup);
+      return bindGroup;
+    } else if (material instanceof MaterialCustom) {
+      material.uniforms.update(material);
+
+      const bindGroup = this.device.createBindGroup({
+        layout: this.materialBindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.defaultSampler },
+          // TODO: Add placeholder textures for custom materials
+          { binding: 1, resource: this.placeholderNormalTexture.createView() },
+          { binding: 2, resource: this.placeholderNormalTexture.createView() },
+          {
+            binding: 3,
+            resource: this.placeholderMetalRoughnessTexture.createView(),
+          },
+          { binding: 4, resource: { buffer: material.uniforms.buffer } },
         ],
       });
 

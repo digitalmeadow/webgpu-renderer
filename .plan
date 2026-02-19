@@ -1,44 +1,9 @@
-Before we do this, we need to sort out a modular, custom material system:
+Materials:
 
-How it Would Work:
-1.  BaseMaterial: This would be an abstract class containing the common properties (albedoTexture, doubleSided, etc.) and the specialization object.
-2.  Concrete Material Classes: We would then provide several concrete implementations for users.
-        //--- For the User ---
-    // The simplest possible material
-    export class BasicMaterial extends BaseMaterial {
-      constructor() {
-        super();
-        // No specialization needed
-      }
-    }
-    // A material that enables our custom toon shading
-    export class ToonMaterial extends BaseMaterial {
-      gradientMapTexture: Texture;
-      
-      constructor(gradientMap: Texture) {
-        super();
-        this.gradientMapTexture = gradientMap;
-        this.specialization.useGradientMap = true; // Automatically enable the shader feature
-      }
-    }
-    // A future material for something like animated foliage
-    export class AnimatedMaterial extends BaseMaterial {
-      constructor() {
-        super();
-        this.specialization.useVertexAnimation = true;
-      }
-    }
-    
-Advantages of this approach:
-*   Excellent DX: This is very clean for the consumer. They just instantiate the material type they need (new BasicMaterial()) without having to worry about the underlying flags or shader permutations.
-*   Type-Safe and Discoverable: The properties on each material class are explicit. ToonMaterial has a gradientMapTexture; BasicMaterial does not. This is great for auto-completion and preventing errors.
-*   Scalable: It's incredibly easy to add new material types in the future without breaking existing code.
-Summary of the Brainstorm
-By combining these two ideas, we get a powerful, flexible, and user-friendly system:
-1.  Multiple Material classes (BasicMaterial, ToonMaterial) provide a clean, high-level interface for the user.
-2.  Each material class sets specialization flags that describe its features.
-3.  The MaterialManager uses these flags to cache and switch between different, highly optimized GPURenderPipeline permutations derived from a single, modular uber-shader.
-This is a robust and professional architecture that sets us up for success with GLTF import, custom effects, and long-term maintainability. What are your thoughts on this combined approach?
+1. Rename the current MaterialCustom to MaterialStandardCustom 
+
+2 Create a new CustomMaterial where the consumer is able to define vertex and fragment shaders entirely
+  Get run either in the geo-pass or the forward pass if transparent
 
 
 Create a new package called webgpu-renderer-gltf-loader

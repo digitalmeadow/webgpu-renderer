@@ -96,7 +96,6 @@ export class Camera {
     far: number = 100,
   ) {
     this.uniforms = new CameraUniforms(device);
-
     this.position = position;
     this.target = target;
     this.up = up;

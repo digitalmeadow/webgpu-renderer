@@ -6,22 +6,6 @@ struct VertexOutput {
     @location(0) uv_coords: vec2<f32>,
 };
 
-@vertex
-fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
-    var positions = array<vec2<f32>, 3>(
-        vec2<f32>(-1.0, -1.0),
-        vec2<f32>(3.0, -1.0),
-        vec2<f32>(-1.0, 3.0),
-    );
-
-    var output: VertexOutput;
-    output.position = vec4<f32>(positions[vertex_index], 0.0, 1.0);
-    output.uv_coords = positions[vertex_index] * 0.5 + 0.5;
-    output.uv_coords.y = 1.0 - output.uv_coords.y;
-    
-    return output;
-}
-
 // G-Buffer inputs (group 0)
 @group(0) @binding(0) var sampler_linear: sampler;
 @group(0) @binding(1) var gbuffer_albedo: texture_2d<f32>;
@@ -41,8 +25,46 @@ struct CameraUniforms {
 
 @group(1) @binding(0) var<uniform> camera_uniforms: CameraUniforms;
 
+// Lights (group 2)
+struct Light {
+    color: vec4<f32>,
+    direction: vec4<f32>,
+    intensity: f32,
+    light_type: u32,
+    _padding: vec2<f32>,
+};
+
+struct LightUniforms {
+    lights: array<Light, 1>,
+};
+
+@group(2) @binding(0) var<uniform> light_uniforms: LightUniforms;
+
+// Scene (group 3)
+struct SceneUniforms {
+    ambient_light_color: vec4<f32>,
+}
+
+@group(3) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
+
 struct FragmentOutput {
     @location(0) color: vec4<f32>,
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    var positions = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>(3.0, -1.0),
+        vec2<f32>(-1.0, 3.0),
+    );
+
+    var output: VertexOutput;
+    output.position = vec4<f32>(positions[vertex_index], 0.0, 1.0);
+    output.uv_coords = positions[vertex_index] * 0.5 + 0.5;
+    output.uv_coords.y = 1.0 - output.uv_coords.y;
+    
+    return output;
 }
 
 @fragment
@@ -70,23 +92,3 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     output.color = vec4<f32>(color, 1.0);
     return output;
 }
-
-struct Light {
-    color: vec4<f32>,
-    direction: vec4<f32>,
-    intensity: f32,
-    light_type: u32,
-    _padding: vec2<f32>,
-};
-
-struct LightUniforms {
-    lights: array<Light, 1>,
-};
-
-@group(2) @binding(0) var<uniform> light_uniforms: LightUniforms;
-
-struct SceneUniforms {
-    ambient_light_color: vec4<f32>,
-}
-
-@group(3) @binding(0) var<uniform> scene_uniforms: SceneUniforms;

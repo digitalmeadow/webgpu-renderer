@@ -1,3 +1,4 @@
+import { MaterialUniforms } from "../MaterialUniforms";
 import { Texture } from "../Texture";
 import { AlphaMode, BaseMaterial } from "./BaseMaterial";
 
@@ -15,11 +16,17 @@ export class MaterialStandard extends BaseMaterial {
   albedoTexture: Texture | null = null;
   normalTexture: Texture | null = null;
   metalnessRoughnessTexture: Texture | null = null;
+  public uniforms: MaterialUniforms;
 
-  constructor(name: string, options: MaterialStandardOptions) {
+  constructor(
+    device: GPUDevice,
+    name: string,
+    options: MaterialStandardOptions,
+  ) {
     super(name, options);
     this.albedoTexture = options.albedoTexture ?? null;
     this.normalTexture = options.normalTexture ?? null;
     this.metalnessRoughnessTexture = options.metalnessRoughnessTexture ?? null;
+    this.uniforms = new MaterialUniforms(device, this);
   }
 }

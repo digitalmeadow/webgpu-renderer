@@ -1,3 +1,7 @@
+struct MaterialUniforms {
+  opacity: f32,
+};
+
 //--HOOK_PLACEHOLDER_UNIFORMS--//
 
 // Default (weak) functions that will be overridden if a hook is provided.
@@ -27,27 +31,27 @@ struct MeshUniforms {
     model_transform_matrix: mat4x4<f32>,
 }
 
-@group(0) @binding(0) var<uniform> camera_uniforms: CameraUniforms;
-@group(1) @binding(0) var<uniform> mesh_uniforms: MeshUniforms;
+@group(0) @binding(0) var<uniform> camera: CameraUniforms;
+@group(1) @binding(0) var<uniform> model: mat4x4<f32>;
 
 @group(2) @binding(0) var defaultSampler: sampler;
 @group(2) @binding(1) var albedoTexture: texture_2d<f32>;
 @group(2) @binding(2) var normalTexture: texture_2d<f32>;
 @group(2) @binding(3) var metalnessRoughnessTexture: texture_2d<f32>;
+@group(2) @binding(4) var<uniform> material: MaterialUniforms;
 
 @vertex
 fn vs_main(
     @location(0) position: vec4<f32>,
     @location(1) normal: vec3<f32>,
-    @location(2) uv: vec2<f32>
-) -> VertexOutput {
-    var output: VertexOutput;
-    let model_matrix = mesh_uniforms.model_transform_matrix;
-    output.position = camera_uniforms.view_projection_matrix * model_matrix * position;
-    output.world_normal = (model_matrix * vec4<f32>(normal, 0.0)).xyz;
-    output.uv_coords = uv;
-    return output;
-}
+     @location(2) uv: vec2<f32>
+ ) -> VertexOutput {
+     var output: VertexOutput;
+     output.position = camera.view_projection_matrix * model * position;
+     output.world_normal = (model * vec4<f32>(normal, 0.0)).xyz;
+     output.uv_coords = uv;
+     return output;
+ }
 
 struct GBufferOutput {
     @location(0) albedo: vec4<f32>,
@@ -60,6 +64,7 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     var output: GBufferOutput;
 
     output.albedo = get_albedo_color(in.uv_coords);
+    output.albedo.a = output.albedo.a * material.opacity;
     output.normal = vec4<f32>(normalize(in.world_normal), 1.0);
     
     let metal_rough = textureSample(metalnessRoughnessTexture, defaultSampler, in.uv_coords);

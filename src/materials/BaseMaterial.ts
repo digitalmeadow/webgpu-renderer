@@ -1,10 +1,4 @@
-import { Texture } from "../Texture";
-
-export enum AlphaMode {
-  Opaque = "OPAQUE",
-  Mask = "MASK",
-  Blend = "BLEND",
-}
+export type AlphaMode = "opaque" | "blend" | "mask";
 
 export interface MaterialSpecialization {
   isCustom?: boolean;
@@ -12,7 +6,7 @@ export interface MaterialSpecialization {
 
 export abstract class BaseMaterial {
   name: string;
-  alphaMode: AlphaMode = AlphaMode.Opaque;
+  alphaMode: AlphaMode = "opaque";
   alphaCutoff: number = 0.5;
   doubleSided: boolean = false;
   opacity: number = 1.0;

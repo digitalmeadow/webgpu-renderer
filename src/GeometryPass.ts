@@ -128,7 +128,7 @@ export class GeometryPass {
       if (mesh.material instanceof MaterialCustom) {
         pipelineToUse = materialManager.getCustomPipeline(
           mesh.material,
-          this.cameraBindGroupLayout,
+          camera,
           this.meshBindGroupLayout,
         );
       } else {

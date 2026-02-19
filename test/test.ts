@@ -9,7 +9,9 @@ import {
   MaterialCustom,
   Texture,
   DirectionalLight,
+  Vec3,
 } from "../src/index";
+import type { AlphaMode } from "../src/index";
 import { createCubeGeometry } from "../src/primitives/Cube";
 
 async function main() {
@@ -26,6 +28,7 @@ async function main() {
   const materialManager = renderer.getMaterialManager();
 
   const world = new World();
+  world.ambientLightColor = new Vec3(0.5, 0.5, 0.5);
   const scene = new Scene("Main Scene");
   world.addScene(scene);
 
@@ -40,7 +43,7 @@ async function main() {
   const cubeGeometry = createCubeGeometry(device);
 
   // Standard Material Cube
-  const standardMaterial = new MaterialStandard("standard-material", {
+  const standardMaterial = new MaterialStandard(device, "standard-material", {
     albedoTexture,
   });
   await materialManager.loadMaterial(standardMaterial);
@@ -53,7 +56,7 @@ async function main() {
   scene.add(standardCube);
 
   // Custom Material Cube
-  const customMaterial = new MaterialCustom("custom-material", {
+  const customMaterial = new MaterialCustom(device, "custom-material", {
     albedo: `
       fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
           // A simple procedural checkerboard pattern
@@ -78,9 +81,29 @@ async function main() {
   customCube.transform.setPosition(2.5, 0, 0);
   scene.add(customCube);
 
+  // Transparent Cube
+  const transparentMaterial = new MaterialStandard(
+    device,
+    "transparent-material",
+    {
+      albedoTexture,
+      opacity: 0.5,
+      alphaMode: "blend" as AlphaMode,
+    },
+  );
+  await materialManager.loadMaterial(transparentMaterial);
+  const transparentCube = new Mesh(
+    device,
+    "transparent-cube",
+    cubeGeometry,
+    transparentMaterial,
+  );
+  transparentCube.transform.setPosition(1, 0, 0);
+  scene.add(transparentCube);
+
   const camera = new Camera(
     device,
-    undefined,
+    Vec3.create(0, 0, 10),
     undefined,
     undefined,
     undefined,
@@ -112,6 +135,13 @@ async function main() {
       time.elapsed * 0.3,
       time.elapsed * 0.5,
       time.elapsed * 0.7,
+    );
+
+    // Rotate the transparent cube
+    transparentCube.transform.setRotation(
+      time.elapsed * 0.2,
+      time.elapsed * 0.3,
+      time.elapsed * 0.4,
     );
 
     renderer.render(world, camera, time);

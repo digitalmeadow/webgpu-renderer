@@ -10,6 +10,7 @@ const LIGHT_SIZE = 48; // In bytes
 export class LightManager {
   private device: GPUDevice;
   public lightBuffer: GPUBuffer;
+  public uniformsBuffer: GPUBuffer;
   public lightBindGroupLayout: GPUBindGroupLayout;
   public lightBindGroup: GPUBindGroup;
 
@@ -20,6 +21,9 @@ export class LightManager {
       size: MAX_LIGHTS * LIGHT_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
+
+    // Alias for convenience
+    this.uniformsBuffer = this.lightBuffer;
 
     this.lightBindGroupLayout = this.device.createBindGroupLayout({
       label: "Light Bind Group Layout",

@@ -3,7 +3,7 @@ import { Uniforms } from "./Uniforms";
 
 export class SceneUniforms extends Uniforms {
   private _ambientLightColor: Vec3;
-  private _buffer: GPUBuffer;
+  public buffer: GPUBuffer;
 
   constructor(
     device: GPUDevice,
@@ -12,7 +12,7 @@ export class SceneUniforms extends Uniforms {
     super(device);
     this._ambientLightColor = ambientLightColor;
 
-    this._buffer = this.device.createBuffer({
+    this.buffer = this.device.createBuffer({
       label: "Scene Uniforms Buffer",
       size: 16, // vec3<f32> is 12 bytes, padded to 16
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -23,7 +23,7 @@ export class SceneUniforms extends Uniforms {
       entries: [
         {
           binding: 0,
-          visibility: GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
           buffer: {
             type: "uniform",
           },
@@ -38,7 +38,7 @@ export class SceneUniforms extends Uniforms {
         {
           binding: 0,
           resource: {
-            buffer: this._buffer,
+            buffer: this.buffer,
           },
         },
       ],
@@ -49,7 +49,7 @@ export class SceneUniforms extends Uniforms {
 
   update(): void {
     this.device.queue.writeBuffer(
-      this._buffer,
+      this.buffer,
       0,
       new Float32Array(this._ambientLightColor.data),
     );

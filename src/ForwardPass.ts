@@ -15,6 +15,9 @@ export class ForwardPass {
     private sceneUniforms: SceneUniforms,
     private lightManager: LightManager,
     private materialManager: MaterialManager,
+    private meshBindGroupLayout: GPUBindGroupLayout,
+    private globalBindGroupLayout: GPUBindGroupLayout,
+    private globalBindGroup: GPUBindGroup,
   ) {
     const shaderModule = this.device.createShaderModule({
       code: forwardShader,
@@ -25,8 +28,8 @@ export class ForwardPass {
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [
           this.camera.uniforms.bindGroupLayout,
-          this.sceneUniforms.bindGroupLayout,
-          this.lightManager.lightBindGroupLayout,
+          this.meshBindGroupLayout,
+          this.globalBindGroupLayout,
           this.materialManager.materialBindGroupLayout,
         ],
       }),
@@ -58,10 +61,11 @@ export class ForwardPass {
       },
       primitive: {
         topology: "triangle-list",
+        cullMode: "none",
       },
       depthStencil: {
         depthWriteEnabled: false,
-        depthCompare: "less",
+        depthCompare: "less-equal",
         format: "depth32float",
       },
     });
@@ -89,15 +93,34 @@ export class ForwardPass {
 
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, this.camera.uniforms.bindGroup);
-    passEncoder.setBindGroup(1, this.sceneUniforms.bindGroup);
-    passEncoder.setBindGroup(2, this.lightManager.lightBindGroup);
+    passEncoder.setBindGroup(2, this.globalBindGroup);
 
     for (const mesh of meshes) {
-      if (!mesh.material) continue;
+      if (!mesh.material) {
+        continue;
+      }
+
+      mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+
+      const meshBindGroup = this.device.createBindGroup({
+        layout: this.meshBindGroupLayout,
+        entries: [
+          {
+            binding: 0,
+            resource: {
+              buffer: mesh.uniforms.buffer,
+            },
+          },
+        ],
+      });
+      passEncoder.setBindGroup(1, meshBindGroup);
+
       const materialBindGroup = this.materialManager.getBindGroup(
         mesh.material,
       );
-      if (!materialBindGroup) continue;
+      if (!materialBindGroup) {
+        continue;
+      }
 
       passEncoder.setBindGroup(3, materialBindGroup);
       passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
