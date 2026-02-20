@@ -3,7 +3,7 @@ import { Texture } from "../textures";
 import { AlphaMode } from "./MaterialBase";
 import { MaterialUniforms } from "./MaterialUniforms";
 
-interface MaterialStandardOptions {
+interface MaterialPBROptions {
   albedoTexture?: Texture | null;
   normalTexture?: Texture | null;
   metalnessRoughnessTexture?: Texture | null;
@@ -13,7 +13,7 @@ interface MaterialStandardOptions {
   opacity?: number;
 }
 
-export class MaterialStandard extends MaterialBase {
+export class MaterialPBR extends MaterialBase {
   albedoTexture: Texture | null = null;
   normalTexture: Texture | null = null;
   metalnessRoughnessTexture: Texture | null = null;
@@ -22,7 +22,7 @@ export class MaterialStandard extends MaterialBase {
   constructor(
     device: GPUDevice,
     name: string,
-    options: MaterialStandardOptions,
+    options: MaterialPBROptions = {},
   ) {
     super(name, options);
     this.albedoTexture = options.albedoTexture ?? null;

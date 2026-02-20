@@ -1,5 +1,5 @@
 import { MaterialBase } from "./MaterialBase";
-import { MaterialStandard } from "./MaterialStandard";
+import { MaterialPBR } from "./MaterialPBR";
 import { MaterialStandardCustom } from "./MaterialStandardCustom";
 import { Camera } from "../camera";
 import { Vertex } from "../geometries";
@@ -149,7 +149,7 @@ export class MaterialManager {
   }
 
   async loadMaterial(material: MaterialBase): Promise<void> {
-    if (material instanceof MaterialStandard) {
+    if (material instanceof MaterialPBR) {
       const textures = [
         material.albedoTexture,
         material.normalTexture,
@@ -192,7 +192,7 @@ export class MaterialManager {
       return this.bindGroupCache.get(material)!;
     }
 
-    if (material instanceof MaterialStandard) {
+    if (material instanceof MaterialPBR) {
       if (!material.albedoTexture) return null; // Albedo is required
       const albedoView = this.textureCache
         .get(material.albedoTexture)

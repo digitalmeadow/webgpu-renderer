@@ -4,7 +4,7 @@ import {
   Scene,
   DirectionalLight,
   Texture,
-  MaterialStandard,
+  MaterialPBR,
   MaterialStandardCustom,
   Mesh,
   Camera,
@@ -43,7 +43,7 @@ async function main() {
   const cubeGeometry = createCubeGeometry(device);
 
   // Standard Material Cube
-  const standardMaterial = new MaterialStandard(device, "standard-material", {
+  const standardMaterial = new MaterialPBR(device, "standard-material", {
     albedoTexture,
   });
   await materialManager.loadMaterial(standardMaterial);
@@ -82,15 +82,11 @@ async function main() {
   scene.add(customCube);
 
   // Transparent Cube
-  const transparentMaterial = new MaterialStandard(
-    device,
-    "transparent-material",
-    {
-      albedoTexture,
-      opacity: 0.5,
-      alphaMode: "blend" as AlphaMode,
-    },
-  );
+  const transparentMaterial = new MaterialPBR(device, "transparent-material", {
+    albedoTexture,
+    opacity: 0.5,
+    alphaMode: "blend" as AlphaMode,
+  });
   await materialManager.loadMaterial(transparentMaterial);
   const transparentCube = new Mesh(
     device,

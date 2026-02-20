@@ -5,7 +5,7 @@ import { Camera } from "../../camera";
 import { GeometryBuffer } from "../GeometryBuffer";
 import { MaterialManager } from "../../materials";
 import { MaterialStandardCustom } from "../../materials";
-import { MaterialStandard } from "../../materials";
+import { MaterialPBR } from "../../materials";
 
 export class GeometryPass {
   private pipeline: GPURenderPipeline;
@@ -146,7 +146,7 @@ export class GeometryPass {
       mesh.uniforms.update(device, mesh.transform.getWorldMatrix());
       passEncoder.setBindGroup(1, mesh.uniforms.bindGroup);
 
-      if (mesh.material instanceof MaterialStandard) {
+      if (mesh.material instanceof MaterialPBR) {
         const materialBindGroup = materialManager.getBindGroup(mesh.material);
         if (materialBindGroup) {
           passEncoder.setBindGroup(2, materialBindGroup);
