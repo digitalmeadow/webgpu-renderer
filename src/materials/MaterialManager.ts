@@ -1,16 +1,16 @@
-import { BaseMaterial } from "./BaseMaterial";
+import { MaterialBase } from "./MaterialBase";
 import { MaterialStandard } from "./MaterialStandard";
 import { MaterialStandardCustom } from "./MaterialStandardCustom";
-import { Camera } from "../camera/Camera";
-import { Vertex } from "../geometries/Vertex";
-import { Texture } from "../textures/Texture";
-import baseGeometryShader from "../renderer/passes/geometry.wgsl?raw";
+import { Camera } from "../camera";
+import { Vertex } from "../geometries";
+import { Texture } from "../textures";
+import geometryPassShader from "../renderer/passes/GeometryPass.wgsl?raw";
 
 export class MaterialManager {
   private device: GPUDevice;
   private textureCache: Map<Texture, GPUTexture> = new Map();
   private defaultSampler: GPUSampler;
-  private bindGroupCache: Map<BaseMaterial, GPUBindGroup> = new Map();
+  private bindGroupCache: Map<MaterialBase, GPUBindGroup> = new Map();
   public readonly materialBindGroupLayout: GPUBindGroupLayout;
   private placeholderNormalTexture: GPUTexture;
   private placeholderMetalRoughnessTexture: GPUTexture;
@@ -33,7 +33,7 @@ export class MaterialManager {
       0, 255, 0, 255,
     ]); // 0 metal, 1 rough
 
-    this.baseShader = baseGeometryShader;
+    this.baseShader = geometryPassShader;
     this.materialBindGroupLayout = device.createBindGroupLayout({
       label: "Material Bind Group Layout",
       entries: [
@@ -148,7 +148,7 @@ export class MaterialManager {
     return pipeline;
   }
 
-  async loadMaterial(material: BaseMaterial): Promise<void> {
+  async loadMaterial(material: MaterialBase): Promise<void> {
     if (material instanceof MaterialStandard) {
       const textures = [
         material.albedoTexture,
@@ -187,7 +187,7 @@ export class MaterialManager {
     this.textureCache.set(texture, gpuTexture);
   }
 
-  getBindGroup(material: BaseMaterial): GPUBindGroup | null {
+  getBindGroup(material: MaterialBase): GPUBindGroup | null {
     if (this.bindGroupCache.has(material)) {
       return this.bindGroupCache.get(material)!;
     }

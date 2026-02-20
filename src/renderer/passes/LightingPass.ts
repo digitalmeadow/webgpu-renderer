@@ -1,6 +1,6 @@
-import lightingShader from "./lighting.wgsl?raw";
+import shader from "./LightingPass.wgsl?raw";
 import { GeometryBuffer } from "../GeometryBuffer";
-import { Camera } from "../../camera/Camera";
+import { Camera } from "../../camera";
 
 export class LightingPass {
   private pipeline: GPURenderPipeline;
@@ -17,7 +17,7 @@ export class LightingPass {
     height: number,
   ) {
     const shaderModule = device.createShaderModule({
-      code: lightingShader,
+      code: shader,
     });
 
     this.outputTexture = device.createTexture({

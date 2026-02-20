@@ -1,6 +1,7 @@
-import { MaterialUniforms } from "../MaterialUniforms";
-import { Texture } from "../Texture";
-import { AlphaMode, BaseMaterial } from "./BaseMaterial";
+import { MaterialBase } from "./MaterialBase";
+import { Texture } from "../textures";
+import { AlphaMode } from "./MaterialBase";
+import { MaterialUniforms } from "./MaterialUniforms";
 
 interface MaterialStandardOptions {
   albedoTexture?: Texture | null;
@@ -12,7 +13,7 @@ interface MaterialStandardOptions {
   opacity?: number;
 }
 
-export class MaterialStandard extends BaseMaterial {
+export class MaterialStandard extends MaterialBase {
   albedoTexture: Texture | null = null;
   normalTexture: Texture | null = null;
   metalnessRoughnessTexture: Texture | null = null;

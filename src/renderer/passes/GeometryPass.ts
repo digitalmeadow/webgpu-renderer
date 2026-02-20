@@ -1,11 +1,11 @@
-import geometryShader from "./geometry.wgsl?raw";
-import { Mesh } from "../../scene/Mesh";
-import { Vertex } from "../../geometries/Vertex";
-import { Camera } from "../../camera/Camera";
+import shader from "./GeometryPass.wgsl?raw";
+import { Mesh } from "../../scene";
+import { Vertex } from "../../geometries";
+import { Camera } from "../../camera";
 import { GeometryBuffer } from "../GeometryBuffer";
-import { MaterialManager } from "../../materials/MaterialManager";
-import { MaterialStandardCustom } from "../../materials/MaterialStandardCustom";
-import { MaterialStandard } from "../../materials/MaterialStandard";
+import { MaterialManager } from "../../materials";
+import { MaterialStandardCustom } from "../../materials";
+import { MaterialStandard } from "../../materials";
 
 export class GeometryPass {
   private pipeline: GPURenderPipeline;
@@ -18,7 +18,7 @@ export class GeometryPass {
     materialManager: MaterialManager,
   ) {
     const shaderModule = device.createShaderModule({
-      code: geometryShader,
+      code: shader,
     });
 
     this.cameraBindGroupLayout = device.createBindGroupLayout({

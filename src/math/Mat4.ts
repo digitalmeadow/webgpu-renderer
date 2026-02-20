@@ -1,6 +1,5 @@
-import { Vec3 } from "./vec3";
-import { Vec4 } from "./vec4";
-import { Quat } from "./quat";
+import { Quat } from "./Quat";
+import { Vec3 } from "./Vec3";
 
 export class Mat4 {
   readonly data: Float32Array;

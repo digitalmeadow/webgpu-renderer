@@ -1,4 +1,4 @@
-import outputShader from "./output.wgsl?raw";
+import shader from "./OutputPass.wgsl?raw";
 
 export class OutputPass {
   private device: GPUDevice;
@@ -9,7 +9,7 @@ export class OutputPass {
   constructor(device: GPUDevice) {
     this.device = device;
     const shaderModule = device.createShaderModule({
-      code: outputShader,
+      code: shader,
     });
 
     this.sampler = device.createSampler({

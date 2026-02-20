@@ -1,4 +1,4 @@
-export * from "./BaseMaterial";
+export * from "./MaterialBase";
 export * from "./MaterialStandard";
 export * from "./MaterialStandardCustom";
 export * from "./MaterialUniforms";

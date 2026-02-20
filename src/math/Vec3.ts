@@ -1,3 +1,6 @@
+import { Mat4 } from "./Mat4";
+import { Quat } from "./Quat";
+
 export class Vec3 {
   readonly data: Float32Array;
 
@@ -288,7 +291,7 @@ export class Vec3 {
     );
   }
 
-  static transformMat4(a: Vec3, m: import("./mat4").Mat4, out?: Vec3): Vec3 {
+  static transformMat4(a: Vec3, m: Mat4, out?: Vec3): Vec3 {
     out ??= new Vec3();
     const x = a.data[0];
     const y = a.data[1];
@@ -304,7 +307,7 @@ export class Vec3 {
     return out;
   }
 
-  static transformQuat(a: Vec3, q: import("./quat").Quat, out?: Vec3): Vec3 {
+  static transformQuat(a: Vec3, q: Quat, out?: Vec3): Vec3 {
     out ??= new Vec3();
     const qx = q.data[0];
     const qy = q.data[1];

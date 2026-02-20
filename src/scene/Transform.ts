@@ -1,6 +1,4 @@
-import { Mat4 } from "./math/mat4";
-import { Vec3 } from "./math/vec3";
-import { Quat } from "./math/quat";
+import { Vec3, Quat, Mat4 } from "../math";
 
 export class Transform {
   translation: Vec3;

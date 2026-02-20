@@ -1,5 +1,6 @@
 export * from "./math";
 export * from "./time";
+export * from "./lights";
 export * from "./scene";
 export * from "./camera";
 export * from "./renderer";
@@ -7,4 +8,3 @@ export * from "./geometries";
 export * from "./materials";
 export * from "./textures";
 export * from "./uniforms";
-export * from "./lights";

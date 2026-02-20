@@ -1,5 +1,4 @@
-import { DirectionalLight, Light } from "./lights";
-import { Vec3 } from "./math";
+import { Light, DirectionalLight } from "../lights";
 
 // This will be expanded to support more lights
 const MAX_LIGHTS = 1;

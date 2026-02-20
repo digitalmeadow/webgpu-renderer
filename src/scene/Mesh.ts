@@ -1,18 +1,18 @@
+import { MaterialBase } from "../materials";
 import { MeshUniforms } from "./MeshUniforms";
-import { BaseMaterial } from "../materials/BaseMaterial";
 import { Entity } from "./Entity";
-import { Geometry } from "../geometries/Geometry";
+import { Geometry } from "../geometries";
 
 export class Mesh extends Entity {
   public geometry: Geometry;
   public uniforms: MeshUniforms;
-  public material: BaseMaterial | null = null;
+  public material: MaterialBase | null = null;
 
   constructor(
     device: GPUDevice,
     name: string,
     geometry: Geometry,
-    material: BaseMaterial,
+    material: MaterialBase,
   ) {
     super(name);
     this.uniforms = new MeshUniforms(device);

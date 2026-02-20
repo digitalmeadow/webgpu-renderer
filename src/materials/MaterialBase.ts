@@ -4,7 +4,7 @@ export interface MaterialSpecialization {
   isCustom?: boolean;
 }
 
-export abstract class BaseMaterial {
+export abstract class MaterialBase {
   name: string;
   alphaMode: AlphaMode = "opaque";
   alphaCutoff: number = 0.5;

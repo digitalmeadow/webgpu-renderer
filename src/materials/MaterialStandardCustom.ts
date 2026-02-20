@@ -1,5 +1,6 @@
-import { MaterialUniforms } from "../MaterialUniforms";
-import { AlphaMode, BaseMaterial } from "./BaseMaterial";
+import { MaterialBase } from "./MaterialBase";
+import { AlphaMode } from "./MaterialBase";
+import { MaterialUniforms } from "./MaterialUniforms";
 
 export interface ShaderHooks {
   uniforms?: string;
@@ -16,12 +17,16 @@ export interface MaterialStandardCustomOptions extends ShaderHooks {
   opacity?: number;
 }
 
-export class MaterialStandardCustom extends BaseMaterial {
+export class MaterialStandardCustom extends MaterialBase {
   public hooks: ShaderHooks = {};
   public customUniforms: Record<string, any> = {};
   public uniforms: MaterialUniforms;
 
-  constructor(device: GPUDevice, name: string, options: MaterialStandardCustomOptions) {
+  constructor(
+    device: GPUDevice,
+    name: string,
+    options: MaterialStandardCustomOptions,
+  ) {
     super(name, options);
     this.hooks = options;
     this.specialization.isCustom = true;

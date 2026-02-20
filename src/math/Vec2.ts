@@ -1,3 +1,5 @@
+import { Mat4 } from "./Mat4";
+
 export class Vec2 {
   readonly data: Float32Array;
 
@@ -246,7 +248,7 @@ export class Vec2 {
     );
   }
 
-  static transformMat4(a: Vec2, m: import("./mat4").Mat4, out?: Vec2): Vec2 {
+  static transformMat4(a: Vec2, m: Mat4, out?: Vec2): Vec2 {
     out ??= new Vec2();
     const x = a.data[0];
     const y = a.data[1];

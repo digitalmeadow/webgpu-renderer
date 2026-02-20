@@ -1,5 +1,5 @@
-import { Entity } from "../Entity";
 import { Vec3 } from "../math";
+import { Entity } from "../scene";
 
 export enum LightType {
   Directional,

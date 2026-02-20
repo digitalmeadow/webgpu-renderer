@@ -1,4 +1,5 @@
-import { Vec3 } from "./vec3";
+import { Vec3 } from "./Vec3";
+import { Mat4 } from "./Mat4";
 
 export class Quat {
   readonly data: Float32Array;
@@ -276,7 +277,7 @@ export class Quat {
     return out;
   }
 
-  static fromMat(m: import("./mat4").Mat4, out?: Quat): Quat {
+  static fromMat(m: Mat4, out?: Quat): Quat {
     out ??= new Quat();
     const m00 = m.data[0],
       m01 = m.data[1],

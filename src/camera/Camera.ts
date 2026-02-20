@@ -1,5 +1,4 @@
-import { Mat4 } from "./math/mat4";
-import { Vec3 } from "./math/vec3";
+import { Mat4, Vec3 } from "../math";
 
 const CAMERA_BUFFER_SIZE = 320;
 

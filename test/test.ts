@@ -2,17 +2,17 @@ import {
   Renderer,
   World,
   Scene,
+  DirectionalLight,
+  Texture,
+  MaterialStandard,
+  MaterialStandardCustom,
+  Mesh,
   Camera,
   Time,
-  Mesh,
-  MaterialStandard,
-  MaterialCustom,
-  Texture,
-  DirectionalLight,
   Vec3,
-} from "../src/index";
-import type { AlphaMode } from "../src/index";
-import { createCubeGeometry } from "../src/primitives/Cube";
+  AlphaMode,
+} from "../src";
+import { createCubeGeometry } from "../src/geometries";
 
 async function main() {
   const canvas = document.getElementById("gpu-canvas") as HTMLCanvasElement;
@@ -56,7 +56,7 @@ async function main() {
   scene.add(standardCube);
 
   // Custom Material Cube
-  const customMaterial = new MaterialCustom(device, "custom-material", {
+  const customMaterial = new MaterialStandardCustom(device, "custom-material", {
     albedo: `
       fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
           // A simple procedural checkerboard pattern

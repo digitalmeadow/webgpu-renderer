@@ -1,10 +1,10 @@
-import { Mesh } from "../../scene/Mesh";
+import { Mesh } from "../../scene";
 import { LightManager } from "../LightManager";
-import { MaterialManager } from "../../materials/MaterialManager";
-import { Camera } from "../../camera/Camera";
-import { Vertex } from "../../geometries/Vertex";
-import { SceneUniforms } from "../../uniforms/SceneUniforms";
-import forwardShader from "./forward.wgsl?raw";
+import { MaterialManager } from "../../materials";
+import { Camera } from "../../camera";
+import { Vertex } from "../../geometries";
+import { SceneUniforms } from "../../uniforms";
+import shader from "./ForwardPass.wgsl?raw";
 
 export class ForwardPass {
   private pipeline: GPURenderPipeline;
@@ -20,7 +20,7 @@ export class ForwardPass {
     private globalBindGroup: GPUBindGroup,
   ) {
     const shaderModule = this.device.createShaderModule({
-      code: forwardShader,
+      code: shader,
     });
 
     this.pipeline = this.device.createRenderPipeline({
