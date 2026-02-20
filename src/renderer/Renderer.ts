@@ -6,23 +6,28 @@ import { GeometryBuffer } from "./GeometryBuffer";
 import { GeometryPass } from "./passes/GeometryPass";
 import { LightingPass } from "./passes/LightingPass";
 import { OutputPass } from "./passes/OutputPass";
+import { ShadowPass } from "./passes/ShadowPass";
 import { MaterialManager } from "../materials";
 import { Mesh } from "../scene";
 
 import { LightManager } from "./LightManager";
 import { SceneUniforms } from "../uniforms";
-import { Light } from "../lights";
+import { Light, DirectionalLight } from "../lights";
+import { frustumPlanesFromMatrix, aabbInFrustum } from "../math";
 
 export class Renderer {
   private canvas: HTMLCanvasElement;
   private device: GPUDevice;
   private context: GPUCanvasContext | null = null;
   private format: GPUTextureFormat;
+  
+  public frustumCulling: boolean = true;
 
   private geometryBuffer: GeometryBuffer;
   private geometryPass: GeometryPass;
   private lightingPass: LightingPass;
   private outputPass: OutputPass;
+  private shadowPass: ShadowPass;
   private forwardPass: ForwardPass;
   private materialManager: MaterialManager;
   private lightManager: LightManager;
@@ -38,6 +43,7 @@ export class Renderer {
     this.geometryPass = null as unknown as GeometryPass;
     this.lightingPass = null as unknown as LightingPass;
     this.outputPass = null as unknown as OutputPass;
+    this.shadowPass = null as unknown as ShadowPass;
     this.forwardPass = null as unknown as ForwardPass;
     this.materialManager = null as unknown as MaterialManager;
     this.lightManager = null as unknown as LightManager;
@@ -126,6 +132,8 @@ export class Renderer {
       );
 
       this.outputPass = new OutputPass(this.device);
+      
+      this.shadowPass = new ShadowPass(this.device);
 
       // ForwardPass will be initialized in the render loop on first use
       // to ensure we have a camera reference.
@@ -156,7 +164,7 @@ export class Renderer {
       return;
     }
 
-    const meshes = this.collectMeshes(world);
+    const meshes = this.collectVisibleMeshes(world, camera);
     const opaqueMeshes = meshes.filter(
       (m) => m.material?.renderPass === "geometry",
     );
@@ -214,11 +222,14 @@ export class Renderer {
     camera.update(this.device);
 
     const lights = this.collectLights(world);
-    this.lightManager.update(lights);
     this.sceneUniforms.ambientLightColor = world.ambientLightColor;
     this.sceneUniforms.update();
 
     const commandEncoder = this.device.createCommandEncoder();
+
+    // Collect directional lights (for lighting, not shadows yet)
+    const directionalLights = lights.filter(l => l instanceof DirectionalLight) as DirectionalLight[];
+    this.lightManager.update(directionalLights, [camera]);
 
     // Geometry Pass
     this.geometryPass.render(
@@ -278,6 +289,33 @@ export class Renderer {
       }
     }
     return meshes;
+  }
+
+  private collectVisibleMeshes(world: World, camera: Camera): Mesh[] {
+    const allMeshes = this.collectMeshes(world);
+    
+    if (!this.frustumCulling) {
+      return allMeshes;
+    }
+
+    // Update world AABBs for all meshes first
+    for (const mesh of allMeshes) {
+      mesh.updateWorldAABB();
+    }
+
+    // Get camera frustum planes
+    const cameraViewProjection = camera.viewProjectionMatrix;
+    const frustumPlanes = frustumPlanesFromMatrix(cameraViewProjection);
+
+    // Filter meshes by frustum culling
+    const visibleMeshes: Mesh[] = [];
+    for (const mesh of allMeshes) {
+      if (aabbInFrustum(mesh.geometry.aabb, frustumPlanes)) {
+        visibleMeshes.push(mesh);
+      }
+    }
+
+    return visibleMeshes;
   }
 
   private collectLights(world: World): Light[] {

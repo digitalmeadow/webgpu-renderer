@@ -1,6 +1,6 @@
 import { Mat4, Vec3 } from "../math";
 
-const CAMERA_BUFFER_SIZE = 320;
+const CAMERA_BUFFER_SIZE = 384;
 
 export class CameraUniforms {
   buffer: GPUBuffer;
@@ -49,6 +49,9 @@ export class CameraUniforms {
     const projectionMatrixInverse = Mat4.create();
     Mat4.invert(projectionMatrix, projectionMatrixInverse);
 
+    const viewMatrixInverse = Mat4.create();
+    Mat4.invert(viewMatrix, viewMatrixInverse);
+
     const pos = new Float32Array([position.x, position.y, position.z, 1]);
     const nearFar = new Float32Array([near, far]);
 
@@ -64,8 +67,13 @@ export class CameraUniforms {
       192,
       projectionMatrixInverse.data as any,
     );
-    device.queue.writeBuffer(this.buffer, 256, pos);
-    device.queue.writeBuffer(this.buffer, 272, nearFar);
+    device.queue.writeBuffer(
+      this.buffer,
+      256,
+      viewMatrixInverse.data as any,
+    );
+    device.queue.writeBuffer(this.buffer, 320, pos);
+    device.queue.writeBuffer(this.buffer, 336, nearFar);
   }
 }
 

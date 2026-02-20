@@ -8,10 +8,11 @@ import {
   MaterialBasic,
   Mesh,
   Camera,
+  FlyControls,
   Time,
   Vec3,
 } from "../src";
-import { createCubeGeometry } from "../src/geometries";
+import { createCubeGeometry, createPlaneGeometry } from "../src/geometries";
 
 async function main() {
   const canvas = document.getElementById("gpu-canvas") as HTMLCanvasElement;
@@ -27,73 +28,60 @@ async function main() {
   const materialManager = renderer.getMaterialManager();
 
   const world = new World();
-  world.ambientLightColor = new Vec3(0.5, 0.5, 0.5);
+  world.ambientLightColor = new Vec3(0.3, 0.3, 0.3);
   const scene = new Scene("Main Scene");
   world.addScene(scene);
 
+  // Directional light at an angle for shadow casting
   const light = new DirectionalLight("main light");
-  light.transform.setPosition(0, 10, 0);
-  light.transform.setRotation(-90, 0, 0);
+  light.transform.setPosition(0, 10, 5);
+  light.transform.lookAt(new Vec3(0, 0, 0));
+  light.intensity = 1.5;
   scene.add(light);
 
-  const albedoTexture = new Texture(
-    "https://upload.wikimedia.org/wikipedia/commons/b/b6/Image_created_with_a_mobile_phone.png",
-  );
+  // Create floor plane
+  const floorGeometry = createPlaneGeometry(device, 20, 20);
+  const floorMaterial = new MaterialBasic(device, "floor-material", {
+    color: [0.4, 0.4, 0.4, 1.0],
+    renderPass: "geometry",
+  });
+  await materialManager.loadMaterial(floorMaterial);
+  const floor = new Mesh(device, "floor", floorGeometry, floorMaterial);
+  floor.transform.setPosition(0, 0.0, 0);
+  floor.transform.setRotation(-Math.PI, 0, 0);
+  scene.add(floor);
+
+  // Cube geometry
   const cubeGeometry = createCubeGeometry(device);
 
-  // Standard PBR Material Cube (Geometry Pass - Opaque)
-  const pbrMaterial = new MaterialPBR(device, "pbr-material", {
-    albedoTexture,
+  // Shadow caster cube (elevated)
+  const casterMaterial = new MaterialBasic(device, "caster-material", {
+    color: [0.8, 0.2, 0.2, 1.0],
     renderPass: "geometry",
   });
-  await materialManager.loadMaterial(pbrMaterial);
-  const pbrCube = new Mesh(
+  await materialManager.loadMaterial(casterMaterial);
+  const casterCube = new Mesh(
     device,
-    "pbr-cube",
+    "caster-cube",
     cubeGeometry,
-    pbrMaterial,
+    casterMaterial,
   );
-  scene.add(pbrCube);
-
-  // Basic Material Cube (Geometry Pass - Simple color)
-  const basicMaterial = new MaterialBasic(device, "basic-material", {
-    color: [0.2, 0.8, 0.2, 1.0], // Green
-    renderPass: "geometry",
-  });
-  await materialManager.loadMaterial(basicMaterial);
-  const basicCube = new Mesh(
-    device,
-    "basic-cube",
-    cubeGeometry,
-    basicMaterial,
-  );
-  basicCube.transform.setPosition(2.5, 0, 0);
-  scene.add(basicCube);
-
-  // Transparent Material Cube (Forward Pass)
-  const transparentMaterial = new MaterialPBR(device, "transparent-material", {
-    albedoTexture,
-    renderPass: "forward",
-    opacity: 0.5,
-  });
-  await materialManager.loadMaterial(transparentMaterial);
-  const transparentCube = new Mesh(
-    device,
-    "transparent-cube",
-    cubeGeometry,
-    transparentMaterial,
-  );
-  transparentCube.transform.setPosition(1, 0, 0);
-  scene.add(transparentCube);
+  casterCube.transform.setPosition(0, 1, 0);
+  scene.add(casterCube);
 
   const camera = new Camera(
     device,
-    Vec3.create(0, 0, 10),
-    undefined,
+    Vec3.create(0, 5, 10),
+    Vec3.create(0, 0, 0),
     undefined,
     undefined,
     canvas.clientWidth / canvas.clientHeight,
+    0.01,
+    60.0,
   );
+
+  // Initialize fly controls
+  const flyControls = new FlyControls(canvas, camera);
 
   const time = new Time();
 
@@ -105,28 +93,20 @@ async function main() {
 
   window.addEventListener("resize", resize);
 
+  // Initial resize to set correct canvas and camera dimensions
+  resize();
+
   function loop() {
     time.update();
 
-    // Rotate the PBR cube
-    pbrCube.transform.setRotation(
+    // Update fly controls
+    flyControls.update(time.delta);
+
+    // Rotate the caster cube
+    casterCube.transform.setRotation(
       time.elapsed * 0.5,
       time.elapsed * 0.7,
       time.elapsed * 0.3,
-    );
-
-    // Rotate the basic cube
-    basicCube.transform.setRotation(
-      time.elapsed * 0.3,
-      time.elapsed * 0.5,
-      time.elapsed * 0.7,
-    );
-
-    // Rotate the transparent cube
-    transparentCube.transform.setRotation(
-      time.elapsed * 0.2,
-      time.elapsed * 0.3,
-      time.elapsed * 0.4,
     );
 
     renderer.render(world, camera, time);

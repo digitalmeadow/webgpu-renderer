@@ -1,4 +1,5 @@
 import { Vertex } from "./Vertex";
+import { AABB } from "../math";
 
 export class Geometry {
   public vertices: Vertex[];
@@ -8,6 +9,8 @@ export class Geometry {
   public indexBuffer: GPUBuffer;
   public vertexCount: number;
   public indexCount: number;
+  
+  public aabb: AABB;
 
   constructor(device: GPUDevice, vertices: Vertex[], indices: number[]) {
     this.vertices = vertices;
@@ -29,6 +32,24 @@ export class Geometry {
       usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
     });
     device.queue.writeBuffer(this.indexBuffer, 0, new Uint32Array(indices));
+
+    this.aabb = this.computeAABB();
+  }
+
+  private computeAABB(): AABB {
+    const aabb = new AABB();
+    const positions: number[] = [];
+    
+    for (const vertex of this.vertices) {
+      positions.push(
+        vertex.position[0],
+        vertex.position[1],
+        vertex.position[2]
+      );
+    }
+    
+    aabb.setFromVertices(positions);
+    return aabb;
   }
 
   public getVertexData(): Float32Array {

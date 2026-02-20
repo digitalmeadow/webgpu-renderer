@@ -79,15 +79,11 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
     var color = albedo * scene_uniforms.ambient_light_color.rgb;
 
-    // TODO: move to a separate directional light loop
+    // Directional lighting
     let N = normalize(normal);
-    let L = normalize(light_uniforms.lights[0].direction.xyz);
+    let L = normalize(-light_uniforms.lights[0].direction.xyz);
     let diffuse = max(dot(N, L), 0.0);
     color += albedo * light_uniforms.lights[0].color.rgb * light_uniforms.lights[0].intensity * diffuse;
-    
-    // Simple ambient light
-    // let ambient = vec3(1.0, 1.0, 1.0);
-    // var color = ambient * albedo;
 
     output.color = vec4<f32>(color, 1.0);
     return output;

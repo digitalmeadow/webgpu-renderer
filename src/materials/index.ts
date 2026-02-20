@@ -1,6 +1,6 @@
-export * from "./MaterialBase";
-export * from "./MaterialPBR";
-export * from "./MaterialBasic";
-export * from "./MaterialCustom";
-export * from "./MaterialUniforms";
-export * from "./MaterialManager";
+export { MaterialBase } from "./MaterialBase";
+export { MaterialPBR } from "./MaterialPBR";
+export { MaterialBasic } from "./MaterialBasic";
+export { MaterialCustom } from "./MaterialCustom";
+export { MaterialUniforms } from "./MaterialUniforms";
+export { MaterialManager } from "./MaterialManager";

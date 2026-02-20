@@ -1,4 +1,5 @@
 struct MaterialUniforms {
+  color: vec4<f32>,
   opacity: f32,
 };
 
