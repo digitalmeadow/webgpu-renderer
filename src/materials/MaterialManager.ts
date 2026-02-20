@@ -1,10 +1,12 @@
 import { MaterialBase } from "./MaterialBase";
 import { MaterialPBR } from "./MaterialPBR";
-import { MaterialStandardCustom } from "./MaterialStandardCustom";
+import { MaterialBasic } from "./MaterialBasic";
+import { MaterialCustom } from "./MaterialCustom";
 import { Camera } from "../camera";
 import { Vertex } from "../geometries";
 import { Texture } from "../textures";
 import geometryPassShader from "../renderer/passes/GeometryPass.wgsl?raw";
+import forwardPassShader from "../renderer/passes/ForwardPass.wgsl?raw";
 
 export class MaterialManager {
   private device: GPUDevice;
@@ -14,9 +16,12 @@ export class MaterialManager {
   public readonly materialBindGroupLayout: GPUBindGroupLayout;
   private placeholderNormalTexture: GPUTexture;
   private placeholderMetalRoughnessTexture: GPUTexture;
-  private customPipelineCache: Map<MaterialStandardCustom, GPURenderPipeline> =
-    new Map();
-  private baseShader: string;
+
+  private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> = new Map();
+  private hookPipelineCache: Map<MaterialPBR | MaterialBasic, GPURenderPipeline> = new Map();
+
+  private baseGeometryShader: string;
+  private baseForwardShader: string;
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -28,12 +33,14 @@ export class MaterialManager {
 
     this.placeholderNormalTexture = this.createPlaceholderTexture([
       0, 0, 255, 255,
-    ]); // Flat normal map
+    ]);
     this.placeholderMetalRoughnessTexture = this.createPlaceholderTexture([
       0, 255, 0, 255,
-    ]); // 0 metal, 1 rough
+    ]);
 
-    this.baseShader = geometryPassShader;
+    this.baseGeometryShader = geometryPassShader;
+    this.baseForwardShader = forwardPassShader;
+
     this.materialBindGroupLayout = device.createBindGroupLayout({
       label: "Material Bind Group Layout",
       entries: [
@@ -84,8 +91,104 @@ export class MaterialManager {
     return texture;
   }
 
+  getHookPipeline(
+    material: MaterialPBR | MaterialBasic,
+    camera: Camera,
+    meshBindGroupLayout: GPUBindGroupLayout,
+    pass: "geometry" | "forward",
+  ): GPURenderPipeline | null {
+    const cacheKey = material as MaterialPBR | MaterialBasic;
+    if (this.hookPipelineCache.has(cacheKey)) {
+      return this.hookPipelineCache.get(cacheKey)!;
+    }
+
+    const baseShader = pass === "geometry" ? this.baseGeometryShader : this.baseForwardShader;
+    let shader = baseShader;
+
+    const materialHooks = (material as any).hooks || {};
+
+    if (materialHooks.albedo) {
+      const albedoFunctionRegex =
+        /fn\s+get_albedo_color\s*\([^)]*\)\s*->\s*vec4<f32>\s*\{[^}]*}/;
+      shader = shader.replace(albedoFunctionRegex, materialHooks.albedo);
+    }
+    if (materialHooks.uniforms) {
+      shader = shader.replace(
+        "//--HOOK_PLACEHOLDER_UNIFORMS--//",
+        materialHooks.uniforms,
+      );
+    }
+
+    const shaderModule = this.device.createShaderModule({
+      code: shader,
+    });
+
+    const isOpaque = pass === "geometry";
+
+    const pipeline = this.device.createRenderPipeline({
+      label: `Hook Material Pipeline: ${material.name} (${pass})`,
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [
+          camera.uniforms.bindGroupLayout,
+          meshBindGroupLayout,
+          this.materialBindGroupLayout,
+        ],
+      }),
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vs_main",
+        buffers: [Vertex.getBufferLayout()],
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fs_main",
+        targets: isOpaque
+          ? [
+              { format: "rgba8unorm" },
+              { format: "rgba16float" },
+              { format: "rgba8unorm" },
+            ]
+          : [
+              {
+                format: navigator.gpu.getPreferredCanvasFormat(),
+                blend: {
+                  color: {
+                    srcFactor: "src-alpha",
+                    dstFactor: "one-minus-src-alpha",
+                    operation: "add",
+                  },
+                  alpha: {
+                    srcFactor: "one",
+                    dstFactor: "one-minus-src-alpha",
+                    operation: "add",
+                  },
+                },
+              },
+            ],
+      },
+      primitive: {
+        topology: "triangle-list",
+        cullMode: material.doubleSided ? "none" : "back",
+      },
+      depthStencil: isOpaque
+        ? {
+            format: "depth32float",
+            depthWriteEnabled: true,
+            depthCompare: "less",
+          }
+        : {
+            format: "depth32float",
+            depthWriteEnabled: false,
+            depthCompare: "less-equal",
+          },
+    });
+
+    this.hookPipelineCache.set(cacheKey, pipeline);
+    return pipeline;
+  }
+
   getCustomPipeline(
-    material: MaterialStandardCustom,
+    material: MaterialCustom,
     camera: Camera,
     meshBindGroupLayout: GPUBindGroupLayout,
   ): GPURenderPipeline | null {
@@ -93,22 +196,19 @@ export class MaterialManager {
       return this.customPipelineCache.get(material)!;
     }
 
-    let shader = this.baseShader;
-    if (material.hooks.albedo) {
-      const albedoFunctionRegex =
-        /fn\s+get_albedo_color\s*\([^)]*\)\s*->\s*vec4<f32>\s*\{[^}]*}/;
-      shader = shader.replace(albedoFunctionRegex, material.hooks.albedo);
-    }
-    if (material.hooks.uniforms) {
-      shader = shader.replace(
-        "//--HOOK_PLACEHOLDER_UNIFORMS--//",
-        material.hooks.uniforms,
-      );
+    const pass = material.renderPass;
+    const customShader = material.passes[pass];
+
+    if (!customShader) {
+      console.warn(`MaterialCustom "${material.name}" has no shader for pass: ${pass}`);
+      return null;
     }
 
     const shaderModule = this.device.createShaderModule({
-      code: shader,
+      code: customShader,
     });
+
+    const isOpaque = pass === "geometry";
 
     const pipeline = this.device.createRenderPipeline({
       label: `Custom Material Pipeline: ${material.name}`,
@@ -127,21 +227,45 @@ export class MaterialManager {
       fragment: {
         module: shaderModule,
         entryPoint: "fs_main",
-        targets: [
-          { format: "rgba8unorm" }, // Albedo
-          { format: "rgba16float" }, // Normal
-          { format: "rgba8unorm" }, // Metal/Roughness
-        ],
+        targets: isOpaque
+          ? [
+              { format: "rgba8unorm" },
+              { format: "rgba16float" },
+              { format: "rgba8unorm" },
+            ]
+          : [
+              {
+                format: navigator.gpu.getPreferredCanvasFormat(),
+                blend: {
+                  color: {
+                    srcFactor: "src-alpha",
+                    dstFactor: "one-minus-src-alpha",
+                    operation: "add",
+                  },
+                  alpha: {
+                    srcFactor: "one",
+                    dstFactor: "one-minus-src-alpha",
+                    operation: "add",
+                  },
+                },
+              },
+            ],
       },
       primitive: {
         topology: "triangle-list",
-        cullMode: "back",
+        cullMode: material.doubleSided ? "none" : "back",
       },
-      depthStencil: {
-        format: "depth32float",
-        depthWriteEnabled: true,
-        depthCompare: "less",
-      },
+      depthStencil: isOpaque
+        ? {
+            format: "depth32float",
+            depthWriteEnabled: true,
+            depthCompare: "less",
+          }
+        : {
+            format: "depth32float",
+            depthWriteEnabled: false,
+            depthCompare: "less-equal",
+          },
     });
 
     this.customPipelineCache.set(material, pipeline);
@@ -161,8 +285,6 @@ export class MaterialManager {
           this.createTextureResources(texture);
         }
       }
-    } else if (material instanceof MaterialStandardCustom) {
-      // Future: Handle textures for custom materials if they have any
     }
   }
 
@@ -193,7 +315,7 @@ export class MaterialManager {
     }
 
     if (material instanceof MaterialPBR) {
-      if (!material.albedoTexture) return null; // Albedo is required
+      if (!material.albedoTexture) return null;
       const albedoView = this.textureCache
         .get(material.albedoTexture)
         ?.createView();
@@ -224,20 +346,32 @@ export class MaterialManager {
 
       this.bindGroupCache.set(material, bindGroup);
       return bindGroup;
-    } else if (material instanceof MaterialStandardCustom) {
+    } else if (material instanceof MaterialBasic) {
       material.uniforms.update(material);
 
       const bindGroup = this.device.createBindGroup({
         layout: this.materialBindGroupLayout,
         entries: [
           { binding: 0, resource: this.defaultSampler },
-          // TODO: Add placeholder textures for custom materials
           { binding: 1, resource: this.placeholderNormalTexture.createView() },
           { binding: 2, resource: this.placeholderNormalTexture.createView() },
-          {
-            binding: 3,
-            resource: this.placeholderMetalRoughnessTexture.createView(),
-          },
+          { binding: 3, resource: this.placeholderMetalRoughnessTexture.createView() },
+          { binding: 4, resource: { buffer: material.uniforms.buffer } },
+        ],
+      });
+
+      this.bindGroupCache.set(material, bindGroup);
+      return bindGroup;
+    } else if (material instanceof MaterialCustom) {
+      material.uniforms.update(material);
+
+      const bindGroup = this.device.createBindGroup({
+        layout: this.materialBindGroupLayout,
+        entries: [
+          { binding: 0, resource: this.defaultSampler },
+          { binding: 1, resource: this.placeholderNormalTexture.createView() },
+          { binding: 2, resource: this.placeholderNormalTexture.createView() },
+          { binding: 3, resource: this.placeholderMetalRoughnessTexture.createView() },
           { binding: 4, resource: { buffer: material.uniforms.buffer } },
         ],
       });

@@ -1,6 +1,7 @@
 import { Mesh } from "../../scene";
 import { LightManager } from "../LightManager";
 import { MaterialManager } from "../../materials";
+import { MaterialPBR, MaterialBasic, MaterialCustom } from "../../materials";
 import { Camera } from "../../camera";
 import { Vertex } from "../../geometries";
 import { SceneUniforms } from "../../uniforms";
@@ -91,13 +92,38 @@ export class ForwardPass {
       },
     });
 
-    passEncoder.setPipeline(this.pipeline);
-    passEncoder.setBindGroup(0, this.camera.uniforms.bindGroup);
-    passEncoder.setBindGroup(2, this.globalBindGroup);
+    let currentPipeline: GPURenderPipeline | null = null;
 
     for (const mesh of meshes) {
       if (!mesh.material) {
         continue;
+      }
+
+      let pipelineToUse: GPURenderPipeline | null = null;
+      
+      if (mesh.material instanceof MaterialCustom) {
+        pipelineToUse = this.materialManager.getCustomPipeline(
+          mesh.material,
+          this.camera,
+          this.meshBindGroupLayout,
+        );
+      } else if (mesh.material instanceof MaterialBasic || 
+                 (mesh.material instanceof MaterialPBR && mesh.material.hooks.albedo)) {
+        pipelineToUse = this.materialManager.getHookPipeline(
+          mesh.material,
+          this.camera,
+          this.meshBindGroupLayout,
+          "forward",
+        );
+      } else {
+        pipelineToUse = this.pipeline;
+      }
+
+      if (!pipelineToUse) continue;
+
+      if (pipelineToUse !== currentPipeline) {
+        passEncoder.setPipeline(pipelineToUse);
+        currentPipeline = pipelineToUse;
       }
 
       mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
@@ -122,6 +148,8 @@ export class ForwardPass {
         continue;
       }
 
+      passEncoder.setBindGroup(0, this.camera.uniforms.bindGroup);
+      passEncoder.setBindGroup(2, this.globalBindGroup);
       passEncoder.setBindGroup(3, materialBindGroup);
       passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
       passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");

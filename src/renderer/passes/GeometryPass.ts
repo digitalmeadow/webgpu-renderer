@@ -4,8 +4,7 @@ import { Vertex } from "../../geometries";
 import { Camera } from "../../camera";
 import { GeometryBuffer } from "../GeometryBuffer";
 import { MaterialManager } from "../../materials";
-import { MaterialStandardCustom } from "../../materials";
-import { MaterialPBR } from "../../materials";
+import { MaterialPBR, MaterialBasic, MaterialCustom } from "../../materials";
 
 export class GeometryPass {
   private pipeline: GPURenderPipeline;
@@ -125,11 +124,20 @@ export class GeometryPass {
 
       // Determine which pipeline to use
       let pipelineToUse: GPURenderPipeline | null = null;
-      if (mesh.material instanceof MaterialStandardCustom) {
+      
+      if (mesh.material instanceof MaterialCustom) {
         pipelineToUse = materialManager.getCustomPipeline(
           mesh.material,
           camera,
           this.meshBindGroupLayout,
+        );
+      } else if (mesh.material instanceof MaterialBasic || 
+                 (mesh.material instanceof MaterialPBR && mesh.material.hooks.albedo)) {
+        pipelineToUse = materialManager.getHookPipeline(
+          mesh.material,
+          camera,
+          this.meshBindGroupLayout,
+          "geometry",
         );
       } else {
         pipelineToUse = this.pipeline;
@@ -146,11 +154,9 @@ export class GeometryPass {
       mesh.uniforms.update(device, mesh.transform.getWorldMatrix());
       passEncoder.setBindGroup(1, mesh.uniforms.bindGroup);
 
-      if (mesh.material instanceof MaterialPBR) {
-        const materialBindGroup = materialManager.getBindGroup(mesh.material);
-        if (materialBindGroup) {
-          passEncoder.setBindGroup(2, materialBindGroup);
-        }
+      const materialBindGroup = materialManager.getBindGroup(mesh.material);
+      if (materialBindGroup) {
+        passEncoder.setBindGroup(2, materialBindGroup);
       }
 
       passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);

@@ -5,12 +5,11 @@ import {
   DirectionalLight,
   Texture,
   MaterialPBR,
-  MaterialStandardCustom,
+  MaterialBasic,
   Mesh,
   Camera,
   Time,
   Vec3,
-  AlphaMode,
 } from "../src";
 import { createCubeGeometry } from "../src/geometries";
 
@@ -42,50 +41,40 @@ async function main() {
   );
   const cubeGeometry = createCubeGeometry(device);
 
-  // Standard Material Cube
-  const standardMaterial = new MaterialPBR(device, "standard-material", {
+  // Standard PBR Material Cube (Geometry Pass - Opaque)
+  const pbrMaterial = new MaterialPBR(device, "pbr-material", {
     albedoTexture,
+    renderPass: "geometry",
   });
-  await materialManager.loadMaterial(standardMaterial);
-  const standardCube = new Mesh(
+  await materialManager.loadMaterial(pbrMaterial);
+  const pbrCube = new Mesh(
     device,
-    "standard-cube",
+    "pbr-cube",
     cubeGeometry,
-    standardMaterial,
+    pbrMaterial,
   );
-  scene.add(standardCube);
+  scene.add(pbrCube);
 
-  // Custom Material Cube
-  const customMaterial = new MaterialStandardCustom(device, "custom-material", {
-    albedo: `
-      fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
-          // A simple procedural checkerboard pattern
-          let checker_size = 10.0;
-          let f = floor(uv * checker_size);
-          let is_even = (f.x + f.y) % 2.0 == 0.0;
-          if (is_even) {
-              return vec4<f32>(0.8, 0.8, 0.8, 1.0);
-          } else {
-              return vec4<f32>(0.2, 0.2, 0.2, 1.0);
-          }
-      }
-    `,
+  // Basic Material Cube (Geometry Pass - Simple color)
+  const basicMaterial = new MaterialBasic(device, "basic-material", {
+    color: [0.2, 0.8, 0.2, 1.0], // Green
+    renderPass: "geometry",
   });
-  await materialManager.loadMaterial(customMaterial);
-  const customCube = new Mesh(
+  await materialManager.loadMaterial(basicMaterial);
+  const basicCube = new Mesh(
     device,
-    "custom-cube",
+    "basic-cube",
     cubeGeometry,
-    customMaterial,
+    basicMaterial,
   );
-  customCube.transform.setPosition(2.5, 0, 0);
-  scene.add(customCube);
+  basicCube.transform.setPosition(2.5, 0, 0);
+  scene.add(basicCube);
 
-  // Transparent Cube
+  // Transparent Material Cube (Forward Pass)
   const transparentMaterial = new MaterialPBR(device, "transparent-material", {
     albedoTexture,
+    renderPass: "forward",
     opacity: 0.5,
-    alphaMode: "blend" as AlphaMode,
   });
   await materialManager.loadMaterial(transparentMaterial);
   const transparentCube = new Mesh(
@@ -119,15 +108,15 @@ async function main() {
   function loop() {
     time.update();
 
-    // Rotate the standard cube
-    standardCube.transform.setRotation(
+    // Rotate the PBR cube
+    pbrCube.transform.setRotation(
       time.elapsed * 0.5,
       time.elapsed * 0.7,
       time.elapsed * 0.3,
     );
 
-    // Rotate the custom cube
-    customCube.transform.setRotation(
+    // Rotate the basic cube
+    basicCube.transform.setRotation(
       time.elapsed * 0.3,
       time.elapsed * 0.5,
       time.elapsed * 0.7,

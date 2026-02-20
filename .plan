@@ -1,10 +1,10 @@
-Materials:
+---- Core --------
+1. Shadows
+2. Skinning
+3. Particles
 
-1. Rename the current MaterialCustom to MaterialStandardCustom 
 
-2 Create a new CustomMaterial where the consumer is able to define vertex and fragment shaders entirely
-  Get run either in the geo-pass or the forward pass if transparent
-
+---- GLTF ------
 
 Create a new package called webgpu-renderer-gltf-loader
 Install @gltf-transform/core as its only dependency.

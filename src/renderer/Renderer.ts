@@ -158,10 +158,10 @@ export class Renderer {
 
     const meshes = this.collectMeshes(world);
     const opaqueMeshes = meshes.filter(
-      (m) => m.material?.alphaMode === "opaque",
+      (m) => m.material?.renderPass === "geometry",
     );
     const transparentMeshes = meshes.filter(
-      (m) => m.material?.alphaMode === "blend",
+      (m) => m.material?.renderPass === "forward",
     );
 
     if (!this.forwardPass && transparentMeshes.length > 0) {
