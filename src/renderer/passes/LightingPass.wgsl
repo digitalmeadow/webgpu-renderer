@@ -10,7 +10,8 @@ struct VertexOutput {
 @group(0) @binding(0) var sampler_linear: sampler;
 @group(0) @binding(1) var gbuffer_albedo: texture_2d<f32>;
 @group(0) @binding(2) var gbuffer_normal_roughness: texture_2d<f32>;
-@group(0) @binding(3) var gbuffer_depth: texture_depth_2d;
+@group(0) @binding(3) var gbuffer_metal_roughness: texture_2d<f32>;
+@group(0) @binding(4) var gbuffer_depth: texture_depth_2d;
 
 // Camera uniforms (group 1)
 struct CameraUniforms {
@@ -25,20 +26,19 @@ struct CameraUniforms {
 
 @group(1) @binding(0) var<uniform> camera_uniforms: CameraUniforms;
 
-// Lights (group 2)
-struct Light {
-    color: vec4<f32>,
+// Shadow resources (group 2)
+@group(2) @binding(0) var shadow_sampler: sampler_comparison;
+@group(2) @binding(1) var shadow_texture: texture_depth_2d;
+
+// Shadow + Light uniforms (group 2, binding 2)
+struct ShadowLightUniforms {
+    lightViewProjMatrix: mat4x4<f32>,
+    lightPos: vec4<f32>,
     direction: vec4<f32>,
-    intensity: f32,
-    light_type: u32,
-    _padding: vec2<f32>,
-};
+    color_intensity: vec4<f32>,
+}
 
-struct LightUniforms {
-    lights: array<Light, 1>,
-};
-
-@group(2) @binding(0) var<uniform> light_uniforms: LightUniforms;
+@group(2) @binding(2) var<uniform> shadow_light_uniforms: ShadowLightUniforms;
 
 // Scene (group 3)
 struct SceneUniforms {
@@ -49,6 +49,24 @@ struct SceneUniforms {
 
 struct FragmentOutput {
     @location(0) color: vec4<f32>,
+}
+
+fn getShadow(world_pos: vec3<f32>, normal: vec3<f32>) -> f32 {
+    let light_space_pos = shadow_light_uniforms.lightViewProjMatrix * vec4<f32>(world_pos, 1.0);
+    
+    // XY to [0,1] texture coords (Y flipped for texture coordinate system)
+    let shadow_coords = vec2<f32>(
+        light_space_pos.x * 0.5 + 0.5,
+        light_space_pos.y * -0.5 + 0.5
+    );
+    
+    // Z stays in clip space [-1,1] - match ShadowPass output
+    // Add small bias to prevent shadow acne
+    let current_depth = light_space_pos.z - 0.001;
+    
+    let shadow = textureSampleCompare(shadow_texture, shadow_sampler, shadow_coords, current_depth);
+    
+    return shadow;
 }
 
 @vertex
@@ -76,14 +94,116 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let normal_roughness = textureSample(gbuffer_normal_roughness, sampler_linear, in.uv_coords);
     let normal = normal_roughness.rgb;
     let roughness = normal_roughness.a;
+    let depth = textureLoad(gbuffer_depth, vec2<i32>(in.uv_coords * vec2<f32>(textureDimensions(gbuffer_depth))), 0);
+
+    // DEBUG: Output normal as color to check if normals are working
+    let debug_normal_color = normal * 0.5 + 0.5;
+    
+    // DEBUG: Check depth values
+    let debug_depth_color = vec3<f32>(depth);
 
     var color = albedo * scene_uniforms.ambient_light_color.rgb;
 
-    // Directional lighting
+    // Reconstruct world position from depth
+    let uv = in.uv_coords;
+    let clip_pos = vec4<f32>(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    let view_pos = camera_uniforms.projection_matrix_inverse * clip_pos;
+    let world_pos = camera_uniforms.view_matrix * view_pos;
+    let world_pos_3d = world_pos.xyz / world_pos.w;
+
+    // DEBUG: Additional debug values
+    let camera_to_frag = length(world_pos_3d - camera_uniforms.position.xyz);
+    let debug_camera_dist = vec3<f32>(camera_to_frag / 60.0);
+    
+    // DEBUG: Shadow coords
+    let light_space_pos_debug = shadow_light_uniforms.lightViewProjMatrix * vec4<f32>(world_pos_3d, 1.0);
+    let shadow_coords_debug = vec2<f32>(
+        light_space_pos_debug.x * 0.5 + 0.5,
+        light_space_pos_debug.y * -0.5 + 0.5
+    );
+    // Z stays in clip space [-1,1], map to [0,1] for display
+    let debug_shadow_coords = vec3<f32>(shadow_coords_debug, light_space_pos_debug.z * 0.5 + 0.5);
+
+    // DEBUG: Raw shadow depth texture sample
+    let shadow_tex_coords = vec2<i32>(shadow_coords_debug * vec2<f32>(2048.0));
+    let shadow_depth_raw = textureLoad(shadow_texture, shadow_tex_coords, 0);
+    let debug_shadow_depth_raw = vec3<f32>(shadow_depth_raw);
+    
+    // DEBUG: Check if directional light data is valid
+    let debug_light_dir = shadow_light_uniforms.direction.xyz;
+    let debug_light_color = shadow_light_uniforms.color_intensity.rgb;
+    let debug_light_intensity = shadow_light_uniforms.color_intensity.a;
+    let debug_diffuse_check = max(dot(normalize(normal), normalize(-debug_light_dir)), 0.0);
+
+    // Directional lighting with shadows
     let N = normalize(normal);
-    let L = normalize(-light_uniforms.lights[0].direction.xyz);
+    let L = normalize(-shadow_light_uniforms.direction.xyz);
     let diffuse = max(dot(N, L), 0.0);
-    color += albedo * light_uniforms.lights[0].color.rgb * light_uniforms.lights[0].intensity * diffuse;
+    
+    // Use actual shadow calculation
+    let shadow = getShadow(world_pos_3d, N);
+    
+    let light_color = shadow_light_uniforms.color_intensity.rgb;
+    let light_intensity = shadow_light_uniforms.color_intensity.a;
+    
+    color += albedo * light_color * light_intensity * diffuse * shadow;
+
+    // DEBUG OUTPUT: Uncomment one of these to debug
+    
+    // Option 1: Show albedo only (no lighting)
+    // Working
+    // color = albedo;
+    
+    // Option 2: Show normal as color
+    // Working
+    // color = debug_normal_color;
+    
+    // Option 3: Show depth
+    // Not really working (have to get right up to the mesh for it to darken)
+    // color = debug_depth_color;
+    
+    // Option 4: Show light direction (if this is colorful, light dir is valid)
+    // Working
+    // color = vec3<f32>(debug_light_dir * 0.5 + 0.5);
+    
+    // Option 5: Show diffuse value (white = lit, black = unlit)
+    // Working
+    // color = vec3<f32>(debug_diffuse_check);
+    
+    // Option 6: Show shadow value (white = fully lit, black = fully shadowed)
+    // Should work now
+    color = vec3<f32>(shadow);
+    
+    // Option 7: Show light space Z depth
+    // Shows the depth value being compared against shadow map (clip space [-1,1])
+    // Map to [0,1] for display: -1 -> 0, 1 -> 1
+    let light_space_z = light_space_pos_debug.z * 0.5 + 0.5;
+    // color = vec3<f32>(light_space_z);
+    
+    // Option 8: Show camera distance (closer = darker, farther = lighter)
+    // Working
+    // color = debug_camera_dist;
+    
+    // Option 8: Show shadow coords (new method - matching working example)
+    // Shows XYZ: X=shadow coord X, Y=shadow coord Y, Z=light space Z
+    // color = debug_shadow_coords;
+
+    // Option 9: Show light space position (raw XYZ values normalized)
+    // color = vec3<f32>(
+    // light_space_pos_debug.x * 0.5 + 0.5,
+    // light_space_pos_debug.y * 0.5 + 0.5,
+    // light_space_pos_debug.z * 0.5 + 0.5
+    // );
+
+    // Option 10: Show raw shadow depth texture (what's actually written to shadow map)
+    // White = depth 1.0 (clear value, nothing rendered)
+    // Black = depth 0.0 (closest to light)
+    // If you see mostly white, nothing is being rendered to shadow map
+    // Should work now
+    // color = debug_shadow_depth_raw;
+
+    // Option 11: Show light color * intensity
+    // color = debug_light_color * debug_light_intensity;
 
     output.color = vec4<f32>(color, 1.0);
     return output;

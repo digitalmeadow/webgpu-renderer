@@ -48,7 +48,7 @@ async function main() {
   await materialManager.loadMaterial(floorMaterial);
   const floor = new Mesh(device, "floor", floorGeometry, floorMaterial);
   floor.transform.setPosition(0, 0.0, 0);
-  floor.transform.setRotation(-Math.PI, 0, 0);
+  // floor.transform.setRotation(0, 0, 0);
   scene.add(floor);
 
   // Cube geometry

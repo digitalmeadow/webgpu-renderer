@@ -67,7 +67,7 @@ export class GeometryPass {
       },
       primitive: {
         topology: "triangle-list",
-        cullMode: "back",
+        cullMode: "none",
       },
       depthStencil: {
         format: "depth32float",

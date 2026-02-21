@@ -12,7 +12,6 @@ export class ShadowPass {
   private meshBindGroupLayout: GPUBindGroupLayout;
   private shadowTexture: GPUTexture;
   private shadowTextureView: GPUTextureView;
-  private shadowTextureViews: GPUTextureView[] = [];
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -22,7 +21,7 @@ export class ShadowPass {
       size: {
         width: SHADOW_MAP_SIZE,
         height: SHADOW_MAP_SIZE,
-        depthOrArrayLayers: SHADOW_MAP_CASCADES_COUNT,
+        depthOrArrayLayers: 1,
       },
       format: "depth32float",
       usage:
@@ -31,18 +30,9 @@ export class ShadowPass {
     });
 
     this.shadowTextureView = this.shadowTexture.createView({
-      label: "Shadow Directional Texture Array View",
-      dimension: "2d-array",
+      label: "Shadow Directional Texture View",
+      dimension: "2d",
     });
-
-    for (let i = 0; i < SHADOW_MAP_CASCADES_COUNT; i++) {
-      const view = this.shadowTexture.createView({
-        label: `Shadow Directional Texture View ${i}`,
-        baseArrayLayer: i,
-        arrayLayerCount: 1,
-      });
-      this.shadowTextureViews.push(view);
-    }
 
     this.meshBindGroupLayout = this.device.createBindGroupLayout({
       label: "Shadow Pass Mesh Bind Group Layout",
@@ -72,11 +62,11 @@ export class ShadowPass {
       },
       primitive: {
         topology: "triangle-list",
-        cullMode: "front",
+        cullMode: "back",
       },
       depthStencil: {
         depthWriteEnabled: true,
-        depthCompare: "less-equal",
+        depthCompare: "less",
         format: "depth32float",
         depthBias: 4,
         depthBiasSlopeScale: 2.0,
@@ -87,56 +77,54 @@ export class ShadowPass {
 
   public render(
     encoder: GPUCommandEncoder,
-    directionalLights: DirectionalLight[],
+    light: DirectionalLight,
     meshes: Mesh[],
   ): void {
-    for (let lightIndex = 0; lightIndex < directionalLights.length; lightIndex++) {
-      const light = directionalLights[lightIndex];
+    console.log('[ShadowPass] render called with', { meshCount: meshes.length });
+
+    const frustumPlanes = frustumPlanesFromMatrix(light.shadowMatrix);
+    const visibleMeshes = meshes.filter((mesh) => {
+      mesh.updateWorldAABB();
+      return true;
+    });
+
+    console.log('[ShadowPass] visible meshes:', visibleMeshes.length);
+
+    const passEncoder = encoder.beginRenderPass({
+      label: "Shadow Pass",
+      colorAttachments: [],
+      depthStencilAttachment: {
+        view: this.shadowTextureView,
+        depthClearValue: 1.0,
+        depthLoadOp: "clear",
+        depthStoreOp: "store",
+      },
+    });
+
+    passEncoder.setPipeline(this.pipeline);
+    
+    for (const mesh of visibleMeshes) {
+      mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
       
-      for (let cascadeIndex = 0; cascadeIndex < SHADOW_MAP_CASCADES_COUNT; cascadeIndex++) {
-        light.setActiveCascadeIndex(cascadeIndex);
-        
-        const frustumPlanes = frustumPlanesFromMatrix(light.viewProjectionMatrices[cascadeIndex]);
-        const visibleMeshes = meshes.filter((mesh) => {
-          mesh.updateWorldAABB();
-          return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-        });
-
-        const passEncoder = encoder.beginRenderPass({
-          label: `Shadow Pass Light ${lightIndex} Cascade ${cascadeIndex}`,
-          colorAttachments: [],
-          depthStencilAttachment: {
-            view: this.shadowTextureViews[cascadeIndex],
-            depthClearValue: 1.0,
-            depthLoadOp: "clear",
-            depthStoreOp: "store",
+      const meshBindGroup = this.device.createBindGroup({
+        label: "Shadow Pass Mesh Bind Group",
+        layout: this.meshBindGroupLayout,
+        entries: [
+          {
+            binding: 0,
+            resource: { buffer: mesh.uniforms.buffer },
           },
-        });
+        ],
+      });
 
-        passEncoder.setPipeline(this.pipeline);
-        
-        for (const mesh of visibleMeshes) {
-          const meshBindGroup = this.device.createBindGroup({
-            label: "Shadow Pass Mesh Bind Group",
-            layout: this.meshBindGroupLayout,
-            entries: [
-              {
-                binding: 0,
-                resource: { buffer: mesh.uniforms.buffer },
-              },
-            ],
-          });
-
-          passEncoder.setBindGroup(0, light.shadowBindGroup);
-          passEncoder.setBindGroup(1, meshBindGroup);
-          passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
-          passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
-          passEncoder.drawIndexed(mesh.geometry.indexCount);
-        }
-
-        passEncoder.end();
-      }
+      passEncoder.setBindGroup(0, light.shadowBindGroup);
+      passEncoder.setBindGroup(1, meshBindGroup);
+      passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
+      passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
+      passEncoder.drawIndexed(mesh.geometry.indexCount);
     }
+
+    passEncoder.end();
   }
 
   public getShadowTextureView(): GPUTextureView {

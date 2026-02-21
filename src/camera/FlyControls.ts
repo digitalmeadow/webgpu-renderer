@@ -150,7 +150,7 @@ export class FlyControls {
     );
 
     this.camera.target.set(target.x, target.y, target.z);
-    this.camera.updateView();
+    this.camera.updateProjectionView();
   }
 
   getSpeed(): number {

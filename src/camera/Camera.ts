@@ -67,11 +67,7 @@ export class CameraUniforms {
       192,
       projectionMatrixInverse.data as any,
     );
-    device.queue.writeBuffer(
-      this.buffer,
-      256,
-      viewMatrixInverse.data as any,
-    );
+    device.queue.writeBuffer(this.buffer, 256, viewMatrixInverse.data as any);
     device.queue.writeBuffer(this.buffer, 320, pos);
     device.queue.writeBuffer(this.buffer, 336, nearFar);
   }
@@ -116,8 +112,7 @@ export class Camera {
     this.projectionMatrix = Mat4.create();
     this.viewProjectionMatrix = Mat4.create();
 
-    this.updateProjection();
-    this.updateView();
+    this.updateProjectionView();
   }
 
   update(device: GPUDevice): void {
@@ -151,9 +146,13 @@ export class Camera {
     );
   }
 
-  resize(width: number, height: number): void {
-    this.aspect = width / height;
+  updateProjectionView(): void {
     this.updateProjection();
     this.updateView();
+  }
+
+  resize(width: number, height: number): void {
+    this.aspect = width / height;
+    this.updateProjectionView();
   }
 }

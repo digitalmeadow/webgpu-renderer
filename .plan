@@ -1,6 +1,14 @@
 ---- Core --------
 0. Frustums
 1. Shadows
+
+-- Add common lerping functions to maths
+-- Replace reference to lerp and lerpVec3 to maths folde
+
+-- Rename DirectionalLight to LightDirectional
+
+2. GLTF loading
+
 2. Skinning
 3. Particles
 

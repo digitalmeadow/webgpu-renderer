@@ -729,7 +729,7 @@ export class Mat4 {
     out ??= new Mat4();
     const lr = 1 / (left - right);
     const bt = 1 / (bottom - top);
-    const nf = 1 / (near - far);
+    const nf = 1 / (far - near);
     out.data[0] = -2 * lr;
     out.data[1] = 0;
     out.data[2] = 0;
@@ -740,11 +740,11 @@ export class Mat4 {
     out.data[7] = 0;
     out.data[8] = 0;
     out.data[9] = 0;
-    out.data[10] = 2 * nf;
+    out.data[10] = nf;
     out.data[11] = 0;
     out.data[12] = (left + right) * lr;
     out.data[13] = (top + bottom) * bt;
-    out.data[14] = (far + near) * nf;
+    out.data[14] = -near * nf;
     out.data[15] = 1;
     return out;
   }
@@ -803,6 +803,48 @@ export class Mat4 {
     out.data[13] = -(y0 * eyex + y1 * eyey + y2 * eyez);
     out.data[14] = -(z0 * eyex + z1 * eyey + z2 * eyez);
     out.data[15] = 1;
+    return out;
+  }
+
+  static transformVec3(m: Mat4, v: Vec3, out?: Vec3): Vec3 {
+    out ??= new Vec3();
+    const x = v.data[0],
+      y = v.data[1],
+      z = v.data[2];
+    const w = m.data[3] * x + m.data[7] * y + m.data[11] * z + m.data[15] || 1.0;
+    out.data[0] = (m.data[0] * x + m.data[4] * y + m.data[8] * z + m.data[12]) / w;
+    out.data[1] = (m.data[1] * x + m.data[5] * y + m.data[9] * z + m.data[13]) / w;
+    out.data[2] = (m.data[2] * x + m.data[6] * y + m.data[10] * z + m.data[14]) / w;
+    return out;
+  }
+
+  static getFrustumCorners(viewProjectionMatrix: Mat4, out?: Vec3[]): Vec3[] {
+    out ??= [];
+    
+    const cornersNDC = [
+      [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+      [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+    ];
+
+    for (let i = 0; i < 8; i++) {
+      const x = cornersNDC[i][0];
+      const y = cornersNDC[i][1];
+      const z = cornersNDC[i][2];
+      
+      const w = viewProjectionMatrix.data[3] * x + viewProjectionMatrix.data[7] * y + viewProjectionMatrix.data[11] * z + viewProjectionMatrix.data[15];
+      const px = (viewProjectionMatrix.data[0] * x + viewProjectionMatrix.data[4] * y + viewProjectionMatrix.data[8] * z + viewProjectionMatrix.data[12]) / w;
+      const py = (viewProjectionMatrix.data[1] * x + viewProjectionMatrix.data[5] * y + viewProjectionMatrix.data[9] * z + viewProjectionMatrix.data[13]) / w;
+      const pz = (viewProjectionMatrix.data[2] * x + viewProjectionMatrix.data[6] * y + viewProjectionMatrix.data[10] * z + viewProjectionMatrix.data[14]) / w;
+      
+      if (out[i]) {
+        out[i].data[0] = px;
+        out[i].data[1] = py;
+        out[i].data[2] = pz;
+      } else {
+        out[i] = new Vec3(px, py, pz);
+      }
+    }
+    
     return out;
   }
 }

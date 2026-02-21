@@ -125,8 +125,7 @@ export class Renderer {
         this.device,
         this.geometryBuffer,
         camera,
-        this.lightManager.lightBindGroupLayout,
-        this.sceneUniforms.bindGroupLayout,
+        this.lightManager,
         this.canvas.width,
         this.canvas.height,
       );
@@ -222,14 +221,31 @@ export class Renderer {
     camera.update(this.device);
 
     const lights = this.collectLights(world);
+    console.log('[Renderer] collectLights:', { 
+      totalLights: lights.length,
+      lights: lights.map(l => ({ name: l.name, type: l.type }))
+    });
     this.sceneUniforms.ambientLightColor = world.ambientLightColor;
     this.sceneUniforms.update();
 
     const commandEncoder = this.device.createCommandEncoder();
 
-    // Collect directional lights (for lighting, not shadows yet)
+    // Collect directional lights
     const directionalLights = lights.filter(l => l instanceof DirectionalLight) as DirectionalLight[];
+    console.log('[Renderer] Directional lights:', { 
+      count: directionalLights.length,
+      lights: directionalLights.map(l => ({ name: l.name }))
+    });
     this.lightManager.update(directionalLights, [camera]);
+
+    // Shadow Pass
+    if (directionalLights.length > 0) {
+      const light = directionalLights[0];
+      this.shadowPass.render(commandEncoder, light, opaqueMeshes);
+      this.lightManager.setShadowTexture(this.shadowPass.getShadowTextureView());
+      this.lightManager.updateLightingBindGroup(directionalLights);
+      this.lightManager.updateSceneLightBindGroup(this.sceneUniforms);
+    }
 
     // Geometry Pass
     this.geometryPass.render(
@@ -246,8 +262,7 @@ export class Renderer {
       commandEncoder,
       this.geometryBuffer,
       camera,
-      this.lightManager.lightBindGroup,
-      this.sceneUniforms.bindGroup,
+      this.lightManager,
     );
 
     // Forward Pass (transparency) - must run BEFORE Output Pass

@@ -1,17 +1,13 @@
 import { Light, LightType } from "./Light";
 import { Vec3, Mat4 } from "../math";
 
-export const SHADOW_MAP_CASCADES_COUNT = 3;
-export const SHADOW_CASCADE_SPLITS = [0.0, 0.2, 0.5, 1.0];
-const LIGHT_VIEW_OFFSET = 50.0;
+export const SHADOW_MAP_CASCADES_COUNT = 1;
 
 export class DirectionalLight extends Light {
-  public direction: Vec3 = new Vec3(0, -1, 0);
-  
-  public viewProjectionMatrices: Mat4[] = [];
-  public cascadeSplits: number[] = [...SHADOW_CASCADE_SPLITS];
-  public cascadeActualDepths: number[] = [];
-  
+  public direction: Vec3 = new Vec3(-0.5, -1, 0);
+
+  public shadowMatrix: Mat4 = Mat4.create();
+
   public shadowBuffer: GPUBuffer | null = null;
   public shadowBindGroup: GPUBindGroup | null = null;
   private shadowBindGroupLayout: GPUBindGroupLayout | null = null;
@@ -21,15 +17,11 @@ export class DirectionalLight extends Light {
 
   constructor(name: string) {
     super(name, LightType.Directional);
-    
-    for (let i = 0; i < SHADOW_MAP_CASCADES_COUNT; i++) {
-      this.viewProjectionMatrices.push(Mat4.create());
-    }
   }
 
   public initShadowResources(device: GPUDevice): void {
     this._device = device;
-    
+
     this.shadowBuffer = device.createBuffer({
       label: "DirectionalLight Shadow Buffer",
       size: 256,
@@ -48,7 +40,8 @@ export class DirectionalLight extends Light {
     });
 
     if (!DirectionalLight.defaultShadowBindGroupLayout) {
-      DirectionalLight.defaultShadowBindGroupLayout = this.shadowBindGroupLayout;
+      DirectionalLight.defaultShadowBindGroupLayout =
+        this.shadowBindGroupLayout;
     }
 
     this.shadowBindGroup = device.createBindGroup({
@@ -63,7 +56,9 @@ export class DirectionalLight extends Light {
     });
   }
 
-  public static getShadowBindGroupLayout(device: GPUDevice): GPUBindGroupLayout {
+  public static getShadowBindGroupLayout(
+    device: GPUDevice,
+  ): GPUBindGroupLayout {
     if (!DirectionalLight.defaultShadowBindGroupLayout) {
       const layout = device.createBindGroupLayout({
         label: "DirectionalLight Shadow BindGroup Layout",
@@ -80,89 +75,102 @@ export class DirectionalLight extends Light {
     return DirectionalLight.defaultShadowBindGroupLayout;
   }
 
-  public updateCascadeMatrices(
+  public updateShadowMatrix(
     cameraPosition: Vec3,
     cameraDirection: Vec3,
     cameraNear: number,
     cameraFar: number,
   ): void {
-    if (!this.shadowBuffer) return;
-
-    const lightDir = this.direction;
-    const up = new Vec3(0, 1, 0);
-
-    const actualSplits: number[] = [cameraNear];
-
-    for (let i = 0; i < SHADOW_MAP_CASCADES_COUNT; i++) {
-      const splitNear = this.lerp(cameraNear, cameraFar, SHADOW_CASCADE_SPLITS[i]);
-      const splitFar = this.lerp(cameraNear, cameraFar, SHADOW_CASCADE_SPLITS[i + 1]);
-      
-      actualSplits.push(splitFar);
-
-      const center = new Vec3(
-        cameraPosition.data[0] + cameraDirection.data[0] * (splitNear + splitFar) * 0.5,
-        cameraPosition.data[1] + cameraDirection.data[1] * (splitNear + splitFar) * 0.5,
-        cameraPosition.data[2] + cameraDirection.data[2] * (splitNear + splitFar) * 0.5,
+    if (!this.shadowBuffer) {
+      console.warn(
+        "[DirectionalLight] No shadow buffer, skipping shadow matrix update",
       );
-
-      const eye = new Vec3(
-        center.data[0] - lightDir.data[0] * LIGHT_VIEW_OFFSET,
-        center.data[1] - lightDir.data[1] * LIGHT_VIEW_OFFSET,
-        center.data[2] - lightDir.data[2] * LIGHT_VIEW_OFFSET,
-      );
-
-      const viewMatrix = Mat4.lookAt(eye, center, up);
-      
-      const frustumRadius = (splitFar - splitNear) * 0.5;
-      const orthoSize = frustumRadius + LIGHT_VIEW_OFFSET;
-      
-      const projectionMatrix = Mat4.ortho(
-        -orthoSize,
-        orthoSize,
-        -orthoSize,
-        orthoSize,
-        -frustumRadius - LIGHT_VIEW_OFFSET,
-        frustumRadius,
-      );
-
-      Mat4.multiply(projectionMatrix, viewMatrix, this.viewProjectionMatrices[i]);
+      return;
     }
 
-    this.cascadeActualDepths = actualSplits;
-    this.updateShadowBuffer();
+    console.log("[DirectionalLight] updateShadowMatrix called", {
+      cameraNear,
+      cameraFar,
+    });
+
+    // Fixed light settings - not dependent on camera
+    const lightDir = this.direction;
+    const up = new Vec3(0, 0, 1);
+
+    // Fixed light position and ortho - tuned for test scene
+    // Scene: floor at Y=0 (20x20), cube at Y=1 rotating
+    const lightPos = new Vec3(-10, 15, 5);
+    const left = -15;
+    const right = 15;
+    const bottom = -15;
+    const top = 15;
+    const near = 0;
+    const far = 40;
+
+    console.log("[DirectionalLight] Fixed light setup:", {
+      lightPos: [lightPos.x, lightPos.y, lightPos.z],
+      direction: [this.direction.x, this.direction.y, this.direction.z],
+      ortho: { left, right, bottom, top, near, far },
+    });
+
+    // Create light view matrix looking at origin
+    const origin = new Vec3(0, 0, 0);
+    const viewMatrix = Mat4.lookAt(lightPos, origin, up);
+
+    // Create orthographic projection
+    const projectionMatrix = Mat4.ortho(left, right, bottom, top, near, far);
+
+    // Compute final shadow matrix
+    Mat4.multiply(projectionMatrix, viewMatrix, this.shadowMatrix);
+
+    console.log("[DirectionalLight] Shadow matrix computed (fixed)", {
+      lightPos: [lightPos.x, lightPos.y, lightPos.z],
+      direction: [this.direction.x, this.direction.y, this.direction.z],
+    });
+
+    this.updateShadowBuffer(lightPos);
   }
 
-  private lerp(a: number, b: number, t: number): number {
-    return a + (b - a) * t;
-  }
-
-  private updateShadowBuffer(): void {
-    if (!this.shadowBuffer || !this._device) return;
-
-    const matrices: number[] = [];
-    for (const matrix of this.viewProjectionMatrices) {
-      matrices.push(...matrix.data);
+  private updateShadowBuffer(lightPos: Vec3): void {
+    if (!this.shadowBuffer || !this._device) {
+      console.warn(
+        "[DirectionalLight] No shadow buffer or device, skipping buffer update",
+      );
+      return;
     }
 
     const data = new Float32Array(64);
-    data.set(matrices, 0);
-    
-    if (this.cascadeActualDepths.length >= 4) {
-      data.set(this.cascadeActualDepths.slice(0, 4), 48);
-    } else {
-      data.set(this.cascadeSplits, 48);
-    }
-    
-    data.set(this.direction.data, 52);
-    data[56] = this.intensity;
+    data.set(this.shadowMatrix.data, 0);
+
+    const posArray = new Float32Array([
+      lightPos.x,
+      lightPos.y,
+      lightPos.z,
+      1.0,
+    ]);
+    data.set(posArray, 48);
+
+    const dirArray = new Float32Array([
+      this.direction.x,
+      this.direction.y,
+      this.direction.z,
+      0.0,
+    ]);
+    data.set(dirArray, 52);
+
+    data[56] = this.color.x;
+    data[57] = this.color.y;
+    data[58] = this.color.z;
+    data[59] = this.intensity;
+
+    console.log("[DirectionalLight] Writing shadow buffer:", {
+      direction: [this.direction.x, this.direction.y, this.direction.z],
+      color: [this.color.x, this.color.y, this.color.z],
+      intensity: this.intensity,
+      matrix: this.shadowMatrix.data.slice(0, 16),
+    });
 
     this._device.queue.writeBuffer(this.shadowBuffer, 0, data);
-  }
-
-  public setActiveCascadeIndex(index: number): void {
-    if (!this.shadowBuffer || !this._device) return;
-    const indexData = new Uint32Array([index]);
-    this._device.queue.writeBuffer(this.shadowBuffer, 240, indexData); // offset 240 = 60 * 4 bytes
   }
 
   public getShadowBindGroup(): GPUBindGroup | null {

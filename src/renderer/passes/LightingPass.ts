@@ -2,6 +2,7 @@ import shader from "./LightingPass.wgsl?raw";
 import { GeometryBuffer } from "../GeometryBuffer";
 import { Camera } from "../../camera";
 import { SceneUniforms } from "../../uniforms";
+import { LightManager } from "../LightManager";
 
 export class LightingPass {
   private pipeline: GPURenderPipeline;
@@ -12,8 +13,7 @@ export class LightingPass {
     device: GPUDevice,
     geometryBuffer: GeometryBuffer,
     camera: Camera,
-    lightBindGroupLayout: GPUBindGroupLayout,
-    sceneBindGroupLayout: GPUBindGroupLayout,
+    lightManager: LightManager,
     width: number,
     height: number,
   ) {
@@ -39,8 +39,8 @@ export class LightingPass {
         bindGroupLayouts: [
           geometryBuffer.bindGroupLayout,
           camera.uniforms.bindGroupLayout,
-          lightBindGroupLayout,
-          sceneBindGroupLayout,
+          lightManager.lightingBindGroupLayout,
+          lightManager.sceneLightBindGroupLayout,
         ],
       }),
       vertex: {
@@ -81,8 +81,7 @@ export class LightingPass {
     encoder: GPUCommandEncoder,
     geometryBuffer: GeometryBuffer,
     camera: Camera,
-    lightBindGroup: GPUBindGroup,
-    sceneBindGroup: GPUBindGroup,
+    lightManager: LightManager,
   ): void {
     const passEncoder = encoder.beginRenderPass({
       label: "Lighting Pass",
@@ -99,8 +98,8 @@ export class LightingPass {
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, geometryBuffer.bindGroup);
     passEncoder.setBindGroup(1, camera.uniforms.bindGroup);
-    passEncoder.setBindGroup(2, lightBindGroup);
-    passEncoder.setBindGroup(3, sceneBindGroup);
+    passEncoder.setBindGroup(2, lightManager.lightingBindGroup);
+    passEncoder.setBindGroup(3, lightManager.sceneLightBindGroup);
     passEncoder.draw(3);
     passEncoder.end();
   }
