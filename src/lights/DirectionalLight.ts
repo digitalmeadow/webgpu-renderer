@@ -24,7 +24,7 @@ export class DirectionalLight extends Light {
 
     this.shadowBuffer = device.createBuffer({
       label: "DirectionalLight Shadow Buffer",
-      size: 256,
+      size: 112,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -94,18 +94,19 @@ export class DirectionalLight extends Light {
     });
 
     // Fixed light settings - not dependent on camera
-    const lightDir = this.direction;
-    const up = new Vec3(0, 0, 1);
+    // Light positioned above the scene looking down at origin
+    // Scene: floor at Y=0 (20x20), cube at Y=1, camera at (0, 5, 10)
+    const up = new Vec3(0, 1, 0);
 
-    // Fixed light position and ortho - tuned for test scene
-    // Scene: floor at Y=0 (20x20), cube at Y=1 rotating
-    const lightPos = new Vec3(-10, 15, 5);
+    // Light directly above the scene, looking at origin
+    // This ensures the shadow frustum captures the cube and floor
+    const lightPos = new Vec3(0, 15, 5);
     const left = -15;
     const right = 15;
     const bottom = -15;
     const top = 15;
-    const near = 0;
-    const far = 40;
+    const near = -20;
+    const far = 20;
 
     console.log("[DirectionalLight] Fixed light setup:", {
       lightPos: [lightPos.x, lightPos.y, lightPos.z],
@@ -123,9 +124,32 @@ export class DirectionalLight extends Light {
     // Compute final shadow matrix
     Mat4.multiply(projectionMatrix, viewMatrix, this.shadowMatrix);
 
-    console.log("[DirectionalLight] Shadow matrix computed (fixed)", {
+    // Debug: What position does the cube at (0,1,0) transform to in NDC?
+    // Apply shadow matrix to cube position (0, 1, 0)
+    const m = this.shadowMatrix.data;
+    const cubeWorld = [0, 1, 0, 1] as [number, number, number, number];
+    const cubeNDC = [
+        m[0]*cubeWorld[0] + m[4]*cubeWorld[1] + m[8]*cubeWorld[2] + m[12]*cubeWorld[3],
+        m[1]*cubeWorld[0] + m[5]*cubeWorld[1] + m[9]*cubeWorld[2] + m[13]*cubeWorld[3],
+        m[2]*cubeWorld[0] + m[6]*cubeWorld[1] + m[10]*cubeWorld[2] + m[14]*cubeWorld[3],
+        m[3]*cubeWorld[0] + m[7]*cubeWorld[1] + m[11]*cubeWorld[2] + m[15]*cubeWorld[3],
+    ];
+
+    // Also test floor center (0, 0, 0)
+    const floorWorld = [0, 0, 0, 1] as [number, number, number, number];
+    const floorNDC = [
+        m[0]*floorWorld[0] + m[4]*floorWorld[1] + m[8]*floorWorld[2] + m[12]*floorWorld[3],
+        m[1]*floorWorld[0] + m[5]*floorWorld[1] + m[9]*floorWorld[2] + m[13]*floorWorld[3],
+        m[2]*floorWorld[0] + m[6]*floorWorld[1] + m[10]*floorWorld[2] + m[14]*floorWorld[3],
+        m[3]*floorWorld[0] + m[7]*floorWorld[1] + m[11]*floorWorld[2] + m[15]*floorWorld[3],
+    ];
+
+    console.log("[DirectionalLight] Shadow frustum check:", {
       lightPos: [lightPos.x, lightPos.y, lightPos.z],
-      direction: [this.direction.x, this.direction.y, this.direction.z],
+      ortho: { left, right, bottom, top, near, far },
+      cubeNDC: cubeNDC,
+      floorNDC: floorNDC,
+      shadowMatrix: Array.from(this.shadowMatrix.data),
     });
 
     this.updateShadowBuffer(lightPos);
@@ -139,31 +163,35 @@ export class DirectionalLight extends Light {
       return;
     }
 
-    const data = new Float32Array(64);
+    // Buffer layout must match LightingPass.wgsl ShadowLightUniforms struct:
+    // - offset 0: lightViewProjMatrix (16 floats, bytes 0-63)
+    // - offset 64: lightPos (4 floats, bytes 64-79)  
+    // - offset 80: direction (4 floats, bytes 80-95)
+    // - offset 96: color_intensity (4 floats, bytes 96-111)
+    const data = new Float32Array(112 / 4); // 112 bytes total
+
+    // lightViewProjMatrix at offset 0 (indices 0-15)
     data.set(this.shadowMatrix.data, 0);
 
-    const posArray = new Float32Array([
-      lightPos.x,
-      lightPos.y,
-      lightPos.z,
-      1.0,
-    ]);
-    data.set(posArray, 48);
+    // lightPos at offset 64 (indices 16-19)
+    data[16] = lightPos.x;
+    data[17] = lightPos.y;
+    data[18] = lightPos.z;
+    data[19] = 1.0;
 
-    const dirArray = new Float32Array([
-      this.direction.x,
-      this.direction.y,
-      this.direction.z,
-      0.0,
-    ]);
-    data.set(dirArray, 52);
+    // direction at offset 80 (indices 20-23)
+    data[20] = this.direction.x;
+    data[21] = this.direction.y;
+    data[22] = this.direction.z;
+    data[23] = 0.0;
 
-    data[56] = this.color.x;
-    data[57] = this.color.y;
-    data[58] = this.color.z;
-    data[59] = this.intensity;
+    // color_intensity at offset 96 (indices 24-27)
+    data[24] = this.color.x;
+    data[25] = this.color.y;
+    data[26] = this.color.z;
+    data[27] = this.intensity;
 
-    console.log("[DirectionalLight] Writing shadow buffer:", {
+    console.log("[DirectionalLight] Writing shadow buffer (corrected layout):", {
       direction: [this.direction.x, this.direction.y, this.direction.z],
       color: [this.color.x, this.color.y, this.color.z],
       intensity: this.intensity,

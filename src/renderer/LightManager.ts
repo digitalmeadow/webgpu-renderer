@@ -77,7 +77,7 @@ export class LightManager {
       magFilter: "nearest",
       minFilter: "nearest",
       mipmapFilter: "linear",
-      compare: "less-equal",
+      compare: "less",
     });
 
     this.lightingBindGroupLayout = this.device.createBindGroupLayout({
@@ -85,12 +85,12 @@ export class LightManager {
       entries: [
         {
           binding: 0,
-          visibility: GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
           sampler: { type: "comparison" },
         },
         {
           binding: 1,
-          visibility: GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
           texture: {
             sampleType: "depth",
             viewDimension: "2d",
@@ -98,7 +98,7 @@ export class LightManager {
         },
         {
           binding: 2,
-          visibility: GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
           buffer: { type: "uniform" },
         },
       ],

@@ -33,9 +33,3 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     
     return output;
 }
-
-@fragment
-fn fs_main(in: VertexOutput) -> @builtin(frag_depth) f32 {
-    // Keep clip-space Z [-1, 1] - GPU automatically handles this for frag_depth
-    return in.position.z;
-}

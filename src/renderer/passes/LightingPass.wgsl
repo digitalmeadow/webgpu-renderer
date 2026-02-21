@@ -19,6 +19,7 @@ struct CameraUniforms {
     projection_matrix: mat4x4<f32>,
     view_projection_matrix: mat4x4<f32>,
     projection_matrix_inverse: mat4x4<f32>,
+    view_matrix_inverse: mat4x4<f32>,
     position: vec4<f32>,
     near: f32,
     far: f32,
@@ -60,11 +61,14 @@ fn getShadow(world_pos: vec3<f32>, normal: vec3<f32>) -> f32 {
         light_space_pos.y * -0.5 + 0.5
     );
     
-    // Z stays in clip space [-1,1] - match ShadowPass output
-    // Add small bias to prevent shadow acne
-    let current_depth = light_space_pos.z - 0.001;
+    // Clamp to valid texture range
+    let clamped_coords = clamp(shadow_coords, vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0));
     
-    let shadow = textureSampleCompare(shadow_texture, shadow_sampler, shadow_coords, current_depth);
+    // Ortho near is negative, so depth is in [-1, 1]. Convert to [0, 1] for texture sampling.
+    // Then apply small bias to prevent shadow acne
+    let current_depth = light_space_pos.z * 0.5 + 0.5 - 0.001;
+    
+    let shadow = textureSampleCompare(shadow_texture, shadow_sampler, clamped_coords, current_depth);
     
     return shadow;
 }
@@ -105,10 +109,12 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     var color = albedo * scene_uniforms.ambient_light_color.rgb;
 
     // Reconstruct world position from depth
+    // clip → view: use projection_matrix_inverse
+    // view → world: use view_matrix_inverse (NOT view_matrix!)
     let uv = in.uv_coords;
     let clip_pos = vec4<f32>(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     let view_pos = camera_uniforms.projection_matrix_inverse * clip_pos;
-    let world_pos = camera_uniforms.view_matrix * view_pos;
+    let world_pos = camera_uniforms.view_matrix_inverse * view_pos;
     let world_pos_3d = world_pos.xyz / world_pos.w;
 
     // DEBUG: Additional debug values
@@ -143,6 +149,18 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     // Use actual shadow calculation
     let shadow = getShadow(world_pos_3d, N);
     
+    // DEBUG: Show shadow calculation values  
+    let depth_debug = light_space_pos_debug.z * 0.5 + 0.5;
+    
+    // Raw shadow texture value
+    let clamped_tex_coords = vec2<i32>(clamp(shadow_coords_debug * vec2<f32>(2048.0), vec2<f32>(0.0, 0.0), vec2<f32>(2047.0, 2047.0)));
+    let shadow_tex_val = textureLoad(shadow_texture, clamped_tex_coords, 0);
+    
+    // Show: R=shadow coords X, G=shadow coords Y, B=depth, A=raw texture value
+    color = vec3<f32>(shadow_coords_debug.x, shadow_coords_debug.y, depth_debug);
+    
+    // color = vec3<f32>(shadow_tex_val); // Raw shadow texture value
+    
     let light_color = shadow_light_uniforms.color_intensity.rgb;
     let light_intensity = shadow_light_uniforms.color_intensity.a;
     
@@ -167,7 +185,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     // color = vec3<f32>(debug_light_dir * 0.5 + 0.5);
     
     // Option 5: Show diffuse value (white = lit, black = unlit)
-    // Working
+    // NOT WORKING - BLACK
     // color = vec3<f32>(debug_diffuse_check);
     
     // Option 6: Show shadow value (white = fully lit, black = fully shadowed)
@@ -178,7 +196,9 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     // Shows the depth value being compared against shadow map (clip space [-1,1])
     // Map to [0,1] for display: -1 -> 0, 1 -> 1
     let light_space_z = light_space_pos_debug.z * 0.5 + 0.5;
+    // WORKING? Mostly grey, background show black to white gradient
     // color = vec3<f32>(light_space_z);
+    // color = vec3<f32>(shadow_coords, 1.0);
     
     // Option 8: Show camera distance (closer = darker, farther = lighter)
     // Working
@@ -186,6 +206,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     
     // Option 8: Show shadow coords (new method - matching working example)
     // Shows XYZ: X=shadow coord X, Y=shadow coord Y, Z=light space Z
+    // WORKING? Colorful gradients everywhere
     // color = debug_shadow_coords;
 
     // Option 9: Show light space position (raw XYZ values normalized)
@@ -200,9 +221,11 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     // Black = depth 0.0 (closest to light)
     // If you see mostly white, nothing is being rendered to shadow map
     // Should work now
+    // MAYBE WORKING - GREY MESHES, WHITE BACKGROUND
     // color = debug_shadow_depth_raw;
 
     // Option 11: Show light color * intensity
+    // NOT WORKING ALL WHITE
     // color = debug_light_color * debug_light_intensity;
 
     output.color = vec4<f32>(color, 1.0);
