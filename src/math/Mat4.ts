@@ -33,27 +33,28 @@ export class Mat4 {
 
   static multiply(a: Mat4, b: Mat4, out?: Mat4): Mat4 {
     out ??= new Mat4();
-    const a00 = a.data[0],
-      a01 = a.data[1],
-      a02 = a.data[2],
-      a03 = a.data[3];
-    const a10 = a.data[4],
-      a11 = a.data[5],
-      a12 = a.data[6],
-      a13 = a.data[7];
-    const a20 = a.data[8],
-      a21 = a.data[9],
-      a22 = a.data[10],
-      a23 = a.data[11];
-    const a30 = a.data[12],
-      a31 = a.data[13],
-      a32 = a.data[14],
-      a33 = a.data[15];
 
-    let b0 = b.data[0],
-      b1 = b.data[1],
-      b2 = b.data[2],
-      b3 = b.data[3];
+    const a00 = a.data[0];
+    const a01 = a.data[1];
+    const a02 = a.data[2];
+    const a03 = a.data[3];
+    const a10 = a.data[4];
+    const a11 = a.data[5];
+    const a12 = a.data[6];
+    const a13 = a.data[7];
+    const a20 = a.data[8];
+    const a21 = a.data[9];
+    const a22 = a.data[10];
+    const a23 = a.data[11];
+    const a30 = a.data[12];
+    const a31 = a.data[13];
+    const a32 = a.data[14];
+    const a33 = a.data[15];
+
+    let b0 = b.data[0];
+    let b1 = b.data[1];
+    let b2 = b.data[2];
+    let b3 = b.data[3];
     out.data[0] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
     out.data[1] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
     out.data[2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
@@ -85,27 +86,29 @@ export class Mat4 {
     out.data[13] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
     out.data[14] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
     out.data[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
     return out;
   }
 
   static invert(m: Mat4, out?: Mat4): Mat4 | null {
     out ??= new Mat4();
-    const a00 = m.data[0],
-      a01 = m.data[1],
-      a02 = m.data[2],
-      a03 = m.data[3];
-    const a10 = m.data[4],
-      a11 = m.data[5],
-      a12 = m.data[6],
-      a13 = m.data[7];
-    const a20 = m.data[8],
-      a21 = m.data[9],
-      a22 = m.data[10],
-      a23 = m.data[11];
-    const a30 = m.data[12],
-      a31 = m.data[13],
-      a32 = m.data[14],
-      a33 = m.data[15];
+
+    const a00 = m.data[0];
+    const a01 = m.data[1];
+    const a02 = m.data[2];
+    const a03 = m.data[3];
+    const a10 = m.data[4];
+    const a11 = m.data[5];
+    const a12 = m.data[6];
+    const a13 = m.data[7];
+    const a20 = m.data[8];
+    const a21 = m.data[9];
+    const a22 = m.data[10];
+    const a23 = m.data[11];
+    const a30 = m.data[12];
+    const a31 = m.data[13];
+    const a32 = m.data[14];
+    const a33 = m.data[15];
 
     const b00 = a00 * a11 - a01 * a10;
     const b01 = a00 * a12 - a02 * a10;
@@ -120,8 +123,7 @@ export class Mat4 {
     const b10 = a21 * a33 - a23 * a31;
     const b11 = a22 * a33 - a23 * a32;
 
-    let det =
-      b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+    let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
     if (!det) return null;
     det = 1.0 / det;
 
@@ -141,26 +143,27 @@ export class Mat4 {
     out.data[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
     out.data[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
     out.data[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+
     return out;
   }
 
   static determinant(m: Mat4): number {
-    const m00 = m.data[0],
-      m01 = m.data[1],
-      m02 = m.data[2],
-      m03 = m.data[3];
-    const m10 = m.data[4],
-      m11 = m.data[5],
-      m12 = m.data[6],
-      m13 = m.data[7];
-    const m20 = m.data[8],
-      m21 = m.data[9],
-      m22 = m.data[10],
-      m23 = m.data[11];
-    const m30 = m.data[12],
-      m31 = m.data[13],
-      m32 = m.data[14],
-      m33 = m.data[15];
+    const m00 = m.data[0];
+    const m01 = m.data[1];
+    const m02 = m.data[2];
+    const m03 = m.data[3];
+    const m10 = m.data[4];
+    const m11 = m.data[5];
+    const m12 = m.data[6];
+    const m13 = m.data[7];
+    const m20 = m.data[8];
+    const m21 = m.data[9];
+    const m22 = m.data[10];
+    const m23 = m.data[11];
+    const m30 = m.data[12];
+    const m31 = m.data[13];
+    const m32 = m.data[14];
+    const m33 = m.data[15];
 
     const tmp0 = m22 * m33;
     const tmp1 = m32 * m23;
@@ -175,51 +178,41 @@ export class Mat4 {
     const tmp10 = m02 * m13;
     const tmp11 = m12 * m03;
 
-    const t0 =
-      tmp0 * m11 +
-      tmp3 * m21 +
-      tmp4 * m31 -
-      (tmp1 * m11 + tmp2 * m21 + tmp5 * m31);
-    const t1 =
-      tmp1 * m01 +
-      tmp6 * m21 +
-      tmp9 * m31 -
-      (tmp0 * m01 + tmp7 * m21 + tmp8 * m31);
-    const t2 =
-      tmp2 * m01 +
-      tmp7 * m11 +
-      tmp10 * m31 -
-      (tmp3 * m01 + tmp6 * m11 + tmp11 * m31);
-    const t3 =
-      tmp5 * m01 +
-      tmp8 * m11 +
-      tmp11 * m21 -
-      (tmp4 * m01 + tmp9 * m11 + tmp10 * m21);
+    const t0 = tmp0 * m11 + tmp3 * m21 + tmp4 * m31 - tmp1 * m11 - tmp2 * m21 - tmp5 * m31;
+    const t1 = tmp1 * m01 + tmp6 * m21 + tmp9 * m31 - tmp0 * m01 - tmp7 * m21 - tmp8 * m31;
+    const t2 = tmp2 * m01 + tmp7 * m11 + tmp10 * m31 - tmp3 * m01 - tmp6 * m11 - tmp11 * m31;
+    const t3 = tmp5 * m01 + tmp8 * m11 + tmp11 * m21 - tmp4 * m01 - tmp9 * m11 - tmp10 * m21;
 
     return m00 * t0 + m10 * t1 + m20 * t2 + m30 * t3;
   }
 
   static transpose(m: Mat4, out?: Mat4): Mat4 {
     out ??= new Mat4();
-    if (m === out) {
-      const m01 = m.data[1],
-        m02 = m.data[2],
-        m03 = m.data[3];
-      const m12 = m.data[6],
-        m13 = m.data[7];
-      const m23 = m.data[11];
-      out.data[1] = m.data[4];
-      out.data[2] = m.data[8];
-      out.data[3] = m.data[12];
-      out.data[4] = m01;
-      out.data[6] = m.data[9];
-      out.data[7] = m.data[13];
-      out.data[8] = m02;
-      out.data[9] = m12;
-      out.data[11] = m.data[14];
-      out.data[12] = m03;
-      out.data[13] = m13;
-      out.data[14] = m23;
+
+    if (out === m) {
+      let t = m.data[1];
+      m.data[1] = m.data[4];
+      m.data[4] = t;
+
+      t = m.data[2];
+      m.data[2] = m.data[8];
+      m.data[8] = t;
+
+      t = m.data[3];
+      m.data[3] = m.data[12];
+      m.data[12] = t;
+
+      t = m.data[6];
+      m.data[6] = m.data[9];
+      m.data[9] = t;
+
+      t = m.data[7];
+      m.data[7] = m.data[13];
+      m.data[13] = t;
+
+      t = m.data[11];
+      m.data[11] = m.data[14];
+      m.data[14] = t;
     } else {
       out.data[0] = m.data[0];
       out.data[1] = m.data[4];
@@ -238,35 +231,36 @@ export class Mat4 {
       out.data[14] = m.data[11];
       out.data[15] = m.data[15];
     }
+
     return out;
   }
 
   static translate(m: Mat4, v: Vec3, out?: Mat4): Mat4 {
     out ??= new Mat4();
-    const x = v.data[0],
-      y = v.data[1],
-      z = v.data[2];
+
+    const x = v.data[0];
+    const y = v.data[1];
+    const z = v.data[2];
 
     if (m === out) {
       out.data[12] = m.data[0] * x + m.data[4] * y + m.data[8] * z + m.data[12];
       out.data[13] = m.data[1] * x + m.data[5] * y + m.data[9] * z + m.data[13];
-      out.data[14] =
-        m.data[2] * x + m.data[6] * y + m.data[10] * z + m.data[14];
-      out.data[15] =
-        m.data[3] * x + m.data[7] * y + m.data[11] * z + m.data[15];
+      out.data[14] = m.data[2] * x + m.data[6] * y + m.data[10] * z + m.data[14];
+      out.data[15] = m.data[3] * x + m.data[7] * y + m.data[11] * z + m.data[15];
     } else {
-      const a00 = m.data[0],
-        a01 = m.data[1],
-        a02 = m.data[2],
-        a03 = m.data[3];
-      const a10 = m.data[4],
-        a11 = m.data[5],
-        a12 = m.data[6],
-        a13 = m.data[7];
-      const a20 = m.data[8],
-        a21 = m.data[9],
-        a22 = m.data[10],
-        a23 = m.data[11];
+      const a00 = m.data[0];
+      const a01 = m.data[1];
+      const a02 = m.data[2];
+      const a03 = m.data[3];
+      const a10 = m.data[4];
+      const a11 = m.data[5];
+      const a12 = m.data[6];
+      const a13 = m.data[7];
+      const a20 = m.data[8];
+      const a21 = m.data[9];
+      const a22 = m.data[10];
+      const a23 = m.data[11];
+
       out.data[0] = a00;
       out.data[1] = a01;
       out.data[2] = a02;
@@ -284,14 +278,16 @@ export class Mat4 {
       out.data[14] = a02 * x + a12 * y + a22 * z + m.data[14];
       out.data[15] = a03 * x + a13 * y + a23 * z + m.data[15];
     }
+
     return out;
   }
 
   static scale(m: Mat4, v: Vec3, out?: Mat4): Mat4 {
     out ??= new Mat4();
-    const x = v.data[0],
-      y = v.data[1],
-      z = v.data[2];
+
+    const x = v.data[0];
+    const y = v.data[1];
+    const z = v.data[2];
 
     out.data[0] = m.data[0] * x;
     out.data[1] = m.data[1] * x;
@@ -309,16 +305,21 @@ export class Mat4 {
     out.data[13] = m.data[13];
     out.data[14] = m.data[14];
     out.data[15] = m.data[15];
+
     return out;
   }
 
   static rotate(m: Mat4, rad: number, axis: Vec3, out?: Mat4): Mat4 | null {
     out ??= new Mat4();
-    let x = axis.data[0],
-      y = axis.data[1],
-      z = axis.data[2];
+
+    let x = axis.data[0];
+    let y = axis.data[1];
+    let z = axis.data[2];
+
     let len = Math.sqrt(x * x + y * y + z * z);
+
     if (len < 0.000001) return null;
+
     len = 1 / len;
     x *= len;
     y *= len;
@@ -328,28 +329,28 @@ export class Mat4 {
     const c = Math.cos(rad);
     const t = 1 - c;
 
-    const a00 = m.data[0],
-      a01 = m.data[1],
-      a02 = m.data[2],
-      a03 = m.data[3];
-    const a10 = m.data[4],
-      a11 = m.data[5],
-      a12 = m.data[6],
-      a13 = m.data[7];
-    const a20 = m.data[8],
-      a21 = m.data[9],
-      a22 = m.data[10],
-      a23 = m.data[11];
+    const a00 = m.data[0];
+    const a01 = m.data[1];
+    const a02 = m.data[2];
+    const a03 = m.data[3];
+    const a10 = m.data[4];
+    const a11 = m.data[5];
+    const a12 = m.data[6];
+    const a13 = m.data[7];
+    const a20 = m.data[8];
+    const a21 = m.data[9];
+    const a22 = m.data[10];
+    const a23 = m.data[11];
 
-    const b00 = x * x * t + c,
-      b01 = y * x * t + z * s,
-      b02 = z * x * t - y * s;
-    const b10 = x * y * t - z * s,
-      b11 = y * y * t + c,
-      b12 = z * y * t + x * s;
-    const b20 = x * z * t + y * s,
-      b21 = y * z * t - x * s,
-      b22 = z * z * t + c;
+    const b00 = x * x * t + c;
+    const b01 = y * x * t + z * s;
+    const b02 = z * x * t - y * s;
+    const b10 = x * y * t - z * s;
+    const b11 = y * y * t + c;
+    const b12 = z * y * t + x * s;
+    const b20 = x * z * t + y * s;
+    const b21 = y * z * t - x * s;
+    const b22 = z * z * t + c;
 
     out.data[0] = a00 * b00 + a10 * b01 + a20 * b02;
     out.data[1] = a01 * b00 + a11 * b01 + a21 * b02;
@@ -370,21 +371,24 @@ export class Mat4 {
       out.data[14] = m.data[14];
       out.data[15] = m.data[15];
     }
+
     return out;
   }
 
   static rotateX(m: Mat4, rad: number, out?: Mat4): Mat4 {
     out ??= new Mat4();
+
     const s = Math.sin(rad);
     const c = Math.cos(rad);
-    const a10 = m.data[4],
-      a11 = m.data[5],
-      a12 = m.data[6],
-      a13 = m.data[7];
-    const a20 = m.data[8],
-      a21 = m.data[9],
-      a22 = m.data[10],
-      a23 = m.data[11];
+
+    const a10 = m.data[4];
+    const a11 = m.data[5];
+    const a12 = m.data[6];
+    const a13 = m.data[7];
+    const a20 = m.data[8];
+    const a21 = m.data[9];
+    const a22 = m.data[10];
+    const a23 = m.data[11];
 
     if (m !== out) {
       out.data[0] = m.data[0];
@@ -396,6 +400,7 @@ export class Mat4 {
       out.data[14] = m.data[14];
       out.data[15] = m.data[15];
     }
+
     out.data[4] = a10 * c + a20 * s;
     out.data[5] = a11 * c + a21 * s;
     out.data[6] = a12 * c + a22 * s;
@@ -404,21 +409,24 @@ export class Mat4 {
     out.data[9] = a21 * c - a11 * s;
     out.data[10] = a22 * c - a12 * s;
     out.data[11] = a23 * c - a13 * s;
+
     return out;
   }
 
   static rotateY(m: Mat4, rad: number, out?: Mat4): Mat4 {
     out ??= new Mat4();
+
     const s = Math.sin(rad);
     const c = Math.cos(rad);
-    const a00 = m.data[0],
-      a01 = m.data[1],
-      a02 = m.data[2],
-      a03 = m.data[3];
-    const a20 = m.data[8],
-      a21 = m.data[9],
-      a22 = m.data[10],
-      a23 = m.data[11];
+
+    const a00 = m.data[0];
+    const a01 = m.data[1];
+    const a02 = m.data[2];
+    const a03 = m.data[3];
+    const a20 = m.data[8];
+    const a21 = m.data[9];
+    const a22 = m.data[10];
+    const a23 = m.data[11];
 
     if (m !== out) {
       out.data[4] = m.data[4];
@@ -430,6 +438,7 @@ export class Mat4 {
       out.data[14] = m.data[14];
       out.data[15] = m.data[15];
     }
+
     out.data[0] = a00 * c - a20 * s;
     out.data[1] = a01 * c - a21 * s;
     out.data[2] = a02 * c - a22 * s;
@@ -438,21 +447,24 @@ export class Mat4 {
     out.data[9] = a01 * s + a21 * c;
     out.data[10] = a02 * s + a22 * c;
     out.data[11] = a03 * s + a23 * c;
+
     return out;
   }
 
   static rotateZ(m: Mat4, rad: number, out?: Mat4): Mat4 {
     out ??= new Mat4();
+
     const s = Math.sin(rad);
     const c = Math.cos(rad);
-    const a00 = m.data[0],
-      a01 = m.data[1],
-      a02 = m.data[2],
-      a03 = m.data[3];
-    const a10 = m.data[4],
-      a11 = m.data[5],
-      a12 = m.data[6],
-      a13 = m.data[7];
+
+    const a00 = m.data[0];
+    const a01 = m.data[1];
+    const a02 = m.data[2];
+    const a03 = m.data[3];
+    const a10 = m.data[4];
+    const a11 = m.data[5];
+    const a12 = m.data[6];
+    const a13 = m.data[7];
 
     if (m !== out) {
       out.data[8] = m.data[8];
@@ -464,6 +476,7 @@ export class Mat4 {
       out.data[14] = m.data[14];
       out.data[15] = m.data[15];
     }
+
     out.data[0] = a00 * c + a10 * s;
     out.data[1] = a01 * c + a11 * s;
     out.data[2] = a02 * c + a12 * s;
@@ -472,27 +485,31 @@ export class Mat4 {
     out.data[5] = a11 * c - a01 * s;
     out.data[6] = a12 * c - a02 * s;
     out.data[7] = a13 * c - a03 * s;
+
     return out;
   }
 
   static fromQuat(q: Quat, out?: Mat4): Mat4 {
     out ??= new Mat4();
-    const x = q.data[0],
-      y = q.data[1],
-      z = q.data[2],
-      w = q.data[3];
-    const x2 = x + x,
-      y2 = y + y,
-      z2 = z + z;
-    const xx = x * x2,
-      yx = y * x2,
-      yy = y * y2;
-    const zx = z * x2,
-      zy = z * y2,
-      zz = z * z2;
-    const wx = w * x2,
-      wy = w * y2,
-      wz = w * z2;
+
+    const x = q.data[0];
+    const y = q.data[1];
+    const z = q.data[2];
+    const w = q.data[3];
+
+    const x2 = x + x;
+    const y2 = y + y;
+    const z2 = z + z;
+
+    const xx = x * x2;
+    const yx = y * x2;
+    const yy = y * y2;
+    const zx = z * x2;
+    const zy = z * y2;
+    const zz = z * z2;
+    const wx = w * x2;
+    const wy = w * y2;
+    const wz = w * z2;
 
     out.data[0] = 1 - yy - zz;
     out.data[1] = yx + wz;
@@ -510,35 +527,35 @@ export class Mat4 {
     out.data[13] = 0;
     out.data[14] = 0;
     out.data[15] = 1;
+
     return out;
   }
 
-  static fromRotationTranslationScale(
-    q: Quat,
-    v: Vec3,
-    s: Vec3,
-    out?: Mat4,
-  ): Mat4 {
+  static fromRotationTranslationScale(q: Quat, v: Vec3, s: Vec3, out?: Mat4): Mat4 {
     out ??= new Mat4();
-    const x = q.data[0],
-      y = q.data[1],
-      z = q.data[2],
-      w = q.data[3];
-    const x2 = x + x,
-      y2 = y + y,
-      z2 = z + z;
-    const xx = x * x2,
-      xy = x * y2,
-      xz = x * z2;
-    const yy = y * y2,
-      yz = y * z2,
-      zz = z * z2;
-    const wx = w * x2,
-      wy = w * y2,
-      wz = w * z2;
-    const sx = s.data[0],
-      sy = s.data[1],
-      sz = s.data[2];
+
+    const x = q.data[0];
+    const y = q.data[1];
+    const z = q.data[2];
+    const w = q.data[3];
+
+    const x2 = x + x;
+    const y2 = y + y;
+    const z2 = z + z;
+
+    const xx = x * x2;
+    const xy = x * y2;
+    const xz = x * z2;
+    const yy = y * y2;
+    const yz = y * z2;
+    const zz = z * z2;
+    const wx = w * x2;
+    const wy = w * y2;
+    const wz = w * z2;
+
+    const sx = s.data[0];
+    const sy = s.data[1];
+    const sz = s.data[2];
 
     out.data[0] = (1 - (yy + zz)) * sx;
     out.data[1] = (xy + wz) * sx;
@@ -556,48 +573,44 @@ export class Mat4 {
     out.data[13] = v.data[1];
     out.data[14] = v.data[2];
     out.data[15] = 1;
+
     return out;
   }
 
-  static compose(
-    translation: Vec3,
-    rotation: Quat,
-    scale: Vec3,
-    out?: Mat4,
-  ): Mat4 {
+  static compose(translation: Vec3, rotation: Quat, scale: Vec3, out?: Mat4): Mat4 {
     return Mat4.fromRotationTranslationScale(rotation, translation, scale, out);
   }
 
-  static fromRotationTranslationScaleOrigin(
-    q: Quat,
-    v: Vec3,
-    s: Vec3,
-    o: Vec3,
-    out?: Mat4,
-  ): Mat4 {
+  static fromRotationTranslationScaleOrigin(q: Quat, v: Vec3, s: Vec3, o: Vec3, out?: Mat4): Mat4 {
     out ??= new Mat4();
-    const x = q.data[0],
-      y = q.data[1],
-      z = q.data[2],
-      w = q.data[3];
-    const x2 = x + x,
-      y2 = y + y,
-      z2 = z + z;
-    const xx = x * x2,
-      xy = x * y2,
-      xz = x * z2;
-    const yy = y * y2,
-      yz = y * z2,
-      zz = z * z2;
-    const wx = w * x2,
-      wy = w * y2,
-      wz = w * z2;
-    const sx = s.data[0],
-      sy = s.data[1],
-      sz = s.data[2];
-    const ox = o.data[0],
-      oy = o.data[1],
-      oz = o.data[2];
+
+    const x = q.data[0];
+    const y = q.data[1];
+    const z = q.data[2];
+    const w = q.data[3];
+
+    const x2 = x + x;
+    const y2 = y + y;
+    const z2 = z + z;
+
+    const xx = x * x2;
+    const xy = x * y2;
+    const xz = x * z2;
+    const yy = y * y2;
+    const yz = y * z2;
+    const zz = z * z2;
+    const wx = w * x2;
+    const wy = w * y2;
+    const wz = w * z2;
+
+    const sx = s.data[0];
+    const sy = s.data[1];
+    const sz = s.data[2];
+
+    const ox = o.data[0];
+    const oy = o.data[1];
+    const oz = o.data[2];
+
     const dx = ox * yy + oz * yz - oy * zz;
     const dy = oy * xx + oz * xz - ox * yz;
     const dz = ox * yz + oy * xz - oz * xx;
@@ -618,6 +631,7 @@ export class Mat4 {
     out.data[13] = v.data[1] - dy * sy;
     out.data[14] = v.data[2] - dz * sz;
     out.data[15] = 1;
+
     return out;
   }
 
@@ -631,15 +645,17 @@ export class Mat4 {
 
   static getRotation(m: Mat4, out?: Quat): Quat {
     out ??= new Quat();
-    const m00 = m.data[0],
-      m01 = m.data[1],
-      m02 = m.data[2];
-    const m10 = m.data[4],
-      m11 = m.data[5],
-      m12 = m.data[6];
-    const m20 = m.data[8],
-      m21 = m.data[9],
-      m22 = m.data[10];
+
+    const m00 = m.data[0];
+    const m01 = m.data[1];
+    const m02 = m.data[2];
+    const m10 = m.data[4];
+    const m11 = m.data[5];
+    const m12 = m.data[6];
+    const m20 = m.data[8];
+    const m21 = m.data[9];
+    const m22 = m.data[10];
+
     const trace = m00 + m11 + m22;
     let S = 0;
 
@@ -668,102 +684,113 @@ export class Mat4 {
       out.data[1] = (m12 + m21) / S;
       out.data[2] = 0.25 * S;
     }
+
     return out;
   }
 
   static getScaling(m: Mat4, out?: Vec3): Vec3 {
     out ??= new Vec3();
-    const m00 = m.data[0],
-      m01 = m.data[1],
-      m02 = m.data[2];
-    const m10 = m.data[4],
-      m11 = m.data[5],
-      m12 = m.data[6];
-    const m20 = m.data[8],
-      m21 = m.data[9],
-      m22 = m.data[10];
+
+    const m00 = m.data[0];
+    const m01 = m.data[1];
+    const m02 = m.data[2];
+    const m10 = m.data[4];
+    const m11 = m.data[5];
+    const m12 = m.data[6];
+    const m20 = m.data[8];
+    const m21 = m.data[9];
+    const m22 = m.data[10];
+
     out.data[0] = Math.sqrt(m00 * m00 + m01 * m01 + m02 * m02);
     out.data[1] = Math.sqrt(m10 * m10 + m11 * m11 + m12 * m12);
     out.data[2] = Math.sqrt(m20 * m20 + m21 * m21 + m22 * m22);
+
     return out;
   }
 
-  static perspective(
-    fovY: number,
-    aspect: number,
-    near: number,
-    far: number,
-    out?: Mat4,
-  ): Mat4 {
+  static perspective(fovY: number, aspect: number, zNear: number, zFar: number, out?: Mat4): Mat4 {
     out ??= new Mat4();
-    const f = 1.0 / Math.tan(fovY / 2);
-    const nf = 1 / (near - far);
+
+    const f = Math.tan(Math.PI * 0.5 - 0.5 * fovY);
+    const rangeInv = 1 / (zNear - zFar);
+
+    // Column-major storage for WebGPU (Z: 0 to 1, camera looks down -Z)
+    // Based on webgpufundamentals.org WebGPU perspective matrix formula
+    // Column 0: indices 0, 4, 8, 12
+    // Column 1: indices 1, 5, 9, 13
+    // Column 2: indices 2, 6, 10, 14
+    // Column 3: indices 3, 7, 11, 15
     out.data[0] = f / aspect;
-    out.data[1] = 0;
-    out.data[2] = 0;
-    out.data[3] = 0;
     out.data[4] = 0;
-    out.data[5] = f;
-    out.data[6] = 0;
-    out.data[7] = 0;
     out.data[8] = 0;
-    out.data[9] = 0;
-    out.data[10] = (far + near) * nf;
-    out.data[11] = -1;
     out.data[12] = 0;
-    out.data[13] = 0;
-    out.data[14] = 2 * far * near * nf;
-    out.data[15] = 0;
-    return out;
-  }
-
-  static ortho(
-    left: number,
-    right: number,
-    bottom: number,
-    top: number,
-    near: number,
-    far: number,
-    out?: Mat4,
-  ): Mat4 {
-    out ??= new Mat4();
-    const lr = 1 / (left - right);
-    const bt = 1 / (bottom - top);
-    const nf = 1 / (far - near);
-    out.data[0] = -2 * lr;
+    
     out.data[1] = 0;
-    out.data[2] = 0;
-    out.data[3] = 0;
-    out.data[4] = 0;
-    out.data[5] = -2 * bt;
-    out.data[6] = 0;
-    out.data[7] = 0;
-    out.data[8] = 0;
+    out.data[5] = f;
     out.data[9] = 0;
-    out.data[10] = nf;
-    out.data[11] = 0;
-    out.data[12] = (left + right) * lr;
-    out.data[13] = (top + bottom) * bt;
-    out.data[14] = -near * nf;
-    out.data[15] = 1;
+    out.data[13] = 0;
+    
+    out.data[2] = 0;
+    out.data[6] = 0;
+    out.data[10] = zFar * rangeInv;
+    out.data[14] = zNear * zFar * rangeInv;
+    
+    out.data[3] = 0;
+    out.data[7] = 0;
+    out.data[11] = -1;  // KEY: -1 for WebGPU (looks down -Z)
+    out.data[15] = 0;
+
     return out;
   }
 
-  static lookAt(eye: Vec3, center: Vec3, up: Vec3, out?: Mat4): Mat4 {
+  static ortho(left: number, right: number, bottom: number, top: number, near: number, far: number, out?: Mat4): Mat4 {
     out ??= new Mat4();
-    const eyex = eye.data[0],
-      eyey = eye.data[1],
-      eyez = eye.data[2];
-    const centerx = center.data[0],
-      centery = center.data[1],
-      centerz = center.data[2];
-    const upx = up.data[0],
-      upy = up.data[1],
-      upz = up.data[2];
 
-    let z0 = eyex - centerx;
-    let z1 = eyey - centery;
-    let z2 = eyez - centerz;
+    const lr = 1 / (right - left);
+    const bt = 1 / (top - bottom);
+    const nf = 1 / (far - near);
+
+    // Column-major storage for WebGPU (Z: 0 to 1)
+    // Maps: near -> 0, far -> 1
+    out.data[0] = 2 * lr;
+    out.data[4] = 0;
+    out.data[8] = 0;
+    out.data[12] = -(right + left) * lr;
+    
+    out.data[1] = 0;
+    out.data[5] = 2 * bt;
+    out.data[9] = 0;
+    out.data[13] = -(top + bottom) * bt;
+    
+    out.data[2] = 0;
+    out.data[6] = 0;
+    out.data[10] = nf;
+    out.data[14] = -near * nf;
+    
+    out.data[3] = 0;
+    out.data[7] = 0;
+    out.data[11] = 0;
+    out.data[15] = 1;
+
+    return out;
+  }
+
+  static lookAt(eye: Vec3, target: Vec3, up: Vec3, out?: Mat4): Mat4 {
+    out ??= new Mat4();
+
+    const eyex = eye.data[0];
+    const eyey = eye.data[1];
+    const eyez = eye.data[2];
+    const targetx = target.data[0];
+    const targety = target.data[1];
+    const targetz = target.data[2];
+    const upx = up.data[0];
+    const upy = up.data[1];
+    const upz = up.data[2];
+
+    let z0 = eyex - targetx;
+    let z1 = eyey - targety;
+    let z2 = eyez - targetz;
     let len = z0 * z0 + z1 * z1 + z2 * z2;
     if (len > 0) {
       len = 1 / Math.sqrt(len);
@@ -787,42 +814,56 @@ export class Mat4 {
     const y1 = z2 * x0 - z0 * x2;
     const y2 = z0 * x1 - z1 * x0;
 
+    // Column-major storage
+    // Column 0 (x-axis): indices 0, 4, 8, 12
+    // Column 1 (y-axis): indices 1, 5, 9, 13
+    // Column 2 (z-axis): indices 2, 6, 10, 14
+    // Column 3 (translation): indices 3, 7, 11, 15
     out.data[0] = x0;
-    out.data[1] = y0;
-    out.data[2] = z0;
-    out.data[3] = 0;
     out.data[4] = x1;
-    out.data[5] = y1;
-    out.data[6] = z1;
-    out.data[7] = 0;
     out.data[8] = x2;
-    out.data[9] = y2;
-    out.data[10] = z2;
-    out.data[11] = 0;
     out.data[12] = -(x0 * eyex + x1 * eyey + x2 * eyez);
+    
+    out.data[1] = y0;
+    out.data[5] = y1;
+    out.data[9] = y2;
     out.data[13] = -(y0 * eyex + y1 * eyey + y2 * eyez);
+    
+    out.data[2] = z0;
+    out.data[6] = z1;
+    out.data[10] = z2;
     out.data[14] = -(z0 * eyex + z1 * eyey + z2 * eyez);
+    
+    out.data[3] = 0;
+    out.data[7] = 0;
+    out.data[11] = 0;
     out.data[15] = 1;
+
     return out;
   }
 
   static transformVec3(m: Mat4, v: Vec3, out?: Vec3): Vec3 {
     out ??= new Vec3();
-    const x = v.data[0],
-      y = v.data[1],
-      z = v.data[2];
-    const w = m.data[3] * x + m.data[7] * y + m.data[11] * z + m.data[15] || 1.0;
-    out.data[0] = (m.data[0] * x + m.data[4] * y + m.data[8] * z + m.data[12]) / w;
-    out.data[1] = (m.data[1] * x + m.data[5] * y + m.data[9] * z + m.data[13]) / w;
-    out.data[2] = (m.data[2] * x + m.data[6] * y + m.data[10] * z + m.data[14]) / w;
+
+    const x = v.data[0];
+    const y = v.data[1];
+    const z = v.data[2];
+
+    const w = m.data[3] * x + m.data[7] * y + m.data[11] * z + m.data[15];
+    const invW = w !== 0 ? 1 / w : 1.0;
+
+    out.data[0] = (m.data[0] * x + m.data[4] * y + m.data[8] * z + m.data[12]) * invW;
+    out.data[1] = (m.data[1] * x + m.data[5] * y + m.data[9] * z + m.data[13]) * invW;
+    out.data[2] = (m.data[2] * x + m.data[6] * y + m.data[10] * z + m.data[14]) * invW;
+
     return out;
   }
 
   static getFrustumCorners(viewProjectionMatrix: Mat4, out?: Vec3[]): Vec3[] {
     out ??= [];
-    
+
     const cornersNDC = [
-      [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+      [-1, -1, 0], [1, -1, 0], [1, 1, 0], [-1, 1, 0],
       [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
     ];
 
@@ -830,12 +871,12 @@ export class Mat4 {
       const x = cornersNDC[i][0];
       const y = cornersNDC[i][1];
       const z = cornersNDC[i][2];
-      
+
       const w = viewProjectionMatrix.data[3] * x + viewProjectionMatrix.data[7] * y + viewProjectionMatrix.data[11] * z + viewProjectionMatrix.data[15];
       const px = (viewProjectionMatrix.data[0] * x + viewProjectionMatrix.data[4] * y + viewProjectionMatrix.data[8] * z + viewProjectionMatrix.data[12]) / w;
       const py = (viewProjectionMatrix.data[1] * x + viewProjectionMatrix.data[5] * y + viewProjectionMatrix.data[9] * z + viewProjectionMatrix.data[13]) / w;
       const pz = (viewProjectionMatrix.data[2] * x + viewProjectionMatrix.data[6] * y + viewProjectionMatrix.data[10] * z + viewProjectionMatrix.data[14]) / w;
-      
+
       if (out[i]) {
         out[i].data[0] = px;
         out[i].data[1] = py;
@@ -844,7 +885,7 @@ export class Mat4 {
         out[i] = new Vec3(px, py, pz);
       }
     }
-    
+
     return out;
   }
 }

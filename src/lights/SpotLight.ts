@@ -97,7 +97,7 @@ export class SpotLight extends Light {
     }
 
     this.updateMatrices();
-
+    
     const data = new Float32Array(36);
     data.set(this.viewProjectionMatrix.data, 0);
     data.set([this.position.x, this.position.y, this.position.z, 0], 16);

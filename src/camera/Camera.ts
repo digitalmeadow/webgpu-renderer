@@ -95,8 +95,8 @@ export class Camera {
     up: Vec3 = Vec3.create(0, 1, 0),
     fov: number = Math.PI / 4,
     aspect: number = 16 / 9,
-    near: number = 0.1,
-    far: number = 100,
+    near: number = 1.0,
+    far: number = 100.0,
   ) {
     this.uniforms = new CameraUniforms(device);
     this.position = position;

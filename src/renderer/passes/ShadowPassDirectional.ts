@@ -205,8 +205,7 @@ export class ShadowPassDirectional {
   }
 
   public getShadowTextureLayerView(layerIndex: number): GPUTextureView {
-    // Return debug texture for viewing in WebGPU inspector
-    return this.debugTextureViews[layerIndex];
+    return this.shadowTextureViews[layerIndex];
   }
   
   public getDebugTextureLayerView(layerIndex: number): GPUTextureView {

@@ -74,7 +74,7 @@ async function main() {
     Vec3.create(0, 5, 10),
     Vec3.create(0, 0, 0),
     undefined,
-    undefined,
+    Math.PI / 4,
     canvas.clientWidth / canvas.clientHeight,
     0.01,
     60.0,
