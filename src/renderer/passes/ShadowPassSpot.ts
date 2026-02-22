@@ -1,16 +1,12 @@
-import shader from "./ShadowPass.wgsl?raw";
+import shader from "./ShadowPassSpot.wgsl?raw";
 import { Mesh } from "../../scene";
-import {
-  DirectionalLight,
-  SHADOW_MAP_CASCADES_COUNT,
-  MAX_LIGHT_DIRECTIONAL_COUNT,
-} from "../../lights";
+import { SpotLight, MAX_LIGHT_SPOT_COUNT } from "../../lights";
 import { Vertex } from "../../geometries";
 import { ContextBuffer } from "../../uniforms";
 
-const SHADOW_MAP_SIZE = 2048;
+const SHADOW_MAP_SIZE = 1024;
 
-export class ShadowPass {
+export class ShadowPassSpot {
   private device: GPUDevice;
   private pipeline: GPURenderPipeline;
   private meshBindGroupLayout: GPUBindGroupLayout;
@@ -23,15 +19,12 @@ export class ShadowPass {
     this.device = device;
     this.contextBuffer = contextBuffer;
 
-    const totalLayers =
-      SHADOW_MAP_CASCADES_COUNT * MAX_LIGHT_DIRECTIONAL_COUNT;
-
     this.shadowTexture = this.device.createTexture({
-      label: "Shadow Pass Directional Texture",
+      label: "Shadow Pass Spot Texture",
       size: {
         width: SHADOW_MAP_SIZE,
         height: SHADOW_MAP_SIZE,
-        depthOrArrayLayers: totalLayers,
+        depthOrArrayLayers: MAX_LIGHT_SPOT_COUNT,
       },
       format: "depth32float",
       usage:
@@ -39,10 +32,10 @@ export class ShadowPass {
     });
 
     this.shadowTextureViews = [];
-    for (let i = 0; i < totalLayers; i++) {
+    for (let i = 0; i < MAX_LIGHT_SPOT_COUNT; i++) {
       this.shadowTextureViews.push(
         this.shadowTexture.createView({
-          label: `Shadow Directional Texture View ${i}`,
+          label: `Shadow Spot Texture View ${i}`,
           dimension: "2d",
           baseArrayLayer: i,
           arrayLayerCount: 1,
@@ -51,12 +44,12 @@ export class ShadowPass {
     }
 
     this.shadowTextureArrayView = this.shadowTexture.createView({
-      label: "Shadow Directional Texture Array View",
+      label: "Shadow Spot Texture Array View",
       dimension: "2d-array",
     });
 
     this.meshBindGroupLayout = this.device.createBindGroupLayout({
-      label: "Shadow Pass Mesh Bind Group Layout",
+      label: "Shadow Pass Spot Mesh Bind Group Layout",
       entries: [
         {
           binding: 0,
@@ -69,7 +62,7 @@ export class ShadowPass {
     const shaderModule = this.device.createShaderModule({ code: shader });
 
     const lightBindGroupLayout = this.device.createBindGroupLayout({
-      label: "Light Directional Uniform Bind Group Layout",
+      label: "Light Spot Uniform Bind Group Layout",
       entries: [
         {
           binding: 0,
@@ -80,7 +73,7 @@ export class ShadowPass {
     });
 
     this.pipeline = this.device.createRenderPipeline({
-      label: "Shadow Pass Pipeline",
+      label: "Shadow Pass Spot Pipeline",
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [
           this.contextBuffer.bindGroupLayout,
@@ -101,8 +94,8 @@ export class ShadowPass {
         depthWriteEnabled: true,
         depthCompare: "less-equal",
         format: "depth32float",
-        depthBias: 4,
-        depthBiasSlopeScale: 2.0,
+        depthBias: 8,
+        depthBiasSlopeScale: 3.0,
         depthBiasClamp: 0.0,
       },
     });
@@ -110,23 +103,20 @@ export class ShadowPass {
 
   public render(
     encoder: GPUCommandEncoder,
-    light: DirectionalLight,
+    lights: SpotLight[],
     meshes: Mesh[],
   ): void {
-    for (
-      let cascadeIndex = 0;
-      cascadeIndex < SHADOW_MAP_CASCADES_COUNT;
-      cascadeIndex++
-    ) {
-      const layerIndex = cascadeIndex;
-
-      light.setActiveViewProjectionIndex(cascadeIndex);
+    for (let i = 0; i < lights.length; i++) {
+      const light = lights[i];
+      if (!light.shadowBindGroup) {
+        continue;
+      }
 
       const passEncoder = encoder.beginRenderPass({
-        label: `Shadow Pass Cascade ${cascadeIndex}`,
+        label: `Shadow Pass Spot ${i}`,
         colorAttachments: [],
         depthStencilAttachment: {
-          view: this.shadowTextureViews[layerIndex],
+          view: this.shadowTextureViews[i],
           depthClearValue: 1.0,
           depthLoadOp: "clear",
           depthStoreOp: "store",
@@ -136,13 +126,13 @@ export class ShadowPass {
       passEncoder.setPipeline(this.pipeline);
 
       passEncoder.setBindGroup(0, this.contextBuffer.bindGroup);
-      passEncoder.setBindGroup(1, light.shadowBindGroup!);
+      passEncoder.setBindGroup(1, light.shadowBindGroup);
 
       for (const mesh of meshes) {
         mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
 
         const meshBindGroup = this.device.createBindGroup({
-          label: "Shadow Pass Mesh Bind Group",
+          label: "Shadow Pass Spot Mesh Bind Group",
           layout: this.meshBindGroupLayout,
           entries: [
             {
@@ -169,15 +159,12 @@ export class ShadowPass {
   public resize(device: GPUDevice, width: number, height: number): void {
     this.shadowTexture.destroy();
 
-    const totalLayers =
-      SHADOW_MAP_CASCADES_COUNT * MAX_LIGHT_DIRECTIONAL_COUNT;
-
     this.shadowTexture = this.device.createTexture({
-      label: "Shadow Pass Directional Texture",
+      label: "Shadow Pass Spot Texture",
       size: {
         width: SHADOW_MAP_SIZE,
         height: SHADOW_MAP_SIZE,
-        depthOrArrayLayers: totalLayers,
+        depthOrArrayLayers: MAX_LIGHT_SPOT_COUNT,
       },
       format: "depth32float",
       usage:
@@ -185,10 +172,10 @@ export class ShadowPass {
     });
 
     this.shadowTextureViews = [];
-    for (let i = 0; i < totalLayers; i++) {
+    for (let i = 0; i < MAX_LIGHT_SPOT_COUNT; i++) {
       this.shadowTextureViews.push(
         this.shadowTexture.createView({
-          label: `Shadow Directional Texture View ${i}`,
+          label: `Shadow Spot Texture View ${i}`,
           dimension: "2d",
           baseArrayLayer: i,
           arrayLayerCount: 1,
@@ -197,8 +184,12 @@ export class ShadowPass {
     }
 
     this.shadowTextureArrayView = this.shadowTexture.createView({
-      label: "Shadow Directional Texture Array View",
+      label: "Shadow Spot Texture Array View",
       dimension: "2d-array",
     });
+  }
+
+  destroy(): void {
+    this.shadowTexture.destroy();
   }
 }

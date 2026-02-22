@@ -20,7 +20,6 @@ export class MaterialManager {
   public readonly materialForwardBindGroupLayout: GPUBindGroupLayout;
   private placeholderNormalTexture: GPUTexture;
   private placeholderMetalRoughnessTexture: GPUTexture;
-  public readonly materialUniformBuffer: GPUBuffer;
 
   private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> = new Map();
   private hookPipelineCache: Map<MaterialPBR | MaterialBasic, GPURenderPipeline> = new Map();
@@ -74,12 +73,6 @@ export class MaterialManager {
 
     this.baseGeometryShader = geometryPassShader;
     this.baseForwardShader = forwardPassShader;
-
-    this.materialUniformBuffer = device.createBuffer({
-      label: "Material Uniform Buffer",
-      size: 48,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
 
     this.materialBindGroupLayout = device.createBindGroupLayout({
       label: "Material Bind Group Layout (Geometry)",
@@ -390,6 +383,18 @@ export class MaterialManager {
     }
   }
 
+  async loadMaterialsFromMeshes(meshes: { material: MaterialBase | null }[]): Promise<void> {
+    const materialsToLoad = new Set<MaterialBase>();
+    for (const mesh of meshes) {
+      if (mesh.material && !materialsToLoad.has(mesh.material)) {
+        materialsToLoad.add(mesh.material);
+      }
+    }
+    for (const material of materialsToLoad) {
+      await this.loadMaterial(material);
+    }
+  }
+
   private createTextureResources(texture: Texture): void {
     if (!texture.bitmap) return;
 
@@ -453,14 +458,14 @@ export class MaterialManager {
           { binding: 4, resource: this.materialSamplerFiltering },
           { binding: 5, resource: this.materialSamplerNonFiltering },
           { binding: 6, resource: this.materialSamplerComparison },
-          { binding: 7, resource: { buffer: this.materialUniformBuffer } },
+          { binding: 7, resource: { buffer: material.uniforms.buffer } },
         );
       } else {
         entries.push(
           { binding: 3, resource: this.materialSamplerFiltering },
           { binding: 4, resource: this.materialSamplerNonFiltering },
           { binding: 5, resource: this.materialSamplerComparison },
-          { binding: 7, resource: { buffer: this.materialUniformBuffer } },
+          { binding: 7, resource: { buffer: material.uniforms.buffer } },
         );
       }
 
@@ -492,14 +497,14 @@ export class MaterialManager {
           { binding: 4, resource: this.materialSamplerFiltering },
           { binding: 5, resource: this.materialSamplerNonFiltering },
           { binding: 6, resource: this.materialSamplerComparison },
-          { binding: 7, resource: { buffer: this.materialUniformBuffer } },
+          { binding: 7, resource: { buffer: material.uniforms.buffer } },
         );
       } else {
         entries.push(
           { binding: 3, resource: this.materialSamplerFiltering },
           { binding: 4, resource: this.materialSamplerNonFiltering },
           { binding: 5, resource: this.materialSamplerComparison },
-          { binding: 7, resource: { buffer: this.materialUniformBuffer } },
+          { binding: 7, resource: { buffer: material.uniforms.buffer } },
         );
       }
 
@@ -531,14 +536,14 @@ export class MaterialManager {
           { binding: 4, resource: this.materialSamplerFiltering },
           { binding: 5, resource: this.materialSamplerNonFiltering },
           { binding: 6, resource: this.materialSamplerComparison },
-          { binding: 7, resource: { buffer: this.materialUniformBuffer } },
+          { binding: 7, resource: { buffer: material.uniforms.buffer } },
         );
       } else {
         entries.push(
           { binding: 3, resource: this.materialSamplerFiltering },
           { binding: 4, resource: this.materialSamplerNonFiltering },
           { binding: 5, resource: this.materialSamplerComparison },
-          { binding: 7, resource: { buffer: this.materialUniformBuffer } },
+          { binding: 7, resource: { buffer: material.uniforms.buffer } },
         );
       }
 

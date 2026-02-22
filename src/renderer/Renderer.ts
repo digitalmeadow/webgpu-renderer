@@ -6,13 +6,14 @@ import { GeometryBuffer } from "./GeometryBuffer";
 import { GeometryPass } from "./passes/GeometryPass";
 import { LightingPass } from "./passes/LightingPass";
 import { OutputPass } from "./passes/OutputPass";
-import { ShadowPass } from "./passes/ShadowPass";
+import { ShadowPassDirectional } from "./passes/ShadowPassDirectional";
+import { ShadowPassSpot } from "./passes/ShadowPassSpot";
 import { MaterialManager } from "../materials";
 import { Mesh } from "../scene";
 
 import { LightManager } from "./LightManager";
 import { SceneUniforms, ContextBuffer } from "../uniforms";
-import { Light, DirectionalLight } from "../lights";
+import { Light, DirectionalLight, SpotLight } from "../lights";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../math";
 
 export class Renderer {
@@ -20,14 +21,16 @@ export class Renderer {
   private device: GPUDevice;
   private context: GPUCanvasContext | null = null;
   private format: GPUTextureFormat;
-  
+
   public frustumCulling: boolean = true;
+  public debugShadowMap: boolean = false;
 
   private geometryBuffer: GeometryBuffer;
   private geometryPass: GeometryPass;
   private lightingPass: LightingPass;
   private outputPass: OutputPass;
-  private shadowPass: ShadowPass;
+  private shadowPassDirectional: ShadowPassDirectional;
+  private shadowPassSpot: ShadowPassSpot;
   private forwardPass: ForwardPass;
   private materialManager: MaterialManager;
   private lightManager: LightManager;
@@ -44,7 +47,8 @@ export class Renderer {
     this.geometryPass = null as unknown as GeometryPass;
     this.lightingPass = null as unknown as LightingPass;
     this.outputPass = null as unknown as OutputPass;
-    this.shadowPass = null as unknown as ShadowPass;
+    this.shadowPassDirectional = null as unknown as ShadowPassDirectional;
+    this.shadowPassSpot = null as unknown as ShadowPassSpot;
     this.forwardPass = null as unknown as ForwardPass;
     this.materialManager = null as unknown as MaterialManager;
     this.lightManager = null as unknown as LightManager;
@@ -134,8 +138,12 @@ export class Renderer {
       );
 
       this.outputPass = new OutputPass(this.device);
-      
-      this.shadowPass = new ShadowPass(this.device, this.contextBuffer);
+
+      this.shadowPassDirectional = new ShadowPassDirectional(
+        this.device,
+        this.contextBuffer,
+      );
+      this.shadowPassSpot = new ShadowPassSpot(this.device, this.contextBuffer);
 
       this.contextBuffer.updateSize(
         this.device,
@@ -157,7 +165,16 @@ export class Renderer {
         this.canvas.height,
       );
 
-      this.shadowPass.resize(this.device, this.canvas.width, this.canvas.height);
+      this.shadowPassDirectional.resize(
+        this.device,
+        this.canvas.width,
+        this.canvas.height,
+      );
+      this.shadowPassSpot.resize(
+        this.device,
+        this.canvas.width,
+        this.canvas.height,
+      );
 
       this.contextBuffer.updateSize(
         this.device,
@@ -202,30 +219,46 @@ export class Renderer {
     camera.update(this.device);
 
     const lights = this.collectLights(world);
-    console.log('[Renderer] collectLights:', { 
-      totalLights: lights.length,
-      lights: lights.map(l => ({ name: l.name, type: l.type }))
-    });
     this.sceneUniforms.ambientLightColor = world.ambientLightColor;
     this.sceneUniforms.update();
 
     const commandEncoder = this.device.createCommandEncoder();
 
-    const directionalLights = lights.filter(l => l instanceof DirectionalLight) as DirectionalLight[];
-    console.log('[Renderer] Directional lights:', { 
-      count: directionalLights.length,
-      lights: directionalLights.map(l => ({ name: l.name }))
-    });
+    const directionalLights = lights.filter(
+      (l) => l instanceof DirectionalLight,
+    ) as DirectionalLight[];
 
     this.contextBuffer.update(this.device, time.elapsed, time.delta);
-    this.lightManager.update(directionalLights, [camera]);
+    this.lightManager.update(lights, [camera]);
 
     if (directionalLights.length > 0) {
-      const light = directionalLights[0];
-      this.shadowPass.render(commandEncoder, light, opaqueMeshes);
-      this.lightManager.setShadowTexture(this.shadowPass.getShadowTextureView());
-      this.lightManager.updateLightingBindGroup(directionalLights, commandEncoder);
+      this.shadowPassDirectional.render(
+        commandEncoder,
+        directionalLights[0],
+        opaqueMeshes,
+      );
     }
+
+    const spotLights = lights.filter(
+      (l) => l instanceof SpotLight,
+    ) as SpotLight[];
+    if (spotLights.length > 0) {
+      this.shadowPassSpot.render(commandEncoder, spotLights, opaqueMeshes);
+    }
+
+    this.lightManager.setDirectionalShadowTexture(
+      this.shadowPassDirectional.getShadowTextureView(),
+    );
+    this.lightManager.setSpotShadowTexture(
+      this.shadowPassSpot.getShadowTextureView(),
+    );
+    this.lightManager.updateLightingBindGroup(
+      directionalLights,
+      spotLights,
+      this.sceneUniforms,
+      commandEncoder,
+    );
+    this.lightManager.updateSceneLightBindGroup(this.lightManager.lightBuffer);
 
     this.geometryPass.render(
       this.device,
@@ -253,11 +286,20 @@ export class Renderer {
     }
 
     const swapChainView = this.context.getCurrentTexture().createView();
-    this.outputPass.render(
-      commandEncoder,
-      this.geometryBuffer.albedoView,
-      swapChainView,
-    );
+
+    if (this.debugShadowMap) {
+      this.outputPass.renderDebugDepth(
+        commandEncoder,
+        this.shadowPassDirectional.getShadowTextureLayerView(0),
+        swapChainView,
+      );
+    } else {
+      this.outputPass.render(
+        commandEncoder,
+        this.lightingPass.outputView,
+        swapChainView,
+      );
+    }
 
     this.device.queue.submit([commandEncoder.finish()]);
   }
@@ -268,6 +310,21 @@ export class Renderer {
 
   public getMaterialManager(): MaterialManager {
     return this.materialManager;
+  }
+
+  destroy(): void {
+    this.geometryBuffer?.destroy();
+    this.geometryBuffer = null as unknown as GeometryBuffer;
+    this.geometryPass = null as unknown as GeometryPass;
+    this.lightingPass = null as unknown as LightingPass;
+    this.outputPass = null as unknown as OutputPass;
+    this.shadowPassDirectional = null as unknown as ShadowPassDirectional;
+    this.shadowPassSpot = null as unknown as ShadowPassSpot;
+    this.forwardPass = null as unknown as ForwardPass;
+    this.materialManager = null as unknown as MaterialManager;
+    this.lightManager = null as unknown as LightManager;
+    this.sceneUniforms = null as unknown as SceneUniforms;
+    this.contextBuffer = null as unknown as ContextBuffer;
   }
 
   private collectMeshes(world: World): Mesh[] {
@@ -284,7 +341,7 @@ export class Renderer {
 
   private collectVisibleMeshes(world: World, camera: Camera): Mesh[] {
     const allMeshes = this.collectMeshes(world);
-    
+
     if (!this.frustumCulling) {
       return allMeshes;
     }

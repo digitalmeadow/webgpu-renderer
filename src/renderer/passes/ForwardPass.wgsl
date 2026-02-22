@@ -16,14 +16,14 @@ struct CameraUniforms {
 @group(1) @binding(0) var<uniform> model: mat4x4<f32>;
 
 struct VertexInput {
-    @location(0) position: vec3<f32>,
-    @location(1) normal: vec3<f32>,
+    @location(0) position: vec4<f32>,
+    @location(1) normal: vec4<f32>,
     @location(2) uv: vec2<f32>,
 };
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) normal: vec3<f32>,
+    @location(0) normal: vec4<f32>,
     @location(1) uv: vec2<f32>,
     @location(2) world_position: vec3<f32>,
 };
@@ -56,9 +56,9 @@ struct LightUniforms {
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    let world_pos = model * vec4<f32>(in.position, 1.0);
+    let world_pos = model * in.position;
     out.position = camera.view_projection_matrix * world_pos;
-    out.normal = (model * vec4<f32>(in.normal, 0.0)).xyz;
+    out.normal = model * in.normal;
     out.uv = in.uv;
     out.world_position = world_pos.xyz;
     return out;
@@ -67,7 +67,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let base_color = textureSample(base_color_texture, sampler_linear, in.uv);
-    let normal = normalize(in.normal);
+    let normal = normalize(in.normal.xyz);
     let light_dir = normalize(vec3<f32>(0.5, 1.0, 0.0));
     let diffuse = max(dot(normal, light_dir), 0.0);
     let ambient = vec3<f32>(0.1, 0.1, 0.1);

@@ -53,10 +53,10 @@ export class GeometryPass {
           this.materialManager.materialBindGroupLayout,
         ],
       }),
-      vertex: {
+       vertex: {
         module: shaderModule,
         entryPoint: "vs_main",
-        buffers: [],
+        buffers: [Vertex.getBufferLayout()],
       },
       fragment: {
         module: shaderModule,
@@ -69,7 +69,7 @@ export class GeometryPass {
       },
       primitive: {
         topology: "triangle-list",
-        cullMode: "none",
+        cullMode: "back",
       },
       depthStencil: {
         format: "depth32float",
@@ -117,52 +117,33 @@ export class GeometryPass {
       },
     });
 
-    passEncoder.setBindGroup(0, camera.uniforms.bindGroup);
-
+passEncoder.setBindGroup(0, camera.uniforms.bindGroup);
     let currentPipeline: GPURenderPipeline | null = null;
-
+    
     for (const mesh of meshes) {
-      if (!mesh.uniforms || !mesh.material) continue;
+        const pipelineToUse = this.pipeline;
 
-      // Determine which pipeline to use
-      let pipelineToUse: GPURenderPipeline | null = null;
-      
-      if (mesh.material instanceof MaterialCustom) {
-        pipelineToUse = materialManager.getCustomPipeline(
-          mesh.material,
-          camera,
-          this.meshBindGroupLayout,
-        );
-      } else if (mesh.material instanceof MaterialBasic || 
-                 (mesh.material instanceof MaterialPBR && mesh.material.hooks.albedo)) {
-        pipelineToUse = materialManager.getHookPipeline(
-          mesh.material,
-          camera,
-          this.meshBindGroupLayout,
-          "geometry",
-        );
-      } else {
-        pipelineToUse = this.pipeline;
-      }
+        if (!pipelineToUse) continue;
 
-      if (!pipelineToUse) continue;
+        // Set pipeline if it has changed
+        if (pipelineToUse !== currentPipeline) {
+          passEncoder.setPipeline(pipelineToUse);
+          currentPipeline = pipelineToUse;
+        }
 
-      // Set pipeline if it has changed
-      if (pipelineToUse !== currentPipeline) {
-        passEncoder.setPipeline(pipelineToUse);
-        currentPipeline = pipelineToUse;
-      }
+        mesh.uniforms.update(device, mesh.transform.getWorldMatrix());
+        passEncoder.setBindGroup(1, mesh.uniforms.bindGroup);
 
-      mesh.uniforms.update(device, mesh.transform.getWorldMatrix());
-      passEncoder.setBindGroup(1, mesh.uniforms.bindGroup);
-
-      const materialBindGroup = materialManager.getBindGroup(mesh.material);
-      if (!materialBindGroup) continue;
-      passEncoder.setBindGroup(2, materialBindGroup);
-
-      passEncoder.draw(3);
+        if (!mesh.material) continue;
+        const materialBindGroup = materialManager.getBindGroup(mesh.material);
+        if (!materialBindGroup) continue;
+        passEncoder.setBindGroup(2, materialBindGroup);
+        
+        passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
+        passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
+        passEncoder.drawIndexed(mesh.geometry.indexCount);
     }
-
+    
     passEncoder.end();
   }
 }

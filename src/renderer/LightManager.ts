@@ -1,4 +1,4 @@
-import { Light, DirectionalLight } from "../lights";
+import { Light, DirectionalLight, SpotLight } from "../lights";
 import { Vec3 } from "../math";
 import { SceneUniforms } from "../uniforms";
 
@@ -12,7 +12,8 @@ export class LightManager {
   
   public shadowSampler: GPUSampler;
   public shadowTexture: GPUTexture;
-  public shadowTextureView: GPUTextureView | null = null;
+  public directionalShadowTextureView: GPUTextureView | null = null;
+  public spotShadowTextureView: GPUTextureView | null = null;
   
   public lightingBindGroupLayout: GPUBindGroupLayout;
   public lightingBindGroup: GPUBindGroup | null = null;
@@ -50,12 +51,12 @@ export class LightManager {
       label: "Lighting Bind Group Layout",
       entries: [
         {
-          binding: 0,
+          binding: 0, // Directional lights uniform buffer
           visibility: GPUShaderStage.FRAGMENT,
           buffer: { type: "uniform" },
         },
         {
-          binding: 1,
+          binding: 1, // Directional shadow texture array
           visibility: GPUShaderStage.FRAGMENT,
           texture: {
             sampleType: "depth",
@@ -63,7 +64,15 @@ export class LightManager {
           },
         },
         {
-          binding: 2,
+          binding: 2, // Spot shadow texture array
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: {
+            sampleType: "depth",
+            viewDimension: "2d-array",
+          },
+        },
+        {
+          binding: 3, // Scene uniforms buffer (NOT a sampler!)
           visibility: GPUShaderStage.FRAGMENT,
           buffer: { type: "uniform" },
         },
@@ -71,15 +80,10 @@ export class LightManager {
     });
 
     this.sceneLightBindGroupLayout = this.device.createBindGroupLayout({
-      label: "Scene + Light Bind Group Layout",
+      label: "Spot Lights Bind Group Layout",
       entries: [
         {
           binding: 0,
-          visibility: GPUShaderStage.FRAGMENT,
-          buffer: { type: "uniform" },
-        },
-        {
-          binding: 1,
           visibility: GPUShaderStage.FRAGMENT,
           buffer: { type: "uniform" },
         },
@@ -87,15 +91,11 @@ export class LightManager {
     });
 
     this.sceneLightBindGroup = this.device.createBindGroup({
-      label: "Scene + Light Bind Group (Fallback)",
+      label: "Spot Lights Bind Group (Fallback)",
       layout: this.sceneLightBindGroupLayout,
       entries: [
         {
           binding: 0,
-          resource: { buffer: this.lightBuffer },
-        },
-        {
-          binding: 1,
           resource: { buffer: this.lightBuffer },
         },
       ],
@@ -104,32 +104,37 @@ export class LightManager {
     this.lightingBindGroup = null;
   }
 
-  public setShadowTexture(view: GPUTextureView): void {
-    this.shadowTextureView = view;
+  public setDirectionalShadowTexture(view: GPUTextureView): void {
+    this.directionalShadowTextureView = view;
   }
 
-  public updateSceneLightBindGroup(sceneUniforms: SceneUniforms): void {
+  public setSpotShadowTexture(view: GPUTextureView): void {
+    this.spotShadowTextureView = view;
+  }
+
+  public updateSceneLightBindGroup(spotLightsBuffer: GPUBuffer): void {
     this.sceneLightBindGroup = this.device.createBindGroup({
-      label: "Scene + Light Bind Group",
+      label: "Spot Lights Bind Group",
       layout: this.sceneLightBindGroupLayout,
       entries: [
         {
           binding: 0,
-          resource: { buffer: sceneUniforms.buffer },
-        },
-        {
-          binding: 1,
-          resource: { buffer: this.lightBuffer },
+          resource: { buffer: spotLightsBuffer },
         },
       ],
     });
   }
 
-  public updateLightingBindGroup(directionalLights: DirectionalLight[], commandEncoder?: GPUCommandEncoder): void {
-    if (!this.shadowTextureView || directionalLights.length === 0) return;
+  public updateLightingBindGroup(
+    directionalLights: DirectionalLight[],
+    spotLights: SpotLight[],
+    sceneUniforms: SceneUniforms,
+    commandEncoder?: GPUCommandEncoder
+  ): void {
+    if (!this.directionalShadowTextureView || !this.spotShadowTextureView) return;
 
     const encoder = commandEncoder ?? this.device.createCommandEncoder();
-    
+
     for (let i = 0; i < directionalLights.length; i++) {
       const light = directionalLights[i];
       if (light.shadowBuffer) {
@@ -138,6 +143,20 @@ export class LightManager {
           0,
           this.lightBuffer,
           i * LIGHT_BUFFER_SIZE,
+          LIGHT_BUFFER_SIZE,
+        );
+      }
+    }
+    
+    const spotLightOffset = MAX_LIGHT_DIRECTIONAL_COUNT * LIGHT_BUFFER_SIZE;
+    for (let i = 0; i < spotLights.length; i++) {
+      const light = spotLights[i];
+      if (light.shadowBuffer) {
+        encoder.copyBufferToBuffer(
+          light.shadowBuffer,
+          0,
+          this.lightBuffer,
+          spotLightOffset + (i * LIGHT_BUFFER_SIZE),
           LIGHT_BUFFER_SIZE,
         );
       }
@@ -157,11 +176,15 @@ export class LightManager {
         },
         {
           binding: 1,
-          resource: this.shadowTextureView,
+          resource: this.directionalShadowTextureView,
         },
         {
           binding: 2,
-          resource: { buffer: this.lightBuffer },
+          resource: this.spotShadowTextureView,
+        },
+        {
+          binding: 3,
+          resource: { buffer: sceneUniforms.buffer },
         },
       ],
     });
@@ -172,35 +195,33 @@ export class LightManager {
       (l) => l instanceof DirectionalLight,
     ) as DirectionalLight[];
 
-    console.log('[LightManager] update called with', { 
-      totalLights: lights.length, 
-      directionalLights: directionalLights.length 
-    });
-
-    if (directionalLights.length === 0) {
-      console.warn('[LightManager] No directional lights found!');
-      return;
+    if (directionalLights.length > 0) {
+      const light = directionalLights[0];
+      if (!light.shadowBuffer) {
+        light.initShadowResources(this.device);
+      }
+      const camera = cameras.length > 0 ? cameras[0] : null;
+      if (camera) {
+        light.updateCascadeMatrices(
+          camera.position,
+          camera.target,
+          camera.near,
+          camera.far,
+          camera.viewMatrix,
+          camera.projectionMatrix,
+        );
+        light.updateShadowUniforms();
+      }
     }
-
-    const light = directionalLights[0];
     
-    if (!light.shadowBuffer) {
-      console.log('[LightManager] Initializing shadow resources');
-      light.initShadowResources(this.device);
-    }
+    const spotLights = lights.filter(
+      (l) => l instanceof SpotLight,
+    ) as SpotLight[];
 
-    const camera = cameras.length > 0 ? cameras[0] : null;
-    if (camera) {
-      console.log('[LightManager] Calling updateCascadeMatrices');
-      light.updateCascadeMatrices(
-        camera.position,
-        camera.target,
-        camera.near,
-        camera.far,
-        camera.viewMatrix,
-        camera.projectionMatrix,
-      );
-      
+    for(const light of spotLights) {
+      if (!light.shadowBuffer) {
+        light.initShadowResources(this.device);
+      }
       light.updateShadowUniforms();
     }
   }

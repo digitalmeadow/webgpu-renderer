@@ -3,7 +3,7 @@ import { Vec3, Vec4, Mat4 } from "../math";
 
 export const SHADOW_MAP_CASCADES_COUNT = 3;
 export const SHADOW_CASCADE_SPLITS = [0.0, 0.2, 0.5, 1.0];
-export const LIGHT_VIEW_OFFSET = 50.0;
+export const LIGHT_VIEW_OFFSET = 25.0;
 export const MAX_LIGHT_DIRECTIONAL_COUNT = 2;
 
 export class DirectionalLight extends Light {
@@ -39,7 +39,10 @@ export class DirectionalLight extends Light {
     this.shadowBuffer = device.createBuffer({
       label: "DirectionalLight Shadow Buffer",
       size: 256,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+      usage:
+        GPUBufferUsage.UNIFORM |
+        GPUBufferUsage.COPY_DST |
+        GPUBufferUsage.COPY_SRC,
     });
 
     this.shadowBindGroupLayout = device.createBindGroupLayout({
@@ -54,7 +57,8 @@ export class DirectionalLight extends Light {
     });
 
     if (!DirectionalLight.defaultShadowBindGroupLayout) {
-      DirectionalLight.defaultShadowBindGroupLayout = this.shadowBindGroupLayout;
+      DirectionalLight.defaultShadowBindGroupLayout =
+        this.shadowBindGroupLayout;
     }
 
     this.shadowBindGroup = device.createBindGroup({
@@ -97,7 +101,9 @@ export class DirectionalLight extends Light {
 
     const viewProjectionInverse = Mat4.invert(viewProjectionMatrix);
     if (!viewProjectionInverse) {
-      console.error("[DirectionalLight] Failed to invert view-projection matrix");
+      console.error(
+        "[DirectionalLight] Failed to invert view-projection matrix",
+      );
       return [];
     }
 
@@ -123,10 +129,22 @@ export class DirectionalLight extends Light {
       }
 
       const viewSpace = new Vec4(
-        invProj.data[0] * clip.x + invProj.data[4] * clip.y + invProj.data[8] * clip.z + invProj.data[12] * clip.w,
-        invProj.data[1] * clip.x + invProj.data[5] * clip.y + invProj.data[9] * clip.z + invProj.data[13] * clip.w,
-        invProj.data[2] * clip.x + invProj.data[6] * clip.y + invProj.data[10] * clip.z + invProj.data[14] * clip.w,
-        invProj.data[3] * clip.x + invProj.data[7] * clip.y + invProj.data[11] * clip.z + invProj.data[15] * clip.w,
+        invProj.data[0] * clip.x +
+          invProj.data[4] * clip.y +
+          invProj.data[8] * clip.z +
+          invProj.data[12] * clip.w,
+        invProj.data[1] * clip.x +
+          invProj.data[5] * clip.y +
+          invProj.data[9] * clip.z +
+          invProj.data[13] * clip.w,
+        invProj.data[2] * clip.x +
+          invProj.data[6] * clip.y +
+          invProj.data[10] * clip.z +
+          invProj.data[14] * clip.w,
+        invProj.data[3] * clip.x +
+          invProj.data[7] * clip.y +
+          invProj.data[11] * clip.z +
+          invProj.data[15] * clip.w,
       );
 
       const w = viewSpace.w;
@@ -157,8 +175,8 @@ export class DirectionalLight extends Light {
     cameraDirection: Vec3,
     cameraNear: number,
     cameraFar: number,
-    viewMatrix: Mat4,
-    projectionMatrix: Mat4,
+    cameraViewMatrix: Mat4,
+    cameraProjectionMatrix: Mat4,
   ): void {
     if (!this.shadowBuffer) {
       console.warn(
@@ -168,23 +186,29 @@ export class DirectionalLight extends Light {
     }
 
     this.direction = this.transform.getForward();
-    console.log('[DirectionalLight] Direction derived from transform:', {
-      forward: this.transform.getForward().data,
-      direction: this.direction.data,
-    });
 
-    const frustumCorners = this.computeFrustumCorners(viewMatrix, projectionMatrix);
+    // Compute camera frustum corners for cascade splits
+    const frustumCorners = this.computeFrustumCorners(
+      cameraViewMatrix,
+      cameraProjectionMatrix,
+    );
     if (frustumCorners.length === 0) {
       console.warn("[DirectionalLight] Failed to compute frustum corners");
       return;
     }
 
+    console.log("[DirectionalLight] Frustum corners (should be positive Z):");
+    for (let i = 0; i < frustumCorners.length; i++) {
+      console.log(`  [${i}]: (${frustumCorners[i].x.toFixed(2)}, ${frustumCorners[i].y.toFixed(2)}, ${frustumCorners[i].z.toFixed(2)})`);
+    }
+
     this.updateCascadeSplits(cameraNear, cameraFar);
     this.updateViewProjectionMatrices(frustumCorners);
-
-    console.log("[DirectionalLight] Cascade matrices updated", {
-      cascadeSplits: this.cascadeSplits,
-    });
+    
+    console.log("[DirectionalLight] Final cascade matrices:");
+    for (let i = 0; i < SHADOW_MAP_CASCADES_COUNT; i++) {
+      console.log(`  Cascade ${i} VP:`, Array.from(this.viewProjectionMatrices[i].data.slice(0, 4)).map(v => v.toFixed(4)));
+    }
   }
 
   private updateCascadeSplits(cameraNear: number, cameraFar: number): void {
@@ -196,14 +220,26 @@ export class DirectionalLight extends Light {
   }
 
   private updateViewProjectionMatrices(frustumCorners: Vec3[]): void {
-    const splitRange = this.cascadeSplits[SHADOW_MAP_CASCADES_COUNT] - this.cascadeSplits[0];
+    const splitRange =
+      this.cascadeSplits[SHADOW_MAP_CASCADES_COUNT] - this.cascadeSplits[0];
 
-    for (let cascadeIndex = 0; cascadeIndex < SHADOW_MAP_CASCADES_COUNT; cascadeIndex++) {
+    console.log("  === updateViewProjectionMatrices ===");
+    console.log("    splitRange:", splitRange.toFixed(2));
+
+    for (
+      let cascadeIndex = 0;
+      cascadeIndex < SHADOW_MAP_CASCADES_COUNT;
+      cascadeIndex++
+    ) {
       const splitNear = this.cascadeSplits[cascadeIndex];
       const splitFar = this.cascadeSplits[cascadeIndex + 1];
 
+      console.log(`    Cascade ${cascadeIndex}: near=${splitNear.toFixed(2)}, far=${splitFar.toFixed(2)}`);
+
       const tNear = (splitNear - this.cascadeSplits[0]) / splitRange;
       const tFar = (splitFar - this.cascadeSplits[0]) / splitRange;
+
+      console.log(`    tNear=${tNear.toFixed(4)}, tFar=${tFar.toFixed(4)}`);
 
       const splitCorners: Vec3[] = [];
 
@@ -215,12 +251,21 @@ export class DirectionalLight extends Light {
         splitCorners.push(this.lerpVec3(nearCorner, farCorner, tFar));
       }
 
+      console.log(`    Split corners:`, splitCorners.map(c => `(${c.x.toFixed(2)}, ${c.y.toFixed(2)}, ${c.z.toFixed(2)})`).join(", "));
+
       this.updateCascadeMatrixFromCorners(cascadeIndex, splitCorners);
     }
   }
 
-  private updateCascadeMatrixFromCorners(cascadeIndex: number, splitCorners: Vec3[]): void {
-    let centerX = 0, centerY = 0, centerZ = 0;
+  private updateCascadeMatrixFromCorners(
+    cascadeIndex: number,
+    splitCorners: Vec3[],
+  ): void {
+    console.log(`    === updateCascadeMatrixFromCorners(${cascadeIndex}) ===`);
+    
+    let centerX = 0,
+      centerY = 0,
+      centerZ = 0;
     for (const corner of splitCorners) {
       centerX += corner.x;
       centerY += corner.y;
@@ -230,6 +275,7 @@ export class DirectionalLight extends Light {
     centerY /= 8;
     centerZ /= 8;
     const centerPoint = new Vec3(centerX, centerY, centerZ);
+    console.log(`    Center point: (${centerX.toFixed(2)}, ${centerY.toFixed(2)}, ${centerZ.toFixed(2)})`);
 
     let maxRadius = 0;
     for (const corner of splitCorners) {
@@ -241,6 +287,7 @@ export class DirectionalLight extends Light {
         maxRadius = dist;
       }
     }
+    console.log(`    maxRadius: ${maxRadius.toFixed(2)}`);
 
     const eye = new Vec3(
       centerX - this.direction.x * (maxRadius + LIGHT_VIEW_OFFSET),
@@ -249,16 +296,23 @@ export class DirectionalLight extends Light {
     );
     const target = centerPoint;
     const up = new Vec3(0, 1, 0);
+    
+    console.log(`    Eye (light pos): (${eye.x.toFixed(2)}, ${eye.y.toFixed(2)}, ${eye.z.toFixed(2)})`);
+    console.log(`    Target: (${target.x.toFixed(2)}, ${target.y.toFixed(2)}, ${target.z.toFixed(2)})`);
+    console.log(`    LIGHT_VIEW_OFFSET: ${LIGHT_VIEW_OFFSET}`);
 
     const viewMatrix = Mat4.lookAt(eye, target, up);
+    console.log(`    View matrix:`, Array.from(viewMatrix.data.slice(0, 4)).map(v => v.toFixed(4)));
 
     const extrudedCorners: Vec3[] = [];
     for (const corner of splitCorners) {
-      extrudedCorners.push(new Vec3(
-        corner.x - this.direction.x * LIGHT_VIEW_OFFSET,
-        corner.y - this.direction.y * LIGHT_VIEW_OFFSET,
-        corner.z - this.direction.z * LIGHT_VIEW_OFFSET,
-      ));
+      extrudedCorners.push(
+        new Vec3(
+          corner.x - this.direction.x * LIGHT_VIEW_OFFSET,
+          corner.y - this.direction.y * LIGHT_VIEW_OFFSET,
+          corner.z - this.direction.z * LIGHT_VIEW_OFFSET,
+        ),
+      );
     }
 
     const allCorners = [...splitCorners, ...extrudedCorners];
@@ -269,9 +323,14 @@ export class DirectionalLight extends Light {
       lightSpaceCorners.push(transformed);
     }
 
-    let minX = lightSpaceCorners[0].x, maxX = lightSpaceCorners[0].x;
-    let minY = lightSpaceCorners[0].y, maxY = lightSpaceCorners[0].y;
-    let minZ = lightSpaceCorners[0].z, maxZ = lightSpaceCorners[0].z;
+    console.log(`    Light space corners:`, lightSpaceCorners.map(c => `(${c.x.toFixed(2)}, ${c.y.toFixed(2)}, ${c.z.toFixed(2)})`).join(", "));
+
+    let minX = lightSpaceCorners[0].x,
+      maxX = lightSpaceCorners[0].x;
+    let minY = lightSpaceCorners[0].y,
+      maxY = lightSpaceCorners[0].y;
+    let minZ = lightSpaceCorners[0].z,
+      maxZ = lightSpaceCorners[0].z;
 
     for (let i = 1; i < lightSpaceCorners.length; i++) {
       const c = lightSpaceCorners[i];
@@ -283,7 +342,11 @@ export class DirectionalLight extends Light {
       if (c.z > maxZ) maxZ = c.z;
     }
 
+    console.log(`    Ortho bounds: X[${minX.toFixed(2)}, ${maxX.toFixed(2)}], Y[${minY.toFixed(2)}, ${maxY.toFixed(2)}], Z[${minZ.toFixed(2)}, ${maxZ.toFixed(2)}]`);
+    console.log(`    Ortho near/far: -${maxZ.toFixed(2)}, -${minZ.toFixed(2)}`);
+
     const projectionMatrix = Mat4.ortho(minX, maxX, minY, maxY, -maxZ, -minZ);
+    console.log(`    Proj matrix:`, Array.from(projectionMatrix.data.slice(0, 4)).map(v => v.toFixed(4)));
 
     this.viewMatrices[cascadeIndex] = viewMatrix;
     this.projectionMatrices[cascadeIndex] = projectionMatrix;
@@ -291,6 +354,7 @@ export class DirectionalLight extends Light {
     const viewProjection = Mat4.create();
     Mat4.multiply(projectionMatrix, viewMatrix, viewProjection);
     this.viewProjectionMatrices[cascadeIndex] = viewProjection;
+    console.log(`    VP matrix:`, Array.from(viewProjection.data.slice(0, 4)).map(v => v.toFixed(4)));
   }
 
   public updateShadowUniforms(): void {
@@ -303,7 +367,11 @@ export class DirectionalLight extends Light {
 
     const data = new Float32Array(64);
 
-    for (let cascadeIndex = 0; cascadeIndex < SHADOW_MAP_CASCADES_COUNT; cascadeIndex++) {
+    for (
+      let cascadeIndex = 0;
+      cascadeIndex < SHADOW_MAP_CASCADES_COUNT;
+      cascadeIndex++
+    ) {
       const matrix = this.viewProjectionMatrices[cascadeIndex];
       for (let i = 0; i < 16; i++) {
         data[cascadeIndex * 16 + i] = matrix.data[i];
@@ -336,10 +404,6 @@ export class DirectionalLight extends Light {
 
     const indexData = new Uint32Array([this.activeViewProjectionIndex]);
     this._device.queue.writeBuffer(this.shadowBuffer, 240, indexData);
-
-    console.log("[DirectionalLight] Shadow uniforms updated", {
-      activeIndex: this.activeViewProjectionIndex,
-    });
   }
 
   public setActiveViewProjectionIndex(index: number): void {

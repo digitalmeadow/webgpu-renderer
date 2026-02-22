@@ -33,14 +33,25 @@ struct LightDirectionalUniforms {
     active_view_projection_matrix: u32,
 }
 
-@group(2) @binding(0) var<uniform> light_directionals: array<LightDirectionalUniforms, 2>;
-@group(2) @binding(1) var light_directional_shadow_texture_array: texture_depth_2d_array;
-
 struct SceneUniforms {
     ambient_light_color: vec4<f32>,
 }
 
-@group(2) @binding(2) var<uniform> scene_uniforms: SceneUniforms;
+@group(2) @binding(0) var<uniform> light_directionals: array<LightDirectionalUniforms, 2>;
+@group(2) @binding(1) var light_directional_shadow_texture_array: texture_depth_2d_array;
+@group(2) @binding(2) var light_spot_shadow_texture_array: texture_depth_2d_array;
+@group(2) @binding(3) var<uniform> scene_uniforms: SceneUniforms;
+
+struct LightSpotUniforms {
+    view_projection_matrix: mat4x4<f32>,
+    position: vec4<f32>,
+    direction: vec4<f32>,
+    color: vec4<f32>,
+    angle_inner: f32,
+    angle_outer: f32,
+}
+@group(3) @binding(0) var<uniform> light_spots: array<LightSpotUniforms, 4>;
+
 
 struct FragmentOutput {
     @location(0) color: vec4<f32>,
@@ -107,6 +118,25 @@ fn fetch_light_directional_shadow(cascade_id: u32, homogeneous_coords: vec4<f32>
     );
 }
 
+fn fetch_light_spot_shadow(light_index: u32, homogeneous_coords: vec4<f32>) -> f32 {
+    if (homogeneous_coords.w <= 0.0) {
+        return 1.0;
+    }
+    
+    let flip_correction = vec2<f32>(0.5, -0.5);
+    let proj_correction = 1.0 / homogeneous_coords.w;
+    let light_local = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
+    let depth = homogeneous_coords.z * proj_correction;
+    
+    let texel = 1.0 / 1024.0;
+    let eps = 1e-5;
+    let uv_clamped = clamp(light_local, vec2<f32>(eps, eps), vec2<f32>(1.0 - eps, 1.0 - eps));
+    
+    return textureSampleCompareLevel(
+        light_spot_shadow_texture_array, shadow_sampler, uv_clamped, i32(light_index), depth
+    );
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> FragmentOutput {
     var output: FragmentOutput;
@@ -123,28 +153,59 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let world_pos = (camera_uniforms.view_matrix_inverse * vec4<f32>(view_pos, 1.0)).xyz;
     let world_normal = normalize((camera_uniforms.view_matrix_inverse * vec4<f32>(normal, 0.0)).xyz);
 
-    let light = light_directionals[0u];
-    
-    let view_space_z = -view_pos.z;
-    let cascade_index = select_cascade(view_space_z, light.cascade_splits);
-    
-    let shadow_matrix = light.view_projection_matrices[cascade_index];
-    let shadow_coords = shadow_matrix * vec4<f32>(world_pos, 1.0);
-    
-    let shadow_layer = 0u * 3u + cascade_index;
-    let shadow = fetch_light_directional_shadow(shadow_layer, shadow_coords);
-
+    var color = albedo * scene_uniforms.ambient_light_color.rgb;
     let N = normalize(world_normal);
-    let L = normalize(-light.direction.xyz);
-    let diffuse = max(dot(N, L), 0.0);
-    
-    let ambient = scene_uniforms.ambient_light_color.rgb;
-    let light_color = light.color.rgb;
-    let light_intensity = light.color.a;
-    
-    var color = albedo * ambient;
-    let shadow_value = select(shadow, 1.0, isBackground);
-    color += albedo * light_color * light_intensity * diffuse * shadow_value;
+
+    // Directional Lights
+    for (var i = 0u; i < 2u; i = i + 1u) {
+        let light = light_directionals[i];
+        if (light.color.a == 0.0) {
+            continue;
+        }
+        
+        let view_space_z = -view_pos.z;
+        let cascade_index = select_cascade(view_space_z, light.cascade_splits);
+        
+        let shadow_matrix = light.view_projection_matrices[cascade_index];
+        let shadow_coords = shadow_matrix * vec4<f32>(world_pos, 1.0);
+        
+        let shadow_layer = i * 3u + cascade_index;
+        let shadow = fetch_light_directional_shadow(shadow_layer, shadow_coords);
+
+        let L = normalize(-light.direction.xyz);
+        let diffuse = max(dot(N, L), 0.0);
+        
+        let light_color = light.color.rgb;
+        let light_intensity = light.color.a;
+        
+        let shadow_value = select(shadow, 1.0, isBackground);
+        color += albedo * light_color * light_intensity * diffuse * shadow_value;
+    }
+
+    // Spot Lights
+//   for (var i = 0u; i < 4u; i = i + 1u) {
+//       let light = light_spots[i];
+//       if (light.color.a == 0.0) {
+//           continue;
+//       }
+//
+//       let to_light = light.position.xyz - world_pos;
+//       let dist = length(to_light);
+//       let L = normalize(to_light);
+//       
+//       let angle = acos(dot(-L, normalize(light.direction.xyz)));
+//       let falloff = smoothstep(light.angle_outer, light.angle_inner, angle);
+//
+//       let shadow_coords = light.view_projection_matrix * vec4<f32>(world_pos, 1.0);
+//       let shadow = fetch_light_spot_shadow(i, shadow_coords);
+//
+//       let diffuse = max(dot(N, L), 0.0);
+//       let light_color = light.color.rgb;
+//       let light_intensity = light.color.a;
+//
+//       let shadow_value = select(shadow, 1.0, isBackground);
+//       color += albedo * light_color * light_intensity * diffuse * falloff * shadow_value;
+//   }
 
     output.color = vec4<f32>(color, 1.0);
     return output;

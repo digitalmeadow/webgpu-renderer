@@ -1,6 +1,6 @@
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) world_normal: vec3<f32>,
+    @location(0) world_normal: vec4<f32>,
     @location(1) uv_coords: vec2<f32>,
 };
 
@@ -35,29 +35,23 @@ struct CameraUniforms {
 //--HOOK_PLACEHOLDER_UNIFORMS--//
 
 fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
-    return vec4<f32>(1.0, 0.0, 1.0, 1.0);
+    return vec4<f32>(1.0, 1.0, 1.0, 1.0);
 }
 
 @vertex
 fn vs_main(
     @location(0) position: vec4<f32>,
-    @location(1) normal: vec3<f32>,
+    @location(1) normal: vec4<f32>,
     @location(2) uv: vec2<f32>,
-    @builtin(vertex_index) vertex_index: u32,
- ) -> VertexOutput {
-     var output: VertexOutput;
+) -> VertexOutput {
+    var output: VertexOutput;
 
-    var positions = array<vec2<f32>, 3>(
-        vec2<f32>(0.0, 0.5),
-        vec2<f32>(-0.5, -0.5),
-        vec2<f32>(0.5, -0.5)
-    );
-
-     output.position = vec4<f32>(positions[vertex_index % 3u], 0.0, 1.0);
-     output.world_normal = (model * vec4<f32>(normal, 0.0)).xyz;
-     output.uv_coords = uv;
-     return output;
- }
+    let modelPosition = model * position;
+    output.position = camera.view_projection_matrix * modelPosition;
+    output.world_normal = model * normal;
+    output.uv_coords = uv;
+    return output;
+}
 
  struct GBufferOutput {
      @location(0) albedo: vec4<f32>,
@@ -69,9 +63,9 @@ fn vs_main(
  fn fs_main(in: VertexOutput) -> GBufferOutput {
      var output: GBufferOutput;
 
-     output.albedo = get_albedo_color(in.uv_coords);
-     output.albedo.a = output.albedo.a * material.opacity;
-     output.normal = vec4<f32>(normalize(in.world_normal), 1.0);
+     output.albedo = material.color;
+     output.albedo.a = material.color.a * material.opacity;
+     output.normal = vec4<f32>(normalize(in.world_normal.xyz), 1.0);
      
      let metal_rough = textureSample(metalnessRoughnessTexture, sampler_linear, in.uv_coords);
      output.metal_rough = vec4<f32>(metal_rough.b, metal_rough.g, 0.0, 1.0);

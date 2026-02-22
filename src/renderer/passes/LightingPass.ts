@@ -40,6 +40,7 @@ export class LightingPass {
           geometryBuffer.bindGroupLayout,
           camera.uniforms.bindGroupLayout,
           lightManager.lightingBindGroupLayout,
+          lightManager.sceneLightBindGroupLayout,
         ],
       }),
       vertex: {
@@ -76,6 +77,10 @@ export class LightingPass {
     this.outputView = this.outputTexture.createView();
   }
 
+  destroy(): void {
+    this.outputTexture.destroy();
+  }
+
   render(
     encoder: GPUCommandEncoder,
     geometryBuffer: GeometryBuffer,
@@ -98,6 +103,7 @@ export class LightingPass {
     passEncoder.setBindGroup(0, geometryBuffer.bindGroup);
     passEncoder.setBindGroup(1, camera.uniforms.bindGroup);
     passEncoder.setBindGroup(2, lightManager.lightingBindGroup);
+    passEncoder.setBindGroup(3, lightManager.sceneLightBindGroup);
     passEncoder.draw(3);
     passEncoder.end();
   }

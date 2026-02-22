@@ -279,4 +279,11 @@ export class GeometryBuffer {
       ],
     });
   }
+
+  destroy(): void {
+    this.albedoTexture.destroy();
+    this.normalTexture.destroy();
+    this.metalRoughnessTexture.destroy();
+    this.depthTexture.destroy();
+  }
 }
