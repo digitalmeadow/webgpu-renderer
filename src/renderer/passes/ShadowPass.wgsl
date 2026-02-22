@@ -8,27 +8,37 @@ struct VertexOutput {
     @builtin(position) position: vec4<f32>,
 };
 
-struct LightUniforms {
-    lightViewProjMatrix: mat4x4<f32>,
-    lightPos: vec4<f32>,
-    direction: vec4<f32>,
-    color_intensity: vec4<f32>,
+struct ContextUniforms {
+    time_duration: f32,
+    time_delta: f32,
+    screen_size: vec2<f32>,
+    render_size: vec2<f32>,
 }
 
-@group(0) @binding(0) var<uniform> light_uniforms: LightUniforms;
+@group(0) @binding(0) var<uniform> context_uniforms: ContextUniforms;
+
+struct LightDirectionalUniforms {
+    view_projection_matrices: array<mat4x4<f32>, 3>,
+    cascade_splits: vec4<f32>,
+    direction: vec4<f32>,
+    color: vec4<f32>,
+    active_view_projection_matrix: u32,
+}
+
+@group(1) @binding(0) var<uniform> light_directional_uniforms: LightDirectionalUniforms;
 
 struct MeshUniforms {
     model_transform_matrix: mat4x4<f32>,
 }
 
-@group(1) @binding(0) var<uniform> mesh_uniforms: MeshUniforms;
+@group(2) @binding(0) var<uniform> mesh_uniforms: MeshUniforms;
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     
-    let model_position = mesh_uniforms.model_transform_matrix * vec4<f32>(in.position.xyz, 1.0);
-    let clip_position = light_uniforms.lightViewProjMatrix * model_position;
+    let model_position: vec4<f32> = mesh_uniforms.model_transform_matrix * vec4<f32>(in.position.xyz, 1.0);
+    let clip_position = light_directional_uniforms.view_projection_matrices[light_directional_uniforms.active_view_projection_matrix] * model_position;
     output.position = clip_position;
     
     return output;

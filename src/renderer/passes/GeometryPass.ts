@@ -10,12 +10,14 @@ export class GeometryPass {
   private pipeline: GPURenderPipeline;
   public cameraBindGroupLayout: GPUBindGroupLayout;
   public meshBindGroupLayout: GPUBindGroupLayout;
+  private materialManager: MaterialManager;
 
   constructor(
     device: GPUDevice,
     geometryBuffer: GeometryBuffer,
     materialManager: MaterialManager,
   ) {
+    this.materialManager = materialManager;
     const shaderModule = device.createShaderModule({
       code: shader,
     });
@@ -48,13 +50,13 @@ export class GeometryPass {
         bindGroupLayouts: [
           this.cameraBindGroupLayout,
           this.meshBindGroupLayout,
-          materialManager.materialBindGroupLayout,
+          this.materialManager.materialBindGroupLayout,
         ],
       }),
       vertex: {
         module: shaderModule,
         entryPoint: "vs_main",
-        buffers: [Vertex.getBufferLayout()],
+        buffers: [],
       },
       fragment: {
         module: shaderModule,
@@ -155,13 +157,10 @@ export class GeometryPass {
       passEncoder.setBindGroup(1, mesh.uniforms.bindGroup);
 
       const materialBindGroup = materialManager.getBindGroup(mesh.material);
-      if (materialBindGroup) {
-        passEncoder.setBindGroup(2, materialBindGroup);
-      }
+      if (!materialBindGroup) continue;
+      passEncoder.setBindGroup(2, materialBindGroup);
 
-      passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
-      passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
-      passEncoder.drawIndexed(mesh.geometry.indexCount);
+      passEncoder.draw(3);
     }
 
     passEncoder.end();

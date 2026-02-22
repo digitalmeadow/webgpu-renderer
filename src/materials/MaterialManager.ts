@@ -12,10 +12,15 @@ export class MaterialManager {
   private device: GPUDevice;
   private textureCache: Map<Texture, GPUTexture> = new Map();
   private defaultSampler: GPUSampler;
+  private materialSamplerFiltering: GPUSampler;
+  private materialSamplerNonFiltering: GPUSampler;
+  private materialSamplerComparison: GPUSampler;
   private bindGroupCache: Map<MaterialBase, GPUBindGroup> = new Map();
   public readonly materialBindGroupLayout: GPUBindGroupLayout;
+  public readonly materialForwardBindGroupLayout: GPUBindGroupLayout;
   private placeholderNormalTexture: GPUTexture;
   private placeholderMetalRoughnessTexture: GPUTexture;
+  public readonly materialUniformBuffer: GPUBuffer;
 
   private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> = new Map();
   private hookPipelineCache: Map<MaterialPBR | MaterialBasic, GPURenderPipeline> = new Map();
@@ -31,6 +36,35 @@ export class MaterialManager {
       minFilter: "linear",
     });
 
+    this.materialSamplerFiltering = device.createSampler({
+      label: "Material Sampler Filtering",
+      magFilter: "linear",
+      minFilter: "linear",
+      mipmapFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+    });
+
+    this.materialSamplerNonFiltering = device.createSampler({
+      label: "Material Sampler Non-Filtering",
+      magFilter: "nearest",
+      minFilter: "nearest",
+      mipmapFilter: "nearest",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+    });
+
+    this.materialSamplerComparison = device.createSampler({
+      label: "Material Sampler Comparison",
+      magFilter: "nearest",
+      minFilter: "nearest",
+      mipmapFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+      addressModeW: "clamp-to-edge",
+      compare: "less-equal",
+    });
+
     this.placeholderNormalTexture = this.createPlaceholderTexture([
       0, 0, 255, 255,
     ]);
@@ -41,31 +75,93 @@ export class MaterialManager {
     this.baseGeometryShader = geometryPassShader;
     this.baseForwardShader = forwardPassShader;
 
+    this.materialUniformBuffer = device.createBuffer({
+      label: "Material Uniform Buffer",
+      size: 48,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
     this.materialBindGroupLayout = device.createBindGroupLayout({
-      label: "Material Bind Group Layout",
+      label: "Material Bind Group Layout (Geometry)",
       entries: [
         {
           binding: 0,
           visibility: GPUShaderStage.FRAGMENT,
-          sampler: { type: "filtering" },
+          texture: { sampleType: "float", viewDimension: "2d" },
         },
         {
           binding: 1,
           visibility: GPUShaderStage.FRAGMENT,
-          texture: { sampleType: "float" },
+          texture: { sampleType: "float", viewDimension: "2d" },
         },
         {
           binding: 2,
           visibility: GPUShaderStage.FRAGMENT,
-          texture: { sampleType: "float" },
+          texture: { sampleType: "float", viewDimension: "2d" },
         },
         {
           binding: 3,
           visibility: GPUShaderStage.FRAGMENT,
-          texture: { sampleType: "float" },
+          sampler: { type: "filtering" },
         },
         {
           binding: 4,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "non-filtering" },
+        },
+        {
+          binding: 5,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "comparison" },
+        },
+        {
+          binding: 7,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
+      ],
+    });
+
+    this.materialForwardBindGroupLayout = device.createBindGroupLayout({
+      label: "Material Bind Group Layout (Forward)",
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: "float", viewDimension: "2d" },
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: "float", viewDimension: "2d" },
+        },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: "float", viewDimension: "2d" },
+        },
+        {
+          binding: 3,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: "depth", viewDimension: "2d" },
+        },
+        {
+          binding: 4,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "filtering" },
+        },
+        {
+          binding: 5,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "non-filtering" },
+        },
+        {
+          binding: 6,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "comparison" },
+        },
+        {
+          binding: 7,
           visibility: GPUShaderStage.FRAGMENT,
           buffer: { type: "uniform" },
         },
@@ -124,6 +220,9 @@ export class MaterialManager {
     });
 
     const isOpaque = pass === "geometry";
+    const materialLayout = pass === "geometry" 
+      ? this.materialBindGroupLayout 
+      : this.materialForwardBindGroupLayout;
 
     const pipeline = this.device.createRenderPipeline({
       label: `Hook Material Pipeline: ${material.name} (${pass})`,
@@ -131,7 +230,7 @@ export class MaterialManager {
         bindGroupLayouts: [
           camera.uniforms.bindGroupLayout,
           meshBindGroupLayout,
-          this.materialBindGroupLayout,
+          materialLayout,
         ],
       }),
       vertex: {
@@ -209,6 +308,9 @@ export class MaterialManager {
     });
 
     const isOpaque = pass === "geometry";
+    const materialLayout = pass === "geometry" 
+      ? this.materialBindGroupLayout 
+      : this.materialForwardBindGroupLayout;
 
     const pipeline = this.device.createRenderPipeline({
       label: `Custom Material Pipeline: ${material.name}`,
@@ -216,7 +318,7 @@ export class MaterialManager {
         bindGroupLayouts: [
           camera.uniforms.bindGroupLayout,
           meshBindGroupLayout,
-          this.materialBindGroupLayout,
+          materialLayout,
         ],
       }),
       vertex: {
@@ -309,8 +411,10 @@ export class MaterialManager {
     this.textureCache.set(texture, gpuTexture);
   }
 
-  getBindGroup(material: MaterialBase): GPUBindGroup | null {
-    if (this.bindGroupCache.has(material)) {
+  getBindGroup(material: MaterialBase, depthTextureView?: GPUTextureView): GPUBindGroup | null {
+    const useForwardLayout = !!depthTextureView;
+
+    if (!useForwardLayout && this.bindGroupCache.has(material)) {
       return this.bindGroupCache.get(material)!;
     }
 
@@ -333,50 +437,119 @@ export class MaterialManager {
 
       material.uniforms.update(material);
 
+      const layout = useForwardLayout 
+        ? this.materialForwardBindGroupLayout 
+        : this.materialBindGroupLayout;
+
+      const entries: GPUBindGroupEntry[] = [
+        { binding: 0, resource: albedoView },
+        { binding: 1, resource: normalView },
+        { binding: 2, resource: metalRoughnessView },
+      ];
+
+      if (useForwardLayout && depthTextureView) {
+        entries.push({ binding: 3, resource: depthTextureView });
+        entries.push(
+          { binding: 4, resource: this.materialSamplerFiltering },
+          { binding: 5, resource: this.materialSamplerNonFiltering },
+          { binding: 6, resource: this.materialSamplerComparison },
+          { binding: 7, resource: { buffer: this.materialUniformBuffer } },
+        );
+      } else {
+        entries.push(
+          { binding: 3, resource: this.materialSamplerFiltering },
+          { binding: 4, resource: this.materialSamplerNonFiltering },
+          { binding: 5, resource: this.materialSamplerComparison },
+          { binding: 7, resource: { buffer: this.materialUniformBuffer } },
+        );
+      }
+
       const bindGroup = this.device.createBindGroup({
-        layout: this.materialBindGroupLayout,
-        entries: [
-          { binding: 0, resource: this.defaultSampler },
-          { binding: 1, resource: albedoView },
-          { binding: 2, resource: normalView },
-          { binding: 3, resource: metalRoughnessView },
-          { binding: 4, resource: { buffer: material.uniforms.buffer } },
-        ],
+        layout,
+        entries,
       });
 
-      this.bindGroupCache.set(material, bindGroup);
+      if (!useForwardLayout) {
+        this.bindGroupCache.set(material, bindGroup);
+      }
       return bindGroup;
     } else if (material instanceof MaterialBasic) {
       material.uniforms.update(material);
 
+      const layout = useForwardLayout 
+        ? this.materialForwardBindGroupLayout 
+        : this.materialBindGroupLayout;
+
+      const entries: GPUBindGroupEntry[] = [
+        { binding: 0, resource: this.placeholderNormalTexture.createView() },
+        { binding: 1, resource: this.placeholderNormalTexture.createView() },
+        { binding: 2, resource: this.placeholderMetalRoughnessTexture.createView() },
+      ];
+
+      if (useForwardLayout && depthTextureView) {
+        entries.push({ binding: 3, resource: depthTextureView });
+        entries.push(
+          { binding: 4, resource: this.materialSamplerFiltering },
+          { binding: 5, resource: this.materialSamplerNonFiltering },
+          { binding: 6, resource: this.materialSamplerComparison },
+          { binding: 7, resource: { buffer: this.materialUniformBuffer } },
+        );
+      } else {
+        entries.push(
+          { binding: 3, resource: this.materialSamplerFiltering },
+          { binding: 4, resource: this.materialSamplerNonFiltering },
+          { binding: 5, resource: this.materialSamplerComparison },
+          { binding: 7, resource: { buffer: this.materialUniformBuffer } },
+        );
+      }
+
       const bindGroup = this.device.createBindGroup({
-        layout: this.materialBindGroupLayout,
-        entries: [
-          { binding: 0, resource: this.defaultSampler },
-          { binding: 1, resource: this.placeholderNormalTexture.createView() },
-          { binding: 2, resource: this.placeholderNormalTexture.createView() },
-          { binding: 3, resource: this.placeholderMetalRoughnessTexture.createView() },
-          { binding: 4, resource: { buffer: material.uniforms.buffer } },
-        ],
+        layout,
+        entries,
       });
 
-      this.bindGroupCache.set(material, bindGroup);
+      if (!useForwardLayout) {
+        this.bindGroupCache.set(material, bindGroup);
+      }
       return bindGroup;
     } else if (material instanceof MaterialCustom) {
       material.uniforms.update(material);
 
+      const layout = useForwardLayout 
+        ? this.materialForwardBindGroupLayout 
+        : this.materialBindGroupLayout;
+
+      const entries: GPUBindGroupEntry[] = [
+        { binding: 0, resource: this.placeholderNormalTexture.createView() },
+        { binding: 1, resource: this.placeholderNormalTexture.createView() },
+        { binding: 2, resource: this.placeholderMetalRoughnessTexture.createView() },
+      ];
+
+      if (useForwardLayout && depthTextureView) {
+        entries.push({ binding: 3, resource: depthTextureView });
+        entries.push(
+          { binding: 4, resource: this.materialSamplerFiltering },
+          { binding: 5, resource: this.materialSamplerNonFiltering },
+          { binding: 6, resource: this.materialSamplerComparison },
+          { binding: 7, resource: { buffer: this.materialUniformBuffer } },
+        );
+      } else {
+        entries.push(
+          { binding: 3, resource: this.materialSamplerFiltering },
+          { binding: 4, resource: this.materialSamplerNonFiltering },
+          { binding: 5, resource: this.materialSamplerComparison },
+          { binding: 7, resource: { buffer: this.materialUniformBuffer } },
+        );
+      }
+
       const bindGroup = this.device.createBindGroup({
-        layout: this.materialBindGroupLayout,
-        entries: [
-          { binding: 0, resource: this.defaultSampler },
-          { binding: 1, resource: this.placeholderNormalTexture.createView() },
-          { binding: 2, resource: this.placeholderNormalTexture.createView() },
-          { binding: 3, resource: this.placeholderMetalRoughnessTexture.createView() },
-          { binding: 4, resource: { buffer: material.uniforms.buffer } },
-        ],
+        layout,
+        entries,
       });
 
-      this.bindGroupCache.set(material, bindGroup);
+      if (!useForwardLayout) {
+        this.bindGroupCache.set(material, bindGroup);
+      }
       return bindGroup;
     }
 

@@ -8,11 +8,11 @@ export class MaterialUniforms {
   constructor(device: GPUDevice, material: MaterialBase) {
     this.device = device;
     this.buffer = device.createBuffer({
-      size: 32, // 8 floats: color (r,g,b,a) + opacity + padding
+      size: 48, // 12 floats: color (r,g,b,a) + opacity + padding (aligned to 48 for WGSL struct)
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       label: `MaterialUniformsBuffer: ${material.name}`,
     });
-    this.data = new Float32Array(8);
+    this.data = new Float32Array(12);
     this.update(material);
   }
 

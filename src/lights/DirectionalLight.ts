@@ -1,22 +1,36 @@
 import { Light, LightType } from "./Light";
-import { Vec3, Mat4 } from "../math";
+import { Vec3, Vec4, Mat4 } from "../math";
 
-export const SHADOW_MAP_CASCADES_COUNT = 1;
+export const SHADOW_MAP_CASCADES_COUNT = 3;
+export const SHADOW_CASCADE_SPLITS = [0.0, 0.2, 0.5, 1.0];
+export const LIGHT_VIEW_OFFSET = 50.0;
+export const MAX_LIGHT_DIRECTIONAL_COUNT = 2;
 
 export class DirectionalLight extends Light {
   public direction: Vec3 = new Vec3(-0.5, -1, 0);
 
-  public shadowMatrix: Mat4 = Mat4.create();
+  public viewMatrices: Mat4[] = [];
+  public projectionMatrices: Mat4[] = [];
+  public viewProjectionMatrices: Mat4[] = [];
+  public cascadeSplits: number[] = [...SHADOW_CASCADE_SPLITS];
+  public normalizedCascadeSplits: number[] = [...SHADOW_CASCADE_SPLITS];
+  public activeViewProjectionIndex: number = 0;
 
   public shadowBuffer: GPUBuffer | null = null;
   public shadowBindGroup: GPUBindGroup | null = null;
-  private shadowBindGroupLayout: GPUBindGroupLayout | null = null;
+  public shadowBindGroupLayout: GPUBindGroupLayout | null = null;
   private _device: GPUDevice | null = null;
 
   private static defaultShadowBindGroupLayout: GPUBindGroupLayout | null = null;
 
   constructor(name: string) {
     super(name, LightType.Directional);
+
+    for (let i = 0; i < SHADOW_MAP_CASCADES_COUNT; i++) {
+      this.viewMatrices.push(Mat4.create());
+      this.projectionMatrices.push(Mat4.create());
+      this.viewProjectionMatrices.push(Mat4.create());
+    }
   }
 
   public initShadowResources(device: GPUDevice): void {
@@ -24,8 +38,8 @@ export class DirectionalLight extends Light {
 
     this.shadowBuffer = device.createBuffer({
       label: "DirectionalLight Shadow Buffer",
-      size: 112,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      size: 256,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
 
     this.shadowBindGroupLayout = device.createBindGroupLayout({
@@ -40,8 +54,7 @@ export class DirectionalLight extends Light {
     });
 
     if (!DirectionalLight.defaultShadowBindGroupLayout) {
-      DirectionalLight.defaultShadowBindGroupLayout =
-        this.shadowBindGroupLayout;
+      DirectionalLight.defaultShadowBindGroupLayout = this.shadowBindGroupLayout;
     }
 
     this.shadowBindGroup = device.createBindGroup({
@@ -75,87 +88,212 @@ export class DirectionalLight extends Light {
     return DirectionalLight.defaultShadowBindGroupLayout;
   }
 
-  public updateShadowMatrix(
+  public computeFrustumCorners(
+    viewMatrix: Mat4,
+    projectionMatrix: Mat4,
+  ): Vec3[] {
+    const viewProjectionMatrix = Mat4.create();
+    Mat4.multiply(projectionMatrix, viewMatrix, viewProjectionMatrix);
+
+    const viewProjectionInverse = Mat4.invert(viewProjectionMatrix);
+    if (!viewProjectionInverse) {
+      console.error("[DirectionalLight] Failed to invert view-projection matrix");
+      return [];
+    }
+
+    const ndcCorners = [
+      [-1, -1, 0],
+      [1, -1, 0],
+      [1, 1, 0],
+      [-1, 1, 0],
+      [-1, -1, 1],
+      [1, -1, 1],
+      [1, 1, 1],
+      [-1, 1, 1],
+    ];
+
+    const corners: Vec3[] = [];
+
+    for (const ndc of ndcCorners) {
+      const clip = new Vec4(ndc[0], ndc[1], ndc[2], 1);
+
+      const invProj = new Mat4();
+      for (let i = 0; i < 16; i++) {
+        invProj.data[i] = viewProjectionInverse.data[i];
+      }
+
+      const viewSpace = new Vec4(
+        invProj.data[0] * clip.x + invProj.data[4] * clip.y + invProj.data[8] * clip.z + invProj.data[12] * clip.w,
+        invProj.data[1] * clip.x + invProj.data[5] * clip.y + invProj.data[9] * clip.z + invProj.data[13] * clip.w,
+        invProj.data[2] * clip.x + invProj.data[6] * clip.y + invProj.data[10] * clip.z + invProj.data[14] * clip.w,
+        invProj.data[3] * clip.x + invProj.data[7] * clip.y + invProj.data[11] * clip.z + invProj.data[15] * clip.w,
+      );
+
+      const w = viewSpace.w;
+      const worldX = viewSpace.x / w;
+      const worldY = viewSpace.y / w;
+      const worldZ = viewSpace.z / w;
+
+      corners.push(new Vec3(worldX, worldY, worldZ));
+    }
+
+    return corners;
+  }
+
+  private lerp(a: number, b: number, t: number): number {
+    return a + (b - a) * t;
+  }
+
+  private lerpVec3(a: Vec3, b: Vec3, t: number): Vec3 {
+    return new Vec3(
+      this.lerp(a.x, b.x, t),
+      this.lerp(a.y, b.y, t),
+      this.lerp(a.z, b.z, t),
+    );
+  }
+
+  public updateCascadeMatrices(
     cameraPosition: Vec3,
     cameraDirection: Vec3,
     cameraNear: number,
     cameraFar: number,
+    viewMatrix: Mat4,
+    projectionMatrix: Mat4,
   ): void {
     if (!this.shadowBuffer) {
       console.warn(
-        "[DirectionalLight] No shadow buffer, skipping shadow matrix update",
+        "[DirectionalLight] No shadow buffer, skipping cascade matrix update",
       );
       return;
     }
 
-    console.log("[DirectionalLight] updateShadowMatrix called", {
-      cameraNear,
-      cameraFar,
+    this.direction = this.transform.getForward();
+    console.log('[DirectionalLight] Direction derived from transform:', {
+      forward: this.transform.getForward().data,
+      direction: this.direction.data,
     });
 
-    // Fixed light settings - not dependent on camera
-    // Light positioned above the scene looking down at origin
-    // Scene: floor at Y=0 (20x20), cube at Y=1, camera at (0, 5, 10)
-    const up = new Vec3(0, 1, 0);
+    const frustumCorners = this.computeFrustumCorners(viewMatrix, projectionMatrix);
+    if (frustumCorners.length === 0) {
+      console.warn("[DirectionalLight] Failed to compute frustum corners");
+      return;
+    }
 
-    // Light directly above the scene, looking at origin
-    // This ensures the shadow frustum captures the cube and floor
-    const lightPos = new Vec3(0, 15, 5);
-    const left = -15;
-    const right = 15;
-    const bottom = -15;
-    const top = 15;
-    const near = -20;
-    const far = 20;
+    this.updateCascadeSplits(cameraNear, cameraFar);
+    this.updateViewProjectionMatrices(frustumCorners);
 
-    console.log("[DirectionalLight] Fixed light setup:", {
-      lightPos: [lightPos.x, lightPos.y, lightPos.z],
-      direction: [this.direction.x, this.direction.y, this.direction.z],
-      ortho: { left, right, bottom, top, near, far },
+    console.log("[DirectionalLight] Cascade matrices updated", {
+      cascadeSplits: this.cascadeSplits,
     });
-
-    // Create light view matrix looking at origin
-    const origin = new Vec3(0, 0, 0);
-    const viewMatrix = Mat4.lookAt(lightPos, origin, up);
-
-    // Create orthographic projection
-    const projectionMatrix = Mat4.ortho(left, right, bottom, top, near, far);
-
-    // Compute final shadow matrix
-    Mat4.multiply(projectionMatrix, viewMatrix, this.shadowMatrix);
-
-    // Debug: What position does the cube at (0,1,0) transform to in NDC?
-    // Apply shadow matrix to cube position (0, 1, 0)
-    const m = this.shadowMatrix.data;
-    const cubeWorld = [0, 1, 0, 1] as [number, number, number, number];
-    const cubeNDC = [
-        m[0]*cubeWorld[0] + m[4]*cubeWorld[1] + m[8]*cubeWorld[2] + m[12]*cubeWorld[3],
-        m[1]*cubeWorld[0] + m[5]*cubeWorld[1] + m[9]*cubeWorld[2] + m[13]*cubeWorld[3],
-        m[2]*cubeWorld[0] + m[6]*cubeWorld[1] + m[10]*cubeWorld[2] + m[14]*cubeWorld[3],
-        m[3]*cubeWorld[0] + m[7]*cubeWorld[1] + m[11]*cubeWorld[2] + m[15]*cubeWorld[3],
-    ];
-
-    // Also test floor center (0, 0, 0)
-    const floorWorld = [0, 0, 0, 1] as [number, number, number, number];
-    const floorNDC = [
-        m[0]*floorWorld[0] + m[4]*floorWorld[1] + m[8]*floorWorld[2] + m[12]*floorWorld[3],
-        m[1]*floorWorld[0] + m[5]*floorWorld[1] + m[9]*floorWorld[2] + m[13]*floorWorld[3],
-        m[2]*floorWorld[0] + m[6]*floorWorld[1] + m[10]*floorWorld[2] + m[14]*floorWorld[3],
-        m[3]*floorWorld[0] + m[7]*floorWorld[1] + m[11]*floorWorld[2] + m[15]*floorWorld[3],
-    ];
-
-    console.log("[DirectionalLight] Shadow frustum check:", {
-      lightPos: [lightPos.x, lightPos.y, lightPos.z],
-      ortho: { left, right, bottom, top, near, far },
-      cubeNDC: cubeNDC,
-      floorNDC: floorNDC,
-      shadowMatrix: Array.from(this.shadowMatrix.data),
-    });
-
-    this.updateShadowBuffer(lightPos);
   }
 
-  private updateShadowBuffer(lightPos: Vec3): void {
+  private updateCascadeSplits(cameraNear: number, cameraFar: number): void {
+    for (let i = 0; i < SHADOW_MAP_CASCADES_COUNT + 1; i++) {
+      const t = (SHADOW_CASCADE_SPLITS[i] - 0.0) / 1.0;
+      this.cascadeSplits[i] = cameraNear + (cameraFar - cameraNear) * t;
+      this.normalizedCascadeSplits[i] = SHADOW_CASCADE_SPLITS[i];
+    }
+  }
+
+  private updateViewProjectionMatrices(frustumCorners: Vec3[]): void {
+    const splitRange = this.cascadeSplits[SHADOW_MAP_CASCADES_COUNT] - this.cascadeSplits[0];
+
+    for (let cascadeIndex = 0; cascadeIndex < SHADOW_MAP_CASCADES_COUNT; cascadeIndex++) {
+      const splitNear = this.cascadeSplits[cascadeIndex];
+      const splitFar = this.cascadeSplits[cascadeIndex + 1];
+
+      const tNear = (splitNear - this.cascadeSplits[0]) / splitRange;
+      const tFar = (splitFar - this.cascadeSplits[0]) / splitRange;
+
+      const splitCorners: Vec3[] = [];
+
+      for (let cornerIndex = 0; cornerIndex < 4; cornerIndex++) {
+        const nearCorner = frustumCorners[cornerIndex];
+        const farCorner = frustumCorners[cornerIndex + 4];
+
+        splitCorners.push(this.lerpVec3(nearCorner, farCorner, tNear));
+        splitCorners.push(this.lerpVec3(nearCorner, farCorner, tFar));
+      }
+
+      this.updateCascadeMatrixFromCorners(cascadeIndex, splitCorners);
+    }
+  }
+
+  private updateCascadeMatrixFromCorners(cascadeIndex: number, splitCorners: Vec3[]): void {
+    let centerX = 0, centerY = 0, centerZ = 0;
+    for (const corner of splitCorners) {
+      centerX += corner.x;
+      centerY += corner.y;
+      centerZ += corner.z;
+    }
+    centerX /= 8;
+    centerY /= 8;
+    centerZ /= 8;
+    const centerPoint = new Vec3(centerX, centerY, centerZ);
+
+    let maxRadius = 0;
+    for (const corner of splitCorners) {
+      const dx = corner.x - centerX;
+      const dy = corner.y - centerY;
+      const dz = corner.z - centerZ;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist > maxRadius) {
+        maxRadius = dist;
+      }
+    }
+
+    const eye = new Vec3(
+      centerX - this.direction.x * (maxRadius + LIGHT_VIEW_OFFSET),
+      centerY - this.direction.y * (maxRadius + LIGHT_VIEW_OFFSET),
+      centerZ - this.direction.z * (maxRadius + LIGHT_VIEW_OFFSET),
+    );
+    const target = centerPoint;
+    const up = new Vec3(0, 1, 0);
+
+    const viewMatrix = Mat4.lookAt(eye, target, up);
+
+    const extrudedCorners: Vec3[] = [];
+    for (const corner of splitCorners) {
+      extrudedCorners.push(new Vec3(
+        corner.x - this.direction.x * LIGHT_VIEW_OFFSET,
+        corner.y - this.direction.y * LIGHT_VIEW_OFFSET,
+        corner.z - this.direction.z * LIGHT_VIEW_OFFSET,
+      ));
+    }
+
+    const allCorners = [...splitCorners, ...extrudedCorners];
+
+    const lightSpaceCorners: Vec3[] = [];
+    for (const corner of allCorners) {
+      const transformed = Mat4.transformVec3(viewMatrix, corner, new Vec3());
+      lightSpaceCorners.push(transformed);
+    }
+
+    let minX = lightSpaceCorners[0].x, maxX = lightSpaceCorners[0].x;
+    let minY = lightSpaceCorners[0].y, maxY = lightSpaceCorners[0].y;
+    let minZ = lightSpaceCorners[0].z, maxZ = lightSpaceCorners[0].z;
+
+    for (let i = 1; i < lightSpaceCorners.length; i++) {
+      const c = lightSpaceCorners[i];
+      if (c.x < minX) minX = c.x;
+      if (c.x > maxX) maxX = c.x;
+      if (c.y < minY) minY = c.y;
+      if (c.y > maxY) maxY = c.y;
+      if (c.z < minZ) minZ = c.z;
+      if (c.z > maxZ) maxZ = c.z;
+    }
+
+    const projectionMatrix = Mat4.ortho(minX, maxX, minY, maxY, -maxZ, -minZ);
+
+    this.viewMatrices[cascadeIndex] = viewMatrix;
+    this.projectionMatrices[cascadeIndex] = projectionMatrix;
+
+    const viewProjection = Mat4.create();
+    Mat4.multiply(projectionMatrix, viewMatrix, viewProjection);
+    this.viewProjectionMatrices[cascadeIndex] = viewProjection;
+  }
+
+  public updateShadowUniforms(): void {
     if (!this.shadowBuffer || !this._device) {
       console.warn(
         "[DirectionalLight] No shadow buffer or device, skipping buffer update",
@@ -163,42 +301,53 @@ export class DirectionalLight extends Light {
       return;
     }
 
-    // Buffer layout must match LightingPass.wgsl ShadowLightUniforms struct:
-    // - offset 0: lightViewProjMatrix (16 floats, bytes 0-63)
-    // - offset 64: lightPos (4 floats, bytes 64-79)  
-    // - offset 80: direction (4 floats, bytes 80-95)
-    // - offset 96: color_intensity (4 floats, bytes 96-111)
-    const data = new Float32Array(112 / 4); // 112 bytes total
+    const data = new Float32Array(64);
 
-    // lightViewProjMatrix at offset 0 (indices 0-15)
-    data.set(this.shadowMatrix.data, 0);
-
-    // lightPos at offset 64 (indices 16-19)
-    data[16] = lightPos.x;
-    data[17] = lightPos.y;
-    data[18] = lightPos.z;
-    data[19] = 1.0;
-
-    // direction at offset 80 (indices 20-23)
-    data[20] = this.direction.x;
-    data[21] = this.direction.y;
-    data[22] = this.direction.z;
-    data[23] = 0.0;
-
-    // color_intensity at offset 96 (indices 24-27)
-    data[24] = this.color.x;
-    data[25] = this.color.y;
-    data[26] = this.color.z;
-    data[27] = this.intensity;
-
-    console.log("[DirectionalLight] Writing shadow buffer (corrected layout):", {
-      direction: [this.direction.x, this.direction.y, this.direction.z],
-      color: [this.color.x, this.color.y, this.color.z],
-      intensity: this.intensity,
-      matrix: this.shadowMatrix.data.slice(0, 16),
-    });
+    for (let cascadeIndex = 0; cascadeIndex < SHADOW_MAP_CASCADES_COUNT; cascadeIndex++) {
+      const matrix = this.viewProjectionMatrices[cascadeIndex];
+      for (let i = 0; i < 16; i++) {
+        data[cascadeIndex * 16 + i] = matrix.data[i];
+      }
+    }
 
     this._device.queue.writeBuffer(this.shadowBuffer, 0, data);
+
+    const splitsData = new Float32Array(4);
+    for (let i = 0; i < 4; i++) {
+      splitsData[i] = this.cascadeSplits[i];
+    }
+    this._device.queue.writeBuffer(this.shadowBuffer, 192, splitsData);
+
+    const directionData = new Float32Array([
+      this.direction.x,
+      this.direction.y,
+      this.direction.z,
+      0.0,
+    ]);
+    this._device.queue.writeBuffer(this.shadowBuffer, 208, directionData);
+
+    const colorData = new Float32Array([
+      this.color.x,
+      this.color.y,
+      this.color.z,
+      this.intensity,
+    ]);
+    this._device.queue.writeBuffer(this.shadowBuffer, 224, colorData);
+
+    const indexData = new Uint32Array([this.activeViewProjectionIndex]);
+    this._device.queue.writeBuffer(this.shadowBuffer, 240, indexData);
+
+    console.log("[DirectionalLight] Shadow uniforms updated", {
+      activeIndex: this.activeViewProjectionIndex,
+    });
+  }
+
+  public setActiveViewProjectionIndex(index: number): void {
+    this.activeViewProjectionIndex = index;
+    if (this.shadowBuffer && this._device) {
+      const indexData = new Uint32Array([index]);
+      this._device.queue.writeBuffer(this.shadowBuffer, 240, indexData);
+    }
   }
 
   public getShadowBindGroup(): GPUBindGroup | null {

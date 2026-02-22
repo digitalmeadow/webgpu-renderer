@@ -2,16 +2,13 @@ import { Light, DirectionalLight } from "../lights";
 import { Vec3 } from "../math";
 import { SceneUniforms } from "../uniforms";
 
-const MAX_LIGHTS = 1;
-
-const LIGHT_SIZE = 48;
+const MAX_LIGHT_DIRECTIONAL_COUNT = 2;
+const MAX_LIGHT_SPOT_COUNT = 8;
+const LIGHT_BUFFER_SIZE = 256;
 
 export class LightManager {
   private device: GPUDevice;
   public lightBuffer: GPUBuffer;
-  public uniformsBuffer: GPUBuffer;
-  public lightBindGroupLayout: GPUBindGroupLayout;
-  public lightBindGroup: GPUBindGroup;
   
   public shadowSampler: GPUSampler;
   public shadowTexture: GPUTexture;
@@ -27,46 +24,15 @@ export class LightManager {
     this.device = device;
 
     this.lightBuffer = this.device.createBuffer({
-      size: MAX_LIGHTS * LIGHT_SIZE,
+      size: MAX_LIGHT_DIRECTIONAL_COUNT * LIGHT_BUFFER_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-
-    this.uniformsBuffer = this.lightBuffer;
 
     this.shadowTexture = this.device.createTexture({
       label: "Shadow Texture (Fallback)",
       size: { width: 2048, height: 2048, depthOrArrayLayers: 1 },
       format: "depth32float",
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
-    });
-    
-    const fallbackShadowTextureView = this.shadowTexture.createView({
-      label: "Fallback Shadow Texture View",
-      dimension: "2d",
-    });
-
-    this.lightBindGroupLayout = this.device.createBindGroupLayout({
-      label: "Light Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.FRAGMENT,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
-
-    this.lightBindGroup = this.device.createBindGroup({
-      label: "Light Bind Group",
-      layout: this.lightBindGroupLayout,
-      entries: [
-        {
-          binding: 0,
-          resource: {
-            buffer: this.lightBuffer,
-          },
-        },
-      ],
     });
 
     this.shadowSampler = this.device.createSampler({
@@ -77,7 +43,7 @@ export class LightManager {
       magFilter: "nearest",
       minFilter: "nearest",
       mipmapFilter: "linear",
-      compare: "less",
+      compare: "less-equal",
     });
 
     this.lightingBindGroupLayout = this.device.createBindGroupLayout({
@@ -85,20 +51,20 @@ export class LightManager {
       entries: [
         {
           binding: 0,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-          sampler: { type: "comparison" },
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
         },
         {
           binding: 1,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.FRAGMENT,
           texture: {
             sampleType: "depth",
-            viewDimension: "2d",
+            viewDimension: "2d-array",
           },
         },
         {
           binding: 2,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.FRAGMENT,
           buffer: { type: "uniform" },
         },
       ],
@@ -126,7 +92,7 @@ export class LightManager {
       entries: [
         {
           binding: 0,
-          resource: { buffer: this.uniformsBuffer },
+          resource: { buffer: this.lightBuffer },
         },
         {
           binding: 1,
@@ -135,24 +101,7 @@ export class LightManager {
       ],
     });
 
-    this.lightingBindGroup = this.device.createBindGroup({
-      label: "Lighting Bind Group (Fallback)",
-      layout: this.lightingBindGroupLayout,
-      entries: [
-        {
-          binding: 0,
-          resource: this.shadowSampler,
-        },
-        {
-          binding: 1,
-          resource: fallbackShadowTextureView,
-        },
-        {
-          binding: 2,
-          resource: { buffer: this.lightBuffer },
-        },
-      ],
-    });
+    this.lightingBindGroup = null;
   }
 
   public setShadowTexture(view: GPUTextureView): void {
@@ -176,11 +125,27 @@ export class LightManager {
     });
   }
 
-  public updateLightingBindGroup(directionalLights: DirectionalLight[]): void {
+  public updateLightingBindGroup(directionalLights: DirectionalLight[], commandEncoder?: GPUCommandEncoder): void {
     if (!this.shadowTextureView || directionalLights.length === 0) return;
 
-    const light = directionalLights[0];
-    if (!light.shadowBuffer) return;
+    const encoder = commandEncoder ?? this.device.createCommandEncoder();
+    
+    for (let i = 0; i < directionalLights.length; i++) {
+      const light = directionalLights[i];
+      if (light.shadowBuffer) {
+        encoder.copyBufferToBuffer(
+          light.shadowBuffer,
+          0,
+          this.lightBuffer,
+          i * LIGHT_BUFFER_SIZE,
+          LIGHT_BUFFER_SIZE,
+        );
+      }
+    }
+
+    if (!commandEncoder) {
+      this.device.queue.submit([encoder.finish()]);
+    }
 
     this.lightingBindGroup = this.device.createBindGroup({
       label: "Lighting Bind Group",
@@ -188,7 +153,7 @@ export class LightManager {
       entries: [
         {
           binding: 0,
-          resource: this.shadowSampler,
+          resource: { buffer: this.lightBuffer },
         },
         {
           binding: 1,
@@ -196,7 +161,7 @@ export class LightManager {
         },
         {
           binding: 2,
-          resource: { buffer: light.shadowBuffer },
+          resource: { buffer: this.lightBuffer },
         },
       ],
     });
@@ -219,13 +184,6 @@ export class LightManager {
 
     const light = directionalLights[0];
     
-    console.log('[LightManager] Directional light:', {
-      color: [light.color.x, light.color.y, light.color.z],
-      intensity: light.intensity,
-      direction: [light.direction.x, light.direction.y, light.direction.z],
-      hasShadowBuffer: !!light.shadowBuffer,
-    });
-    
     if (!light.shadowBuffer) {
       console.log('[LightManager] Initializing shadow resources');
       light.initShadowResources(this.device);
@@ -233,32 +191,18 @@ export class LightManager {
 
     const camera = cameras.length > 0 ? cameras[0] : null;
     if (camera) {
-      const cameraDirection = new Vec3(
-        camera.target.data[0] - camera.position.data[0],
-        camera.target.data[1] - camera.position.data[1],
-        camera.target.data[2] - camera.position.data[2],
+      console.log('[LightManager] Calling updateCascadeMatrices');
+      light.updateCascadeMatrices(
+        camera.position,
+        camera.target,
+        camera.near,
+        camera.far,
+        camera.viewMatrix,
+        camera.projectionMatrix,
       );
       
-      // Don't overwrite light direction - it's set directly on DirectionalLight
-      console.log('[LightManager] Calling updateShadowMatrix');
-      light.updateShadowMatrix(camera.position, cameraDirection, camera.near, camera.far);
+      light.updateShadowUniforms();
     }
-
-    const lightData = new Float32Array(MAX_LIGHTS * (LIGHT_SIZE / 4));
-    const u32Data = new Uint32Array(lightData.buffer);
-
-    lightData.set(light.color.data, 0);
-    lightData.set(light.transform.getForward().data, 4);
-    lightData[8] = light.intensity;
-    u32Data[9] = light.type;
-
-    console.log('[LightManager] Writing light buffer:', {
-      color: [light.color.x, light.color.y, light.color.z],
-      intensity: light.intensity,
-      direction: [light.transform.getForward().x, light.transform.getForward().y, light.transform.getForward().z],
-    });
-
-    this.device.queue.writeBuffer(this.lightBuffer, 0, lightData);
   }
 
   public getDirectionalLights(): DirectionalLight[] {

@@ -7,7 +7,10 @@ export class GeometryBuffer {
   metalRoughnessView: GPUTextureView;
   depthTexture: GPUTexture;
   depthView: GPUTextureView;
-  sampler: GPUSampler;
+  samplerFiltering: GPUSampler;
+  samplerNonFiltering: GPUSampler;
+  samplerComparison: GPUSampler;
+  materialBuffer: GPUBuffer;
   bindGroupLayout: GPUBindGroupLayout;
   bindGroup: GPUBindGroup;
 
@@ -48,13 +51,35 @@ export class GeometryBuffer {
     });
     this.depthView = this.depthTexture.createView();
 
-    this.sampler = device.createSampler({
-      label: "G-Buffer Sampler",
+    this.samplerFiltering = device.createSampler({
+      label: "G-Buffer Filtering Sampler (Linear)",
+      magFilter: "linear",
+      minFilter: "linear",
+      mipmapFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+      addressModeW: "clamp-to-edge",
+    });
+
+    this.samplerNonFiltering = device.createSampler({
+      label: "G-Buffer Non-Filtering Sampler (Nearest)",
       magFilter: "nearest",
       minFilter: "nearest",
       mipmapFilter: "nearest",
       addressModeU: "clamp-to-edge",
       addressModeV: "clamp-to-edge",
+      addressModeW: "clamp-to-edge",
+    });
+
+    this.samplerComparison = device.createSampler({
+      label: "G-Buffer Comparison Sampler",
+      magFilter: "nearest",
+      minFilter: "nearest",
+      mipmapFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+      addressModeW: "clamp-to-edge",
+      compare: "less-equal",
     });
 
     this.bindGroupLayout = device.createBindGroupLayout({
@@ -63,7 +88,7 @@ export class GeometryBuffer {
         {
           binding: 0,
           visibility: GPUShaderStage.FRAGMENT,
-          sampler: { type: "filtering" },
+          texture: { sampleType: "float", viewDimension: "2d" },
         },
         {
           binding: 1,
@@ -78,14 +103,30 @@ export class GeometryBuffer {
         {
           binding: 3,
           visibility: GPUShaderStage.FRAGMENT,
-          texture: { sampleType: "float", viewDimension: "2d" },
+          texture: { sampleType: "depth", viewDimension: "2d" },
         },
         {
           binding: 4,
           visibility: GPUShaderStage.FRAGMENT,
-          texture: { sampleType: "depth", viewDimension: "2d" },
+          sampler: { type: "filtering" },
+        },
+        {
+          binding: 5,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "filtering" },
+        },
+        {
+          binding: 6,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "comparison" },
         },
       ],
+    });
+
+    this.materialBuffer = device.createBuffer({
+      label: "G-Buffer Material Buffer",
+      size: 48,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
     this.bindGroup = device.createBindGroup({
@@ -94,23 +135,31 @@ export class GeometryBuffer {
       entries: [
         {
           binding: 0,
-          resource: this.sampler,
-        },
-        {
-          binding: 1,
           resource: this.albedoView,
         },
         {
-          binding: 2,
+          binding: 1,
           resource: this.normalView,
         },
         {
-          binding: 3,
+          binding: 2,
           resource: this.metalRoughnessView,
         },
         {
-          binding: 4,
+          binding: 3,
           resource: this.depthView,
+        },
+        {
+          binding: 4,
+          resource: this.samplerFiltering,
+        },
+        {
+          binding: 5,
+          resource: this.samplerNonFiltering,
+        },
+        {
+          binding: 6,
+          resource: this.samplerComparison,
         },
       ],
     });
@@ -158,29 +207,74 @@ export class GeometryBuffer {
     });
     this.depthView = this.depthTexture.createView();
 
+    this.samplerFiltering = device.createSampler({
+      label: "G-Buffer Filtering Sampler (Linear)",
+      magFilter: "linear",
+      minFilter: "linear",
+      mipmapFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+      addressModeW: "clamp-to-edge",
+    });
+
+    this.samplerNonFiltering = device.createSampler({
+      label: "G-Buffer Non-Filtering Sampler (Nearest)",
+      magFilter: "nearest",
+      minFilter: "nearest",
+      mipmapFilter: "nearest",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+      addressModeW: "clamp-to-edge",
+    });
+
+    this.samplerComparison = device.createSampler({
+      label: "G-Buffer Comparison Sampler",
+      magFilter: "nearest",
+      minFilter: "nearest",
+      mipmapFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+      addressModeW: "clamp-to-edge",
+      compare: "less-equal",
+    });
+
+    this.materialBuffer = device.createBuffer({
+      label: "G-Buffer Material Buffer",
+      size: 48,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
     this.bindGroup = device.createBindGroup({
       label: "G-Buffer Bind Group",
       layout: this.bindGroupLayout,
       entries: [
         {
           binding: 0,
-          resource: this.sampler,
-        },
-        {
-          binding: 1,
           resource: this.albedoView,
         },
         {
-          binding: 2,
+          binding: 1,
           resource: this.normalView,
         },
         {
-          binding: 3,
+          binding: 2,
           resource: this.metalRoughnessView,
         },
         {
-          binding: 4,
+          binding: 3,
           resource: this.depthView,
+        },
+        {
+          binding: 4,
+          resource: this.samplerFiltering,
+        },
+        {
+          binding: 5,
+          resource: this.samplerNonFiltering,
+        },
+        {
+          binding: 6,
+          resource: this.samplerComparison,
         },
       ],
     });

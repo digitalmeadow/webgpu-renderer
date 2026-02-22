@@ -1,10 +1,8 @@
 import { Mesh } from "../../scene";
-import { LightManager } from "../LightManager";
 import { MaterialManager } from "../../materials";
 import { MaterialPBR, MaterialBasic, MaterialCustom } from "../../materials";
 import { Camera } from "../../camera";
 import { Vertex } from "../../geometries";
-import { SceneUniforms } from "../../uniforms";
 import shader from "./ForwardPass.wgsl?raw";
 
 export class ForwardPass {
@@ -13,12 +11,8 @@ export class ForwardPass {
   constructor(
     private device: GPUDevice,
     private camera: Camera,
-    private sceneUniforms: SceneUniforms,
-    private lightManager: LightManager,
     private materialManager: MaterialManager,
     private meshBindGroupLayout: GPUBindGroupLayout,
-    private globalBindGroupLayout: GPUBindGroupLayout,
-    private globalBindGroup: GPUBindGroup,
   ) {
     const shaderModule = this.device.createShaderModule({
       code: shader,
@@ -30,8 +24,7 @@ export class ForwardPass {
         bindGroupLayouts: [
           this.camera.uniforms.bindGroupLayout,
           this.meshBindGroupLayout,
-          this.globalBindGroupLayout,
-          this.materialManager.materialBindGroupLayout,
+          this.materialManager.materialForwardBindGroupLayout,
         ],
       }),
       vertex: {
@@ -143,14 +136,14 @@ export class ForwardPass {
 
       const materialBindGroup = this.materialManager.getBindGroup(
         mesh.material,
+        depthTextureView,
       );
       if (!materialBindGroup) {
         continue;
       }
 
       passEncoder.setBindGroup(0, this.camera.uniforms.bindGroup);
-      passEncoder.setBindGroup(2, this.globalBindGroup);
-      passEncoder.setBindGroup(3, materialBindGroup);
+      passEncoder.setBindGroup(2, materialBindGroup);
       passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
       passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
       passEncoder.drawIndexed(mesh.geometry.indexCount);

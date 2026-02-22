@@ -28,7 +28,6 @@ struct VertexOutput {
     @location(2) world_position: vec3<f32>,
 };
 
-// Scene + Light (Group 2)
 struct SceneUniforms {
     ambient_light_color: vec4<f32>,
 }
@@ -45,13 +44,14 @@ struct LightUniforms {
     lights: array<Light, 1>,
 }
 
-@group(2) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
-@group(2) @binding(1) var<uniform> light_uniforms: LightUniforms;
-
-// Material (Group 3)
-@group(3) @binding(1) var base_color_texture: texture_2d<f32>;
-@group(3) @binding(0) var base_color_sampler: sampler;
-@group(3) @binding(4) var<uniform> material: MaterialUniforms;
+@group(2) @binding(0) var base_color_texture: texture_2d<f32>;
+@group(2) @binding(1) var normal_texture: texture_2d<f32>;
+@group(2) @binding(2) var metalness_roughness_texture: texture_2d<f32>;
+@group(2) @binding(3) var depth_texture: texture_depth_2d;
+@group(2) @binding(4) var sampler_linear: sampler;
+@group(2) @binding(5) var sampler_nearest: sampler;
+@group(2) @binding(6) var sampler_compare: sampler_comparison;
+@group(2) @binding(7) var<uniform> material: MaterialUniforms;
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
@@ -66,13 +66,12 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let base_color = textureSample(base_color_texture, base_color_sampler, in.uv);
-    let light = light_uniforms.lights[0];
-    let light_dir = normalize(light.direction.xyz);
+    let base_color = textureSample(base_color_texture, sampler_linear, in.uv);
     let normal = normalize(in.normal);
-    let diffuse = max(dot(normal, light_dir), 0.0) * light.intensity;
+    let light_dir = normalize(vec3<f32>(0.5, 1.0, 0.0));
+    let diffuse = max(dot(normal, light_dir), 0.0);
+    let ambient = vec3<f32>(0.1, 0.1, 0.1);
     
-    let ambient = scene_uniforms.ambient_light_color;
     var final_color = base_color * (diffuse + ambient);
     final_color.a = material.opacity;
     return final_color;
