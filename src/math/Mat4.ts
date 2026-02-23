@@ -34,58 +34,35 @@ export class Mat4 {
   static multiply(a: Mat4, b: Mat4, out?: Mat4): Mat4 {
     out ??= new Mat4();
 
-    const a00 = a.data[0];
-    const a01 = a.data[1];
-    const a02 = a.data[2];
-    const a03 = a.data[3];
-    const a10 = a.data[4];
-    const a11 = a.data[5];
-    const a12 = a.data[6];
-    const a13 = a.data[7];
-    const a20 = a.data[8];
-    const a21 = a.data[9];
-    const a22 = a.data[10];
-    const a23 = a.data[11];
-    const a30 = a.data[12];
-    const a31 = a.data[13];
-    const a32 = a.data[14];
-    const a33 = a.data[15];
+    const a00 = a.data[0], a01 = a.data[1], a02 = a.data[2], a03 = a.data[3];
+    const a10 = a.data[4], a11 = a.data[5], a12 = a.data[6], a13 = a.data[7];
+    const a20 = a.data[8], a21 = a.data[9], a22 = a.data[10], a23 = a.data[11];
+    const a30 = a.data[12], a31 = a.data[13], a32 = a.data[14], a33 = a.data[15];
 
-    let b0 = b.data[0];
-    let b1 = b.data[1];
-    let b2 = b.data[2];
-    let b3 = b.data[3];
-    out.data[0] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
-    out.data[1] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
-    out.data[2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
-    out.data[3] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+    const b00 = b.data[0], b01 = b.data[1], b02 = b.data[2], b03 = b.data[3];
+    const b10 = b.data[4], b11 = b.data[5], b12 = b.data[6], b13 = b.data[7];
+    const b20 = b.data[8], b21 = b.data[9], b22 = b.data[10], b23 = b.data[11];
+    const b30 = b.data[12], b31 = b.data[13], b32 = b.data[14], b33 = b.data[15];
 
-    b0 = b.data[4];
-    b1 = b.data[5];
-    b2 = b.data[6];
-    b3 = b.data[7];
-    out.data[4] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
-    out.data[5] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
-    out.data[6] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
-    out.data[7] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+    out.data[0] = b00 * a00 + b01 * a10 + b02 * a20 + b03 * a30;
+    out.data[1] = b00 * a01 + b01 * a11 + b02 * a21 + b03 * a31;
+    out.data[2] = b00 * a02 + b01 * a12 + b02 * a22 + b03 * a32;
+    out.data[3] = b00 * a03 + b01 * a13 + b02 * a23 + b03 * a33;
 
-    b0 = b.data[8];
-    b1 = b.data[9];
-    b2 = b.data[10];
-    b3 = b.data[11];
-    out.data[8] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
-    out.data[9] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
-    out.data[10] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
-    out.data[11] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+    out.data[4] = b10 * a00 + b11 * a10 + b12 * a20 + b13 * a30;
+    out.data[5] = b10 * a01 + b11 * a11 + b12 * a21 + b13 * a31;
+    out.data[6] = b10 * a02 + b11 * a12 + b12 * a22 + b13 * a32;
+    out.data[7] = b10 * a03 + b11 * a13 + b12 * a23 + b13 * a33;
 
-    b0 = b.data[12];
-    b1 = b.data[13];
-    b2 = b.data[14];
-    b3 = b.data[15];
-    out.data[12] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
-    out.data[13] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
-    out.data[14] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
-    out.data[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+    out.data[8] = b20 * a00 + b21 * a10 + b22 * a20 + b23 * a30;
+    out.data[9] = b20 * a01 + b21 * a11 + b22 * a21 + b23 * a31;
+    out.data[10] = b20 * a02 + b21 * a12 + b22 * a22 + b23 * a32;
+    out.data[11] = b20 * a03 + b21 * a13 + b22 * a23 + b23 * a33;
+
+    out.data[12] = b30 * a00 + b31 * a10 + b32 * a20 + b33 * a30;
+    out.data[13] = b30 * a01 + b31 * a11 + b32 * a21 + b33 * a31;
+    out.data[14] = b30 * a02 + b31 * a12 + b32 * a22 + b33 * a32;
+    out.data[15] = b30 * a03 + b31 * a13 + b32 * a23 + b33 * a33;
 
     return out;
   }
@@ -711,33 +688,24 @@ export class Mat4 {
   static perspective(fovY: number, aspect: number, zNear: number, zFar: number, out?: Mat4): Mat4 {
     out ??= new Mat4();
 
-    const f = Math.tan(Math.PI * 0.5 - 0.5 * fovY);
+    const f = 1.0 / Math.tan(fovY / 2);
     const rangeInv = 1 / (zNear - zFar);
 
-    // Column-major storage for WebGPU (Z: 0 to 1, camera looks down -Z)
-    // Based on webgpufundamentals.org WebGPU perspective matrix formula
-    // Column 0: indices 0, 4, 8, 12
-    // Column 1: indices 1, 5, 9, 13
-    // Column 2: indices 2, 6, 10, 14
-    // Column 3: indices 3, 7, 11, 15
     out.data[0] = f / aspect;
-    out.data[4] = 0;
-    out.data[8] = 0;
-    out.data[12] = 0;
-    
     out.data[1] = 0;
-    out.data[5] = f;
-    out.data[9] = 0;
-    out.data[13] = 0;
-    
     out.data[2] = 0;
-    out.data[6] = 0;
-    out.data[10] = zFar * rangeInv;
-    out.data[14] = zNear * zFar * rangeInv;
-    
     out.data[3] = 0;
+    out.data[4] = 0;
+    out.data[5] = f;
+    out.data[6] = 0;
     out.data[7] = 0;
-    out.data[11] = -1;  // KEY: -1 for WebGPU (looks down -Z)
+    out.data[8] = 0;
+    out.data[9] = 0;
+    out.data[10] = zFar * rangeInv;
+    out.data[11] = -1;
+    out.data[12] = 0;
+    out.data[13] = 0;
+    out.data[14] = zNear * zFar * rangeInv;
     out.data[15] = 0;
 
     return out;
@@ -788,9 +756,9 @@ export class Mat4 {
     const upy = up.data[1];
     const upz = up.data[2];
 
-    let z0 = eyex - targetx;
-    let z1 = eyey - targety;
-    let z2 = eyez - targetz;
+    let z0 = targetx - eyex;
+    let z1 = targety - eyey;
+    let z2 = targetz - eyez;
     let len = z0 * z0 + z1 * z1 + z2 * z2;
     if (len > 0) {
       len = 1 / Math.sqrt(len);

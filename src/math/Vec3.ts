@@ -39,6 +39,28 @@ export class Vec3 {
     return this;
   }
 
+  min(other: Vec3): void {
+    this.data[0] = Math.min(this.data[0], other.data[0]);
+    this.data[1] = Math.min(this.data[1], other.data[1]);
+    this.data[2] = Math.min(this.data[2], other.data[2]);
+  }
+
+  max(other: Vec3): void {
+    this.data[0] = Math.max(this.data[0], other.data[0]);
+    this.data[1] = Math.max(this.data[1], other.data[1]);
+    this.data[2] = Math.max(this.data[2], other.data[2]);
+  }
+
+  length(): number {
+    return Math.sqrt(this.data[0] ** 2 + this.data[1] ** 2 + this.data[2] ** 2);
+  }
+
+  multiply(s: number): void {
+    this.data[0] *= s;
+    this.data[1] *= s;
+    this.data[2] *= s;
+  }
+
   copy(): Vec3 {
     return new Vec3(this.data[0], this.data[1], this.data[2]);
   }

@@ -60,30 +60,17 @@ export class AABB {
   }
 
   public updateWorldSpace(worldMatrix: Mat4): void {
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    this.minWS.set(Infinity, Infinity, Infinity);
+    this.maxWS.set(-Infinity, -Infinity, -Infinity);
 
     for (let i = 0; i < 8; i++) {
       const corner = this.corners[i];
       const cornerWS = this.cornersWS[i];
       
-      const x = corner.data[0], y = corner.data[1], z = corner.data[2];
+      Mat4.transformVec3(corner, worldMatrix, cornerWS);
       
-      const wx = worldMatrix.data[0] * x + worldMatrix.data[4] * y + worldMatrix.data[8] * z + worldMatrix.data[12];
-      const wy = worldMatrix.data[1] * x + worldMatrix.data[5] * y + worldMatrix.data[9] * z + worldMatrix.data[13];
-      const wz = worldMatrix.data[2] * x + worldMatrix.data[6] * y + worldMatrix.data[10] * z + worldMatrix.data[14];
-      
-      cornerWS.set(wx, wy, wz);
-      
-      if (wx < minX) minX = wx;
-      if (wy < minY) minY = wy;
-      if (wz < minZ) minZ = wz;
-      if (wx > maxX) maxX = wx;
-      if (wy > maxY) maxY = wy;
-      if (wz > maxZ) maxZ = wz;
+      this.minWS.min(cornerWS);
+      this.maxWS.max(cornerWS);
     }
-
-    this.minWS.set(minX, minY, minZ);
-    this.maxWS.set(maxX, maxY, maxZ);
   }
 }

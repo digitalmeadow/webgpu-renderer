@@ -20,46 +20,36 @@ export function frustumPlanesFromMatrix(viewProjectionMatrix: Mat4): FrustumPlan
 
   const m = viewProjectionMatrix.data;
   
-  const row0 = [m[0], m[1], m[2], m[3]];
-  const row1 = [m[4], m[5], m[6], m[7]];
-  const row2 = [m[8], m[9], m[10], m[11]];
-  const row3 = [m[12], m[13], m[14], m[15]];
+  // Left clipping plane
+  planes[0].normal.set(m[3] + m[0], m[7] + m[4], m[11] + m[8]);
+  planes[0].d = m[15] + m[12];
 
-  // Left: row3 + row0
-  let p = [row3[0] + row0[0], row3[1] + row0[1], row3[2] + row0[2], row3[3] + row0[3]];
-  let len = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-  planes[0].normal.set(p[0] / len, p[1] / len, p[2] / len);
-  planes[0].d = p[3] / len;
+  // Right clipping plane
+  planes[1].normal.set(m[3] - m[0], m[7] - m[4], m[11] - m[8]);
+  planes[1].d = m[15] - m[12];
 
-  // Right: row3 - row0
-  p = [row3[0] - row0[0], row3[1] - row0[1], row3[2] - row0[2], row3[3] - row0[3]];
-  len = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-  planes[1].normal.set(p[0] / len, p[1] / len, p[2] / len);
-  planes[1].d = p[3] / len;
+  // Top clipping plane
+  planes[2].normal.set(m[3] - m[1], m[7] - m[5], m[11] - m[9]);
+  planes[2].d = m[15] - m[13];
 
-  // Bottom: row3 + row1
-  p = [row3[0] + row1[0], row3[1] + row1[1], row3[2] + row1[2], row3[3] + row1[3]];
-  len = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-  planes[2].normal.set(p[0] / len, p[1] / len, p[2] / len);
-  planes[2].d = p[3] / len;
+  // Bottom clipping plane
+  planes[3].normal.set(m[3] + m[1], m[7] + m[5], m[11] + m[9]);
+  planes[3].d = m[15] + m[13];
 
-  // Top: row3 - row1
-  p = [row3[0] - row1[0], row3[1] - row1[1], row3[2] - row1[2], row3[3] - row1[3]];
-  len = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-  planes[3].normal.set(p[0] / len, p[1] / len, p[2] / len);
-  planes[3].d = p[3] / len;
+  // Near clipping plane
+  planes[4].normal.set(m[3] + m[2], m[7] + m[6], m[11] + m[10]);
+  planes[4].d = m[15] + m[14];
 
-  // Near: row3 + row2
-  p = [row3[0] + row2[0], row3[1] + row2[1], row3[2] + row2[2], row3[3] + row2[3]];
-  len = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-  planes[4].normal.set(p[0] / len, p[1] / len, p[2] / len);
-  planes[4].d = p[3] / len;
+  // Far clipping plane
+  planes[5].normal.set(m[3] - m[2], m[7] - m[6], m[11] - m[10]);
+  planes[5].d = m[15] - m[14];
 
-  // Far: row3 - row2
-  p = [row3[0] - row2[0], row3[1] - row2[1], row3[2] - row2[2], row3[3] - row2[3]];
-  len = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-  planes[5].normal.set(p[0] / len, p[1] / len, p[2] / len);
-  planes[5].d = p[3] / len;
+  // Normalize the plane equations
+  for (let i = 0; i < 6; i++) {
+    const invLen = 1.0 / planes[i].normal.length();
+    planes[i].normal.multiply(invLen);
+    planes[i].d *= invLen;
+  }
 
   return planes;
 }
