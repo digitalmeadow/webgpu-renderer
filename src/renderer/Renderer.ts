@@ -125,7 +125,7 @@ export class Renderer {
         this.device,
         this.geometryBuffer,
         camera,
-        this.lightManager.lightBindGroupLayout,
+        this.lightManager.lightingBindGroupLayout,
         this.sceneUniforms.bindGroupLayout,
         this.canvas.width,
         this.canvas.height,
@@ -246,6 +246,12 @@ export class Renderer {
     // Shadow Pass
     if (directionalLights.length > 0) {
       this.shadowPass.render(commandEncoder, directionalLights, opaqueMeshes);
+
+      // Set shadow texture and update lighting bind group
+      this.lightManager.setShadowTexture(
+        this.shadowPass.getShadowTextureView(),
+      );
+      this.lightManager.updateLightingBindGroup(directionalLights);
     }
 
     // Lighting Pass
@@ -253,7 +259,7 @@ export class Renderer {
       commandEncoder,
       this.geometryBuffer,
       camera,
-      this.lightManager.lightBindGroup,
+      this.lightManager.lightingBindGroup || this.lightManager.lightBindGroup,
       this.sceneUniforms.bindGroup,
     );
 
