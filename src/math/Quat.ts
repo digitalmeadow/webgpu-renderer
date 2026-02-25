@@ -215,17 +215,6 @@ export class Quat {
 
   static fromEuler(x: number, y: number, z: number, out?: Quat): Quat {
     out ??= new Quat();
-    return Quat.fromEulerOrder(x, y, z, "xyz", out);
-  }
-
-  static fromEulerOrder(
-    x: number,
-    y: number,
-    z: number,
-    order: "xyz" | "xzy" | "yxz" | "yzx" | "zxy" | "zyx",
-    out?: Quat,
-  ): Quat {
-    out ??= new Quat();
     const hx = x * 0.5,
       hy = y * 0.5,
       hz = z * 0.5;
@@ -236,57 +225,26 @@ export class Quat {
     const sz = Math.sin(hz),
       cz = Math.cos(hz);
 
-    switch (order) {
-      case "xyz":
-        out.data[0] = sx * cy * cz + cx * sy * sz;
-        out.data[1] = cx * sy * cz - sx * cy * sz;
-        out.data[2] = cx * cy * sz + sx * sy * cz;
-        out.data[3] = cx * cy * cz - sx * sy * sz;
-        break;
-      case "xzy":
-        out.data[0] = sx * cy * cz - cx * sy * sz;
-        out.data[1] = cx * sy * cz - sx * cy * sz;
-        out.data[2] = cx * cy * sz + sx * sy * cz;
-        out.data[3] = cx * cy * cz + sx * sy * sz;
-        break;
-      case "yxz":
-        out.data[0] = sx * cy * cz + cx * sy * sz;
-        out.data[1] = cx * sy * cz - sx * cy * sz;
-        out.data[2] = cx * cy * sz - sx * sy * cz;
-        out.data[3] = cx * cy * cz + sx * sy * sz;
-        break;
-      case "yzx":
-        out.data[0] = sx * cy * cz + cx * sy * sz;
-        out.data[1] = cx * sy * cz + sx * cy * sz;
-        out.data[2] = cx * cy * sz - sx * sy * cz;
-        out.data[3] = cx * cy * cz - sx * sy * sz;
-        break;
-      case "zxy":
-        out.data[0] = sx * cy * cz - cx * sy * sz;
-        out.data[1] = cx * sy * cz + sx * cy * sz;
-        out.data[2] = cx * cy * sz + sx * sy * cz;
-        out.data[3] = cx * cy * cz - sx * sy * sz;
-        break;
-      case "zyx":
-        out.data[0] = sx * cy * cz - cx * sy * sz;
-        out.data[1] = cx * sy * cz + sx * cy * sz;
-        out.data[2] = cx * cy * sz - sx * sy * cz;
-        out.data[3] = cx * cy * cz + sx * sy * sz;
-        break;
-    }
+    // Column-major RH, "XYZ" intrinsic rotation (X first, then Y, then Z)
+    out.data[0] = sx * cy * cz + cx * sy * sz;
+    out.data[1] = cx * sy * cz - sx * cy * sz;
+    out.data[2] = cx * cy * sz + sx * sy * cz;
+    out.data[3] = cx * cy * cz - sx * sy * sz;
+
     return out;
   }
 
   static fromMat(m: Mat4, out?: Quat): Quat {
     out ??= new Quat();
+
     const m00 = m.data[0],
-      m01 = m.data[1],
-      m02 = m.data[2];
-    const m10 = m.data[4],
+      m01 = m.data[4],
+      m02 = m.data[8];
+    const m10 = m.data[1],
       m11 = m.data[5],
-      m12 = m.data[6];
-    const m20 = m.data[8],
-      m21 = m.data[9],
+      m12 = m.data[9];
+    const m20 = m.data[2],
+      m21 = m.data[6],
       m22 = m.data[10];
 
     const trace = m00 + m11 + m22;
@@ -299,27 +257,71 @@ export class Quat {
       out.data[1] = (m02 - m20) * invRoot;
       out.data[2] = (m10 - m01) * invRoot;
     } else if (m00 > m11 && m00 > m22) {
-      const root = Math.sqrt(1.0 + m00 - m11 - m22);
+      const root = Math.sqrt(1 + m00 - m11 - m22);
       out.data[0] = 0.5 * root;
       const invRoot = 0.5 / root;
       out.data[1] = (m01 + m10) * invRoot;
       out.data[2] = (m02 + m20) * invRoot;
       out.data[3] = (m21 - m12) * invRoot;
     } else if (m11 > m22) {
-      const root = Math.sqrt(1.0 + m11 - m00 - m22);
+      const root = Math.sqrt(1 + m11 - m00 - m22);
       out.data[1] = 0.5 * root;
       const invRoot = 0.5 / root;
       out.data[0] = (m01 + m10) * invRoot;
       out.data[2] = (m12 + m21) * invRoot;
       out.data[3] = (m02 - m20) * invRoot;
     } else {
-      const root = Math.sqrt(1.0 + m22 - m00 - m11);
+      const root = Math.sqrt(1 + m22 - m00 - m11);
       out.data[2] = 0.5 * root;
       const invRoot = 0.5 / root;
       out.data[0] = (m02 + m20) * invRoot;
       out.data[1] = (m12 + m21) * invRoot;
       out.data[3] = (m10 - m01) * invRoot;
     }
+
+    return out;
+  }
+
+  static toMat(q: Quat, out?: Mat4): Mat4 {
+    out ??= new Mat4();
+    const x = q.data[0],
+      y = q.data[1],
+      z = q.data[2],
+      w = q.data[3];
+    const x2 = x + x,
+      y2 = y + y,
+      z2 = z + z;
+    const xx = x * x2,
+      xy = x * y2,
+      xz = x * z2;
+    const yy = y * y2,
+      yz = y * z2,
+      zz = z * z2;
+    const wx = w * x2,
+      wy = w * y2,
+      wz = w * z2;
+
+    // Column-major
+    out.data[0] = 1 - (yy + zz);
+    out.data[1] = xy + wz;
+    out.data[2] = xz - wy;
+    out.data[3] = 0;
+
+    out.data[4] = xy - wz;
+    out.data[5] = 1 - (xx + zz);
+    out.data[6] = yz + wx;
+    out.data[7] = 0;
+
+    out.data[8] = xz + wy;
+    out.data[9] = yz - wx;
+    out.data[10] = 1 - (xx + yy);
+    out.data[11] = 0;
+
+    out.data[12] = 0;
+    out.data[13] = 0;
+    out.data[14] = 0;
+    out.data[15] = 1;
+
     return out;
   }
 
@@ -375,49 +377,58 @@ export class Quat {
 
   static rotateX(q: Quat, rad: number, out?: Quat): Quat {
     out ??= new Quat();
-    const halfRad = rad * 0.5;
-    const qx = q.data[0],
-      qy = q.data[1],
-      qz = q.data[2],
-      qw = q.data[3];
-    const bx = Math.sin(halfRad),
-      bw = Math.cos(halfRad);
-    out.data[0] = qx * bw + qw * bx;
-    out.data[1] = qy * bw + qz * bx;
-    out.data[2] = qz * bw - qy * bx;
-    out.data[3] = qw * bw - qx * bx;
+    const half = rad * 0.5;
+    const sinH = Math.sin(half);
+    const cosH = Math.cos(half);
+
+    const x = q.data[0],
+      y = q.data[1],
+      z = q.data[2],
+      w = q.data[3];
+
+    out.data[0] = x * cosH + w * sinH;
+    out.data[1] = y * cosH + z * sinH;
+    out.data[2] = z * cosH - y * sinH;
+    out.data[3] = w * cosH - x * sinH;
+
     return out;
   }
 
   static rotateY(q: Quat, rad: number, out?: Quat): Quat {
     out ??= new Quat();
-    const halfRad = rad * 0.5;
-    const qx = q.data[0],
-      qy = q.data[1],
-      qz = q.data[2],
-      qw = q.data[3];
-    const by = Math.sin(halfRad),
-      bw = Math.cos(halfRad);
-    out.data[0] = qx * bw - qz * by;
-    out.data[1] = qy * bw + qw * by;
-    out.data[2] = qz * bw + qx * by;
-    out.data[3] = qw * bw - qy * by;
+    const half = rad * 0.5;
+    const sinH = Math.sin(half);
+    const cosH = Math.cos(half);
+
+    const x = q.data[0],
+      y = q.data[1],
+      z = q.data[2],
+      w = q.data[3];
+
+    out.data[0] = x * cosH - z * sinH;
+    out.data[1] = y * cosH + w * sinH;
+    out.data[2] = z * cosH + x * sinH;
+    out.data[3] = w * cosH - y * sinH;
+
     return out;
   }
 
   static rotateZ(q: Quat, rad: number, out?: Quat): Quat {
     out ??= new Quat();
-    const halfRad = rad * 0.5;
-    const qx = q.data[0],
-      qy = q.data[1],
-      qz = q.data[2],
-      qw = q.data[3];
-    const bz = Math.sin(halfRad),
-      bw = Math.cos(halfRad);
-    out.data[0] = qx * bw + qy * bz;
-    out.data[1] = qy * bw - qx * bz;
-    out.data[2] = qz * bw + qw * bz;
-    out.data[3] = qw * bw - qz * bz;
+    const half = rad * 0.5;
+    const sinH = Math.sin(half);
+    const cosH = Math.cos(half);
+
+    const x = q.data[0],
+      y = q.data[1],
+      z = q.data[2],
+      w = q.data[3];
+
+    out.data[0] = x * cosH + y * sinH;
+    out.data[1] = y * cosH - x * sinH;
+    out.data[2] = z * cosH + w * sinH;
+    out.data[3] = w * cosH - z * sinH;
+
     return out;
   }
 

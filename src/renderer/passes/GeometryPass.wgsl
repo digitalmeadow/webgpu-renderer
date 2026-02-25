@@ -51,6 +51,7 @@ fn vs_main(
      output.position = camera.view_projection_matrix * model * position;
      output.world_normal = (model * vec4<f32>(normal, 0.0)).xyz;
      output.uv_coords = uv;
+
      return output;
  }
 

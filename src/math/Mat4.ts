@@ -696,24 +696,29 @@ export class Mat4 {
     out?: Mat4,
   ): Mat4 {
     out ??= new Mat4();
-    const f = 1.0 / Math.tan(fovY / 2);
-    const nf = 1 / (near - far);
+    const f = 1 / Math.tan(fovY / 2);
+    const nf = 1 / (near - far); // note near - far
+
     out.data[0] = f / aspect;
     out.data[1] = 0;
     out.data[2] = 0;
     out.data[3] = 0;
+
     out.data[4] = 0;
     out.data[5] = f;
     out.data[6] = 0;
     out.data[7] = 0;
+
     out.data[8] = 0;
     out.data[9] = 0;
-    out.data[10] = (far + near) * nf;
-    out.data[11] = -1;
+    out.data[10] = far * nf; // far / (near - far)
+    out.data[11] = -1; // MUST be -1
+
     out.data[12] = 0;
     out.data[13] = 0;
-    out.data[14] = 2 * far * near * nf;
+    out.data[14] = near * far * nf; // near*far / (near - far)
     out.data[15] = 0;
+
     return out;
   }
 
@@ -740,11 +745,11 @@ export class Mat4 {
     out.data[7] = 0;
     out.data[8] = 0;
     out.data[9] = 0;
-    out.data[10] = 2 * nf;
+    out.data[10] = nf;
     out.data[11] = 0;
     out.data[12] = (left + right) * lr;
     out.data[13] = (top + bottom) * bt;
-    out.data[14] = (far + near) * nf;
+    out.data[14] = near / (near - far);
     out.data[15] = 1;
     return out;
   }

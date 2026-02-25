@@ -20,8 +20,8 @@ export class Renderer {
   private device: GPUDevice;
   private context: GPUCanvasContext | null = null;
   private format: GPUTextureFormat;
-  
-  public frustumCulling: boolean = true;
+
+  public frustumCulling: boolean = false;
 
   private geometryBuffer: GeometryBuffer;
   private geometryPass: GeometryPass;
@@ -132,7 +132,7 @@ export class Renderer {
       );
 
       this.outputPass = new OutputPass(this.device);
-      
+
       this.shadowPass = new ShadowPass(this.device);
 
       // ForwardPass will be initialized in the render loop on first use
@@ -228,7 +228,9 @@ export class Renderer {
     const commandEncoder = this.device.createCommandEncoder();
 
     // Collect directional lights (for lighting, not shadows yet)
-    const directionalLights = lights.filter(l => l instanceof DirectionalLight) as DirectionalLight[];
+    const directionalLights = lights.filter(
+      (l) => l instanceof DirectionalLight,
+    ) as DirectionalLight[];
     this.lightManager.update(directionalLights, [camera]);
 
     // Geometry Pass
@@ -293,7 +295,7 @@ export class Renderer {
 
   private collectVisibleMeshes(world: World, camera: Camera): Mesh[] {
     const allMeshes = this.collectMeshes(world);
-    
+
     if (!this.frustumCulling) {
       return allMeshes;
     }
