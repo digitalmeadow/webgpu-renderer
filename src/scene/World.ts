@@ -1,9 +1,9 @@
 import { Scene } from "./Scene";
-import { Vec3 } from "../math";
+import { vec3, Vec3 } from 'wgpu-matrix';
 
 export class World {
   scenes: Scene[] = [];
-  ambientLightColor: Vec3 = new Vec3(0.05, 0.05, 0.05);
+  ambientLightColor: Vec3 = vec3.fromValues(0.05, 0.05, 0.05);
 
   constructor() {}
 

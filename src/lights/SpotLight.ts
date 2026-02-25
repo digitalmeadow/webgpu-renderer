@@ -1,17 +1,17 @@
 import { Light, LightType } from "./Light";
-import { Vec3, Mat4 } from "../math";
+import { vec3, mat4, Vec3, Mat4 } from 'wgpu-matrix';
 
 export const MAX_LIGHT_SPOT_COUNT = 4;
 
 export class SpotLight extends Light {
-  public direction: Vec3 = new Vec3(0, -1, 0);
-  public position: Vec3 = new Vec3(0, 5, 0);
+  public direction: Vec3 = vec3.fromValues(0, -1, 0);
+  public position: Vec3 = vec3.fromValues(0, 5, 0);
   public angleInner: number = Math.PI / 8;
   public angleOuter: number = Math.PI / 6;
 
-  public viewMatrix: Mat4 = Mat4.create();
-  public projectionMatrix: Mat4 = Mat4.create();
-  public viewProjectionMatrix: Mat4 = Mat4.create();
+  public viewMatrix: Mat4 = mat4.create();
+  public projectionMatrix: Mat4 = mat4.create();
+  public viewProjectionMatrix: Mat4 = mat4.create();
 
   public shadowBuffer: GPUBuffer | null = null;
   public shadowBindGroup: GPUBindGroup | null = null;
@@ -29,7 +29,7 @@ export class SpotLight extends Light {
 
     this.shadowBuffer = device.createBuffer({
       label: "SpotLight Shadow Buffer",
-      size: 144, // 64 for mat4, 16 for pos, 16 for dir, 16 for color, 4 for inner, 4 for outer, 20 bytes padding
+      size: 144,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -81,14 +81,14 @@ export class SpotLight extends Light {
     this.position = this.transform.translation;
     this.direction = this.transform.getForward();
 
-    const target = new Vec3(
-      this.position.x + this.direction.x,
-      this.position.y + this.direction.y,
-      this.position.z + this.direction.z,
+    const target = vec3.fromValues(
+      this.position[0] + this.direction[0],
+      this.position[1] + this.direction[1],
+      this.position[2] + this.direction[2],
     );
-    this.viewMatrix = Mat4.lookAt(this.position, target, new Vec3(0, 1, 0));
-    this.projectionMatrix = Mat4.perspective(this.angleOuter * 2, 1, 0.1, 100);
-    Mat4.multiply(this.projectionMatrix, this.viewMatrix, this.viewProjectionMatrix);
+    mat4.lookAt(this.position, target, vec3.fromValues(0, 1, 0), this.viewMatrix);
+    mat4.perspective(this.angleOuter * 2, 1, 0.1, 100, this.projectionMatrix);
+    mat4.multiply(this.projectionMatrix, this.viewMatrix, this.viewProjectionMatrix);
   }
 
   public updateShadowUniforms(): void {
@@ -99,10 +99,10 @@ export class SpotLight extends Light {
     this.updateMatrices();
     
     const data = new Float32Array(36);
-    data.set(this.viewProjectionMatrix.data, 0);
-    data.set([this.position.x, this.position.y, this.position.z, 0], 16);
-    data.set([this.direction.x, this.direction.y, this.direction.z, 0], 20);
-    data.set([this.color.x, this.color.y, this.color.z, this.intensity], 24);
+    data.set(this.viewProjectionMatrix, 0);
+    data.set([this.position[0], this.position[1], this.position[2], 0], 16);
+    data.set([this.direction[0], this.direction[1], this.direction[2], 0], 20);
+    data.set([this.color[0], this.color[1], this.color[2], this.intensity], 24);
     data.set([this.angleInner], 28);
     data.set([this.angleOuter], 29);
     this._device.queue.writeBuffer(this.shadowBuffer, 0, data);

@@ -1,4 +1,4 @@
-import { Vec3, Quat, Mat4 } from "../math";
+import { vec3, quat, mat4, Vec3, Quat, Mat4 } from 'wgpu-matrix';
 
 export class Transform {
   translation: Vec3;
@@ -11,34 +11,51 @@ export class Transform {
   children: Transform[] = [];
 
   constructor() {
-    this.translation = Vec3.create();
-    this.rotation = Quat.identity();
-    this.scale = Vec3.create(1, 1, 1);
-    this.localMatrix = Mat4.create();
-    this.worldMatrix = Mat4.create();
+    this.translation = vec3.create();
+    this.rotation = quat.create();
+    quat.identity(this.rotation);
+    this.scale = vec3.fromValues(1, 1, 1);
+    this.localMatrix = mat4.create();
+    this.worldMatrix = mat4.create();
     this.updateLocalMatrix();
   }
 
   setPosition(x: number, y: number, z: number): this {
-    this.translation.set(x, y, z);
+    this.translation[0] = x;
+    this.translation[1] = y;
+    this.translation[2] = z;
     this.updateLocalMatrix();
     return this;
   }
 
   setRotation(x: number, y: number, z: number): this {
-    this.rotation = Quat.fromEuler(x, y, z);
+    const rotX = mat4.rotationX(x);
+    const rotY = mat4.rotationY(y);
+    const rotZ = mat4.rotationZ(z);
+    
+    let combined = mat4.create();
+    mat4.multiply(rotY, rotX, combined);
+    mat4.multiply(combined, rotZ, combined);
+    
+    quat.fromMat(combined, this.rotation);
+    quat.normalize(this.rotation, this.rotation);
     this.updateLocalMatrix();
     return this;
   }
 
   setRotationQuat(x: number, y: number, z: number, w: number): this {
-    this.rotation.set(x, y, z, w);
+    this.rotation[0] = x;
+    this.rotation[1] = y;
+    this.rotation[2] = z;
+    this.rotation[3] = w;
     this.updateLocalMatrix();
     return this;
   }
 
   setScale(x: number, y: number, z: number): this {
-    this.scale.set(x, y, z);
+    this.scale[0] = x;
+    this.scale[1] = y;
+    this.scale[2] = z;
     this.updateLocalMatrix();
     return this;
   }
@@ -62,14 +79,20 @@ export class Transform {
   }
 
   updateLocalMatrix(): void {
-    Mat4.compose(this.translation, this.rotation, this.scale, this.localMatrix);
+    const t = mat4.translation(this.translation);
+    const r = mat4.fromQuat(this.rotation);
+    const s = mat4.scaling(this.scale);
+    
+    let result = mat4.create();
+    mat4.multiply(t, r, result);
+    mat4.multiply(result, s, this.localMatrix);
   }
 
   updateWorldMatrix(parentWorldMatrix?: Mat4): void {
     if (parentWorldMatrix) {
-      Mat4.multiply(parentWorldMatrix, this.localMatrix, this.worldMatrix);
+      mat4.multiply(parentWorldMatrix, this.localMatrix, this.worldMatrix);
     } else {
-      Mat4.copy(this.localMatrix, this.worldMatrix);
+      mat4.copy(this.localMatrix, this.worldMatrix);
     }
 
     for (const child of this.children) {
@@ -78,60 +101,50 @@ export class Transform {
   }
 
   public getForward(): Vec3 {
-    const forward = new Vec3(0, 0, 1);
-    Vec3.transformQuat(forward, this.rotation, forward);
-    return forward;
+    const forward = vec3.fromValues(0, 0, 1);
+    const result = vec3.create();
+    vec3.transformQuat(forward, this.rotation, result);
+    return result;
   }
 
   public lookAt(target: Vec3): this {
-    const direction = new Vec3(
-      target.data[0] - this.translation.data[0],
-      target.data[1] - this.translation.data[1],
-      target.data[2] - this.translation.data[2],
-    );
+    // Compute forward direction directly
+    const forward = vec3.create();
+    vec3.subtract(target, this.translation, forward);
+    vec3.normalize(forward, forward);
     
-    const len = Math.sqrt(
-      direction.data[0] ** 2 + 
-      direction.data[1] ** 2 + 
-      direction.data[2] ** 2
-    );
-    if (len > 0) {
-      direction.data[0] /= len;
-      direction.data[1] /= len;
-      direction.data[2] /= len;
-    }
-
-    const up = new Vec3(0, 1, 0);
-    let right = new Vec3();
-    right.data[0] = up.data[1] * direction.data[2] - up.data[2] * direction.data[1];
-    right.data[1] = up.data[2] * direction.data[0] - up.data[0] * direction.data[2];
-    right.data[2] = up.data[0] * direction.data[1] - up.data[1] * direction.data[0];
+    const up = vec3.fromValues(0, 1, 0);
     
-    const rightLen = Math.sqrt(right.data[0] ** 2 + right.data[1] ** 2 + right.data[2] ** 2);
-    if (rightLen > 0) {
-      right.data[0] /= rightLen;
-      right.data[1] /= rightLen;
-      right.data[2] /= rightLen;
+    // Handle case where forward is parallel to up
+    const right = vec3.create();
+    vec3.cross(forward, up, right);
+    
+    if (vec3.length(right) < 0.001) {
+      vec3.cross(forward, vec3.fromValues(1, 0, 0), right);
     }
-
-    const newUp = new Vec3(
-      direction.data[1] * right.data[2] - direction.data[2] * right.data[1],
-      direction.data[2] * right.data[0] - direction.data[0] * right.data[2],
-      direction.data[0] * right.data[1] - direction.data[1] * right.data[0],
-    );
-
-    const rotMatrix = Mat4.create();
-    rotMatrix.data[0] = right.data[0];
-    rotMatrix.data[1] = right.data[1];
-    rotMatrix.data[2] = right.data[2];
-    rotMatrix.data[4] = newUp.data[0];
-    rotMatrix.data[5] = newUp.data[1];
-    rotMatrix.data[6] = newUp.data[2];
-    rotMatrix.data[8] = direction.data[0];
-    rotMatrix.data[9] = direction.data[1];
-    rotMatrix.data[10] = direction.data[2];
-
-    this.rotation = Mat4.getRotation(rotMatrix, this.rotation);
+    vec3.normalize(right, right);
+    
+    // Recompute true up
+    const newUp = vec3.create();
+    vec3.cross(right, forward, newUp);
+    
+    // Build rotation matrix (3x3 in 4x4 format)
+    // Column 2 should be -forward (pointing backward in standard right-handed coords)
+    const rotMatrix = mat4.create();
+    rotMatrix[0] = right[0];
+    rotMatrix[1] = right[1];
+    rotMatrix[2] = right[2];
+    rotMatrix[4] = newUp[0];
+    rotMatrix[5] = newUp[1];
+    rotMatrix[6] = newUp[2];
+    rotMatrix[8] = -forward[0];
+    rotMatrix[9] = -forward[1];
+    rotMatrix[10] = -forward[2];
+    rotMatrix[15] = 1;
+    
+    quat.fromMat(rotMatrix, this.rotation);
+    quat.normalize(this.rotation, this.rotation);
+    
     this.updateLocalMatrix();
     return this;
   }

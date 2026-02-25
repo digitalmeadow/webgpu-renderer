@@ -1,4 +1,4 @@
-import { Mat4, Vec3 } from "../math";
+import { mat4, vec3, Mat4, Vec3 } from 'wgpu-matrix';
 
 const CAMERA_BUFFER_SIZE = 384;
 
@@ -46,34 +46,43 @@ export class CameraUniforms {
     near: number,
     far: number,
   ): void {
-    const projectionMatrixInverse = Mat4.create();
-    Mat4.invert(projectionMatrix, projectionMatrixInverse);
+    const projectionMatrixInverse = mat4.create();
+    mat4.invert(projectionMatrix, projectionMatrixInverse);
 
-    const viewMatrixInverse = Mat4.create();
-    Mat4.invert(viewMatrix, viewMatrixInverse);
+    const viewMatrixInverse = mat4.create();
+    mat4.invert(viewMatrix, viewMatrixInverse);
 
-    const pos = new Float32Array([position.x, position.y, position.z, 1]);
+    const pos = new Float32Array([position[0], position[1], position[2], 1]);
     const nearFar = new Float32Array([near, far]);
 
-    device.queue.writeBuffer(this.buffer, 0, viewMatrix.data as any);
-    device.queue.writeBuffer(this.buffer, 64, projectionMatrix.data as any);
+    const viewMatrixF32 = new Float32Array(viewMatrix);
+    const projectionMatrixF32 = new Float32Array(projectionMatrix);
+    const viewProjectionMatrixF32 = new Float32Array(viewProjectionMatrix);
+    const projectionMatrixInverseF32 = new Float32Array(projectionMatrixInverse);
+    const viewMatrixInverseF32 = new Float32Array(viewMatrixInverse);
+
+    device.queue.writeBuffer(this.buffer, 0, viewMatrixF32);
+    device.queue.writeBuffer(this.buffer, 64, projectionMatrixF32);
     device.queue.writeBuffer(
       this.buffer,
       128,
-      viewProjectionMatrix.data as any,
+      viewProjectionMatrixF32,
     );
     device.queue.writeBuffer(
       this.buffer,
       192,
-      projectionMatrixInverse.data as any,
+      projectionMatrixInverseF32,
     );
-    device.queue.writeBuffer(this.buffer, 256, viewMatrixInverse.data as any);
+    device.queue.writeBuffer(this.buffer, 256, viewMatrixInverseF32);
     device.queue.writeBuffer(this.buffer, 320, pos);
     device.queue.writeBuffer(this.buffer, 336, nearFar);
   }
 }
 
+let cameraIdCounter = 0;
+
 export class Camera {
+  public id: number;
   public uniforms: CameraUniforms;
   viewMatrix: Mat4;
   projectionMatrix: Mat4;
@@ -90,27 +99,28 @@ export class Camera {
 
   constructor(
     device: GPUDevice,
-    position: Vec3 = Vec3.create(0, 0, 5),
-    target: Vec3 = Vec3.create(0, 0, 0),
-    up: Vec3 = Vec3.create(0, 1, 0),
+    position?: Vec3,
+    target?: Vec3,
+    up?: Vec3,
     fov: number = Math.PI / 4,
     aspect: number = 16 / 9,
     near: number = 1.0,
     far: number = 100.0,
   ) {
+    this.id = cameraIdCounter++;
     this.uniforms = new CameraUniforms(device);
-    this.position = position;
-    this.target = target;
-    this.up = up;
+    this.position = position ? vec3.fromValues(position[0], position[1], position[2]) : vec3.fromValues(0, 0, 5);
+    this.target = target ? vec3.fromValues(target[0], target[1], target[2]) : vec3.fromValues(0, 0, 0);
+    this.up = up ? vec3.fromValues(up[0], up[1], up[2]) : vec3.fromValues(0, 1, 0);
 
     this.fov = fov;
     this.aspect = aspect;
     this.near = near;
     this.far = far;
 
-    this.viewMatrix = Mat4.create();
-    this.projectionMatrix = Mat4.create();
-    this.viewProjectionMatrix = Mat4.create();
+    this.viewMatrix = mat4.create();
+    this.projectionMatrix = mat4.create();
+    this.viewProjectionMatrix = mat4.create();
 
     this.updateProjectionView();
   }
@@ -128,7 +138,7 @@ export class Camera {
   }
 
   updateProjection(): void {
-    Mat4.perspective(
+    mat4.perspective(
       this.fov,
       this.aspect,
       this.near,
@@ -138,8 +148,8 @@ export class Camera {
   }
 
   updateView(): void {
-    Mat4.lookAt(this.position, this.target, this.up, this.viewMatrix);
-    Mat4.multiply(
+    mat4.lookAt(this.position, this.target, this.up, this.viewMatrix);
+    mat4.multiply(
       this.projectionMatrix,
       this.viewMatrix,
       this.viewProjectionMatrix,

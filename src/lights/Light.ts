@@ -1,4 +1,4 @@
-import { Vec3 } from "../math";
+import { vec3, Vec3 } from 'wgpu-matrix';
 import { Entity } from "../scene";
 
 export enum LightType {
@@ -9,7 +9,7 @@ export enum LightType {
 
 export abstract class Light extends Entity {
   public type: LightType;
-  public color: Vec3 = new Vec3(1, 1, 1);
+  public color: Vec3 = vec3.fromValues(1, 1, 1);
   public intensity: number = 1.0;
 
   constructor(name: string, type: LightType) {

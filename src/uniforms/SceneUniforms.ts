@@ -1,4 +1,4 @@
-import { Vec3 } from "../math";
+import { vec3, Vec3 } from 'wgpu-matrix';
 import { Uniforms } from "./Uniforms";
 
 export class SceneUniforms extends Uniforms {
@@ -7,14 +7,14 @@ export class SceneUniforms extends Uniforms {
 
   constructor(
     device: GPUDevice,
-    ambientLightColor: Vec3 = new Vec3(0.05, 0.05, 0.05),
+    ambientLightColor: Vec3 = vec3.fromValues(0.05, 0.05, 0.05),
   ) {
     super(device);
     this._ambientLightColor = ambientLightColor;
 
     this.buffer = this.device.createBuffer({
       label: "Scene Uniforms Buffer",
-      size: 16, // vec3<f32> is 12 bytes, padded to 16
+      size: 16,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -51,7 +51,7 @@ export class SceneUniforms extends Uniforms {
     this.device.queue.writeBuffer(
       this.buffer,
       0,
-      new Float32Array(this._ambientLightColor.data),
+      new Float32Array(this._ambientLightColor),
     );
   }
 

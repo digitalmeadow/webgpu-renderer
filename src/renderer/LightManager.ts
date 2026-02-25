@@ -1,5 +1,4 @@
 import { Light, DirectionalLight, SpotLight } from "../lights";
-import { Vec3 } from "../math";
 import { SceneUniforms } from "../uniforms";
 
 const MAX_LIGHT_DIRECTIONAL_COUNT = 2;
@@ -131,12 +130,21 @@ export class LightManager {
     sceneUniforms: SceneUniforms,
     commandEncoder?: GPUCommandEncoder
   ): void {
-    if (!this.directionalShadowTextureView || !this.spotShadowTextureView) return;
+    console.log(`[LightManager] === UPDATE LIGHTING BIND GROUP ===`);
+    console.log(`[LightManager] directionalShadowTextureView: ${this.directionalShadowTextureView !== null ? 'OK' : 'NULL'}`);
+    console.log(`[LightManager] spotShadowTextureView: ${this.spotShadowTextureView !== null ? 'NULL (this is OK for now)' : 'OK'}`);
+
+    if (!this.directionalShadowTextureView || !this.spotShadowTextureView) {
+      console.log(`[LightManager] SKIPPING - missing shadow textures`);
+      return;
+    }
 
     const encoder = commandEncoder ?? this.device.createCommandEncoder();
 
+    console.log(`[LightManager] Copying directional lights to shared buffer...`);
     for (let i = 0; i < directionalLights.length; i++) {
       const light = directionalLights[i];
+      console.log(`[LightManager]   copying directional[${i}] "${light.name}" from shadowBuffer`);
       if (light.shadowBuffer) {
         encoder.copyBufferToBuffer(
           light.shadowBuffer,
@@ -149,8 +157,10 @@ export class LightManager {
     }
     
     const spotLightOffset = MAX_LIGHT_DIRECTIONAL_COUNT * LIGHT_BUFFER_SIZE;
+    console.log(`[LightManager] Copying spot lights to shared buffer (offset: ${spotLightOffset})...`);
     for (let i = 0; i < spotLights.length; i++) {
       const light = spotLights[i];
+      console.log(`[LightManager]   copying spot[${i}] "${light.name}"`);
       if (light.shadowBuffer) {
         encoder.copyBufferToBuffer(
           light.shadowBuffer,
@@ -191,17 +201,31 @@ export class LightManager {
   }
 
   public update(lights: Light[], cameras: any[] = []) {
+    console.log(`[LightManager] === UPDATE ===`);
+    console.log(`[LightManager] Total lights: ${lights.length}`);
+
     const directionalLights = lights.filter(
       (l) => l instanceof DirectionalLight,
     ) as DirectionalLight[];
 
+    console.log(`[LightManager] Directional lights: ${directionalLights.length}`);
+    for (let i = 0; i < directionalLights.length; i++) {
+      const l = directionalLights[i];
+      console.log(`[LightManager]   directional[${i}]: "${l.name}", intensity: ${l.intensity}, color: [${l.color[0].toFixed(2)}, ${l.color[1].toFixed(2)}, ${l.color[2].toFixed(2)}]`);
+      console.log(`[LightManager]   directional[${i}] direction: [${l.direction[0].toFixed(3)}, ${l.direction[1].toFixed(3)}, ${l.direction[2].toFixed(3)}]`);
+      console.log(`[LightManager]   directional[${i}] shadowBuffer: ${l.shadowBuffer !== null ? 'OK' : 'NULL'}`);
+    }
+
     if (directionalLights.length > 0) {
       const light = directionalLights[0];
       if (!light.shadowBuffer) {
+        console.log(`[LightManager] Initializing shadow resources for: ${light.name}`);
         light.initShadowResources(this.device);
       }
       const camera = cameras.length > 0 ? cameras[0] : null;
+      console.log(`[LightManager] Camera: ${camera !== null ? 'OK' : 'NULL'}`);
       if (camera) {
+        console.log(`[LightManager] Calling updateCascadeMatrices...`);
         light.updateCascadeMatrices(
           camera.position,
           camera.target,
@@ -210,6 +234,7 @@ export class LightManager {
           camera.viewMatrix,
           camera.projectionMatrix,
         );
+        console.log(`[LightManager] Calling updateShadowUniforms...`);
         light.updateShadowUniforms();
       }
     }

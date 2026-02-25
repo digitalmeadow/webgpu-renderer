@@ -22,7 +22,7 @@ export class Renderer {
   private context: GPUCanvasContext | null = null;
   private format: GPUTextureFormat;
 
-  public frustumCulling: boolean = true;
+  public frustumCulling: boolean = false;
   public debugShadowMap: boolean = false;
 
   private geometryBuffer: GeometryBuffer;
@@ -120,21 +120,10 @@ export class Renderer {
         this.canvas.height,
       );
 
-      const camera = new Camera(this.device);
-
       this.geometryPass = new GeometryPass(
         this.device,
         this.geometryBuffer,
         this.materialManager,
-      );
-
-      this.lightingPass = new LightingPass(
-        this.device,
-        this.geometryBuffer,
-        camera,
-        this.lightManager,
-        this.canvas.width,
-        this.canvas.height,
       );
 
       this.outputPass = new OutputPass(this.device);
@@ -154,12 +143,6 @@ export class Renderer {
       );
     } else {
       this.geometryBuffer.resize(
-        this.device,
-        this.canvas.width,
-        this.canvas.height,
-      );
-
-      this.lightingPass.resize(
         this.device,
         this.canvas.width,
         this.canvas.height,
@@ -192,11 +175,28 @@ export class Renderer {
       !this.context ||
       !this.geometryBuffer ||
       !this.geometryPass ||
-      !this.lightingPass ||
       !this.outputPass
     ) {
       return;
     }
+
+    // Create lightingPass on first render with the correct camera
+    if (!this.lightingPass) {
+      this.lightingPass = new LightingPass(
+        this.device,
+        this.geometryBuffer,
+        camera.uniforms.bindGroupLayout,
+        this.lightManager,
+        this.canvas.width,
+        this.canvas.height,
+      );
+    }
+
+    // Update camera FIRST so frustum culling uses the correct view-projection matrix
+    camera.update(this.device);
+
+    // Update world SECOND so world matrices are computed before frustum culling uses them
+    world.update();
 
     const meshes = this.collectVisibleMeshes(world, camera);
     const opaqueMeshes = meshes.filter(
@@ -215,10 +215,13 @@ export class Renderer {
       );
     }
 
-    world.update();
-    camera.update(this.device);
-
     const lights = this.collectLights(world);
+    console.log(`[Renderer] === RENDER FRAME ===`);
+    console.log(`[Renderer] Collected ${lights.length} lights`);
+    for (const light of lights) {
+      console.log(`[Renderer]   - ${light.name} (type: ${light.type})`);
+    }
+
     this.sceneUniforms.ambientLightColor = world.ambientLightColor;
     this.sceneUniforms.update();
 
@@ -228,9 +231,11 @@ export class Renderer {
       (l) => l instanceof DirectionalLight,
     ) as DirectionalLight[];
 
+    console.log(`[Renderer] Calling lightManager.update()...`);
     this.contextBuffer.update(this.device, time.elapsed, time.delta);
     this.lightManager.update(lights, [camera]);
 
+    console.log(`[Renderer] Rendering shadow pass for ${directionalLights.length} directional lights...`);
     if (directionalLights.length > 0) {
       this.shadowPassDirectional.render(
         commandEncoder,
@@ -242,10 +247,12 @@ export class Renderer {
     const spotLights = lights.filter(
       (l) => l instanceof SpotLight,
     ) as SpotLight[];
+    console.log(`[Renderer] Spot lights: ${spotLights.length}`);
     if (spotLights.length > 0) {
       this.shadowPassSpot.render(commandEncoder, spotLights, opaqueMeshes);
     }
 
+    console.log(`[Renderer] Setting shadow textures and updating lighting bind group...`);
     this.lightManager.setDirectionalShadowTexture(
       this.shadowPassDirectional.getShadowTextureView(),
     );
@@ -260,6 +267,7 @@ export class Renderer {
     );
     this.lightManager.updateSceneLightBindGroup(this.lightManager.lightBuffer);
 
+    console.log(`[Renderer] Rendering geometry pass...`);
     this.geometryPass.render(
       this.device,
       commandEncoder,

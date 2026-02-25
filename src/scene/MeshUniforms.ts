@@ -1,4 +1,4 @@
-import { Mat4 } from "../math";
+import { mat4, Mat4 } from 'wgpu-matrix';
 
 export class MeshUniforms {
   buffer: GPUBuffer;
@@ -7,7 +7,7 @@ export class MeshUniforms {
   modelMatrix: Mat4;
 
   constructor(device: GPUDevice) {
-    this.modelMatrix = Mat4.create();
+    this.modelMatrix = mat4.create();
 
     this.buffer = device.createBuffer({
       label: "Mesh Uniforms Buffer",
@@ -39,6 +39,6 @@ export class MeshUniforms {
   }
 
   update(device: GPUDevice, modelMatrix: Mat4): void {
-    device.queue.writeBuffer(this.buffer, 0, modelMatrix.data as any);
+    device.queue.writeBuffer(this.buffer, 0, new Float32Array(modelMatrix));
   }
 }

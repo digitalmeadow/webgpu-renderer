@@ -17,7 +17,7 @@ export class ShadowPassDirectional {
   private shadowTexture: GPUTexture;
   private shadowTextureViews: GPUTextureView[];
   private shadowTextureArrayView: GPUTextureView;
-  private debugTexture: GPUTexture;  // For debug color output
+  private debugTexture: GPUTexture; // For debug color output
   private debugTextureViews: GPUTextureView[];
   private contextBuffer: ContextBuffer;
 
@@ -126,7 +126,7 @@ export class ShadowPassDirectional {
       },
       primitive: {
         topology: "triangle-list",
-        cullMode: "front",
+        cullMode: "none",
       },
       depthStencil: {
         depthWriteEnabled: true,
@@ -144,6 +144,13 @@ export class ShadowPassDirectional {
     light: DirectionalLight,
     meshes: Mesh[],
   ): void {
+    console.log(`[ShadowPass] === RENDER SHADOW PASS ===`);
+    console.log(`[ShadowPass] Rendering ${meshes.length} meshes`);
+    console.log(`[ShadowPass] light.shadowBindGroup:`, light.shadowBindGroup !== null ? 'OK' : 'NULL');
+    console.log(`[ShadowPass] light.direction: [${light.direction[0].toFixed(3)}, ${light.direction[1].toFixed(3)}, ${light.direction[2].toFixed(3)}]`);
+    console.log(`[ShadowPass] light.intensity: ${light.intensity}`);
+    console.log(`[ShadowPass] light.color: [${light.color[0].toFixed(2)}, ${light.color[1].toFixed(2)}, ${light.color[2].toFixed(2)}]`);
+
     for (
       let cascadeIndex = 0;
       cascadeIndex < SHADOW_MAP_CASCADES_COUNT;
@@ -151,20 +158,24 @@ export class ShadowPassDirectional {
     ) {
       const layerIndex = cascadeIndex;
 
+      console.log(`[ShadowPass] Setting active cascade to: ${cascadeIndex}`);
       light.setActiveViewProjectionIndex(cascadeIndex);
+
+      const vp = light.viewProjectionMatrices[cascadeIndex];
+      console.log(`[ShadowPass] cascade[${cascadeIndex}] VP matrix:`, vp);
 
       const passEncoder = encoder.beginRenderPass({
         label: `Shadow Pass Cascade ${cascadeIndex}`,
         colorAttachments: [
           {
-            view: this.debugTextureViews[layerIndex],  // Debug color output
+            view: this.debugTextureViews[layerIndex],
             clearValue: { r: 0, g: 0, b: 0, a: 1 },
             loadOp: "clear",
             storeOp: "store",
           },
         ],
         depthStencilAttachment: {
-          view: this.shadowTextureViews[layerIndex],  // Actual depth for shadows
+          view: this.shadowTextureViews[layerIndex],
           depthClearValue: 1.0,
           depthLoadOp: "clear",
           depthStoreOp: "store",
@@ -207,7 +218,7 @@ export class ShadowPassDirectional {
   public getShadowTextureLayerView(layerIndex: number): GPUTextureView {
     return this.shadowTextureViews[layerIndex];
   }
-  
+
   public getDebugTextureLayerView(layerIndex: number): GPUTextureView {
     return this.debugTextureViews[layerIndex];
   }

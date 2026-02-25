@@ -10,9 +10,9 @@ import {
   Camera,
   FlyControls,
   Time,
-  Vec3,
 } from "../src";
 import { createCubeGeometry, createPlaneGeometry } from "../src/geometries";
+import { vec3 } from "wgpu-matrix";
 
 async function main() {
   const canvas = document.getElementById("gpu-canvas") as HTMLCanvasElement;
@@ -28,14 +28,14 @@ async function main() {
   const materialManager = renderer.getMaterialManager();
 
   const world = new World();
-  world.ambientLightColor = new Vec3(0.3, 0.3, 0.3);
+  world.ambientLightColor = vec3.fromValues(0.3, 0.3, 0.3);
   const scene = new Scene("Main Scene");
   world.addScene(scene);
 
   // Directional light at an angle for shadow casting
   const light = new DirectionalLight("main light");
   light.transform.setPosition(0, 10, 5);
-  light.transform.lookAt(new Vec3(0, 0, 0));
+  light.transform.lookAt(vec3.fromValues(0, 0, 0));
   light.intensity = 1.5;
   scene.add(light);
 
@@ -48,7 +48,6 @@ async function main() {
   await materialManager.loadMaterial(floorMaterial);
   const floor = new Mesh(device, "floor", floorGeometry, floorMaterial);
   floor.transform.setPosition(0, 0.0, 0);
-  // floor.transform.setRotation(0, 0, 0);
   scene.add(floor);
 
   // Cube geometry
@@ -71,13 +70,13 @@ async function main() {
 
   const camera = new Camera(
     device,
-    Vec3.create(0, 5, 10),
-    Vec3.create(0, 0, 0),
+    vec3.fromValues(0, 5, 10),
+    vec3.fromValues(0, 0, 0),
     undefined,
-    Math.PI / 4,
+    Math.PI / 3,
     canvas.clientWidth / canvas.clientHeight,
-    0.01,
-    60.0,
+    1.0,
+    100.0,
   );
 
   // Initialize fly controls
@@ -99,7 +98,7 @@ async function main() {
   function loop() {
     time.update();
 
-    // Update fly controls
+    // Update fly controls FIRST so camera position/target are updated before render
     flyControls.update(time.delta);
 
     // Rotate the caster cube

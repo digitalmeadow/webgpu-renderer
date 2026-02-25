@@ -1,5 +1,4 @@
-import { Vec3 } from "./Vec3";
-import { Mat4 } from "./Mat4";
+import { vec3, mat4, Vec3, Mat4 } from 'wgpu-matrix';
 import { AABB } from "./AABB";
 
 export class FrustumPlane {
@@ -7,7 +6,7 @@ export class FrustumPlane {
   public d: number;
 
   constructor() {
-    this.normal = new Vec3();
+    this.normal = vec3.create();
     this.d = 0;
   }
 }
@@ -18,36 +17,53 @@ export function frustumPlanesFromMatrix(viewProjectionMatrix: Mat4): FrustumPlan
     planes.push(new FrustumPlane());
   }
 
-  const m = viewProjectionMatrix.data;
+  const m = viewProjectionMatrix;
   
-  // Left clipping plane
-  planes[0].normal.set(m[3] + m[0], m[7] + m[4], m[11] + m[8]);
+  // Left plane
+  planes[0].normal[0] = m[3] + m[0];
+  planes[0].normal[1] = m[7] + m[4];
+  planes[0].normal[2] = m[11] + m[8];
   planes[0].d = m[15] + m[12];
 
-  // Right clipping plane
-  planes[1].normal.set(m[3] - m[0], m[7] - m[4], m[11] - m[8]);
+  // Right plane
+  planes[1].normal[0] = m[3] - m[0];
+  planes[1].normal[1] = m[7] - m[4];
+  planes[1].normal[2] = m[11] - m[8];
   planes[1].d = m[15] - m[12];
 
-  // Top clipping plane
-  planes[2].normal.set(m[3] - m[1], m[7] - m[5], m[11] - m[9]);
+  // Bottom plane
+  planes[2].normal[0] = m[3] - m[1];
+  planes[2].normal[1] = m[7] - m[5];
+  planes[2].normal[2] = m[11] - m[9];
   planes[2].d = m[15] - m[13];
 
-  // Bottom clipping plane
-  planes[3].normal.set(m[3] + m[1], m[7] + m[5], m[11] + m[9]);
+  // Top plane
+  planes[3].normal[0] = m[3] + m[1];
+  planes[3].normal[1] = m[7] + m[5];
+  planes[3].normal[2] = m[11] + m[9];
   planes[3].d = m[15] + m[13];
 
-  // Near clipping plane
-  planes[4].normal.set(m[3] + m[2], m[7] + m[6], m[11] + m[10]);
+  // Near plane (z=0 in NDC, WebGPU) - points toward camera (inward)
+  // WebGPU NDC: z ranges from 0 (near) to 1 (far)
+  // The plane equation is n · P + d = 0, where n is the inward-facing normal
+  planes[4].normal[0] = m[3] + m[2];
+  planes[4].normal[1] = m[7] + m[6];
+  planes[4].normal[2] = m[11] + m[10];
   planes[4].d = m[15] + m[14];
 
-  // Far clipping plane
-  planes[5].normal.set(m[3] - m[2], m[7] - m[6], m[11] - m[10]);
+  // Far plane (z=1 in NDC, WebGPU) - points away from camera
+  planes[5].normal[0] = m[3] - m[2];
+  planes[5].normal[1] = m[7] - m[6];
+  planes[5].normal[2] = m[11] - m[10];
   planes[5].d = m[15] - m[14];
 
-  // Normalize the plane equations
   for (let i = 0; i < 6; i++) {
-    const invLen = 1.0 / planes[i].normal.length();
-    planes[i].normal.multiply(invLen);
+    const normal = planes[i].normal;
+    const len = Math.sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+    const invLen = 1.0 / len;
+    normal[0] *= invLen;
+    normal[1] *= invLen;
+    normal[2] *= invLen;
     planes[i].d *= invLen;
   }
 
@@ -62,16 +78,12 @@ export function aabbInFrustum(aabb: AABB, planes: FrustumPlane[]): boolean {
     const plane = planes[i];
     const normal = plane.normal;
 
-    let px = normal.data[0] >= 0 ? max.data[0] : min.data[0];
-    let py = normal.data[1] >= 0 ? max.data[1] : min.data[1];
-    let pz = normal.data[2] >= 0 ? max.data[2] : min.data[2];
+    const px = normal[0] >= 0 ? max[0] : min[0];
+    const py = normal[1] >= 0 ? max[1] : min[1];
+    const pz = normal[2] >= 0 ? max[2] : min[2];
 
-    const padding = 1.0;
-    px += normal.data[0] * padding;
-    py += normal.data[1] * padding;
-    pz += normal.data[2] * padding;
-
-    const dot = normal.data[0] * px + normal.data[1] * py + normal.data[2] * pz + plane.d;
+    const dot = normal[0] * px + normal[1] * py + normal[2] * pz + plane.d;
+    
     if (dot < 0) {
       return false;
     }

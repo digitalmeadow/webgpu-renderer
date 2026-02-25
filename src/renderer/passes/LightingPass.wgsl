@@ -90,9 +90,13 @@ fn position_from_depth(uv: vec2<f32>, depth: f32) -> vec3<f32> {
 }
 
 fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
-    if (view_space_z < splits.y) {
+    // wgpu-matrix perspective: view space Z is NEGATIVE (camera looks down -Z)
+    // The depth buffer stores 0 (near) to 1 (far), which maps to -near to -far in view space
+    // So we negate view_space_z to get positive comparison values
+    let z = -view_space_z;
+    if (z < splits.y) {
         return 0u;
-    } else if (view_space_z < splits.z) {
+    } else if (z < splits.z) {
         return 1u;
     } else {
         return 2u;
@@ -104,12 +108,11 @@ fn fetch_light_directional_shadow(cascade_id: u32, homogeneous_coords: vec4<f32>
         return 1.0;
     }
     
-    let flip_correction = vec2<f32>(0.5, -0.5);
+    let flip_correction = vec2<f32>(0.5, 0.5);
     let proj_correction = 1.0 / homogeneous_coords.w;
     let light_local = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
     let depth = homogeneous_coords.z * proj_correction;
     
-    let texel = 1.0 / 2048.0;
     let eps = 1e-5;
     let uv_clamped = clamp(light_local, vec2<f32>(eps, eps), vec2<f32>(1.0 - eps, 1.0 - eps));
     
@@ -123,12 +126,11 @@ fn fetch_light_spot_shadow(light_index: u32, homogeneous_coords: vec4<f32>) -> f
         return 1.0;
     }
     
-    let flip_correction = vec2<f32>(0.5, -0.5);
+    let flip_correction = vec2<f32>(0.5, 0.5);
     let proj_correction = 1.0 / homogeneous_coords.w;
     let light_local = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
     let depth = homogeneous_coords.z * proj_correction;
-    
-    let texel = 1.0 / 1024.0;
+
     let eps = 1e-5;
     let uv_clamped = clamp(light_local, vec2<f32>(eps, eps), vec2<f32>(1.0 - eps, 1.0 - eps));
     
@@ -156,6 +158,8 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     var color = albedo * scene_uniforms.ambient_light_color.rgb;
     let N = normalize(world_normal);
 
+    var debugColor = vec3<f32>(0.0);
+
     // Directional Lights
     for (var i = 0u; i < 2u; i = i + 1u) {
         let light = light_directionals[i];
@@ -163,9 +167,12 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             continue;
         }
         
-        let view_space_z = -view_pos.z;
+        // wgpu-matrix perspective: view space Z is NEGATIVE (camera looks down -Z)
+        // The depth buffer stores values from 0 (near) to 1 (far)
+        // position_from_depth gives us view-space position where Z is negative going into the scene
+        let view_space_z = view_pos.z;
         let cascade_index = select_cascade(view_space_z, light.cascade_splits);
-        
+
         let shadow_matrix = light.view_projection_matrices[cascade_index];
         let shadow_coords = shadow_matrix * vec4<f32>(world_pos, 1.0);
         
@@ -174,7 +181,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
         let L = normalize(-light.direction.xyz);
         let diffuse = max(dot(N, L), 0.0);
-        
+
         let light_color = light.color.rgb;
         let light_intensity = light.color.a;
         

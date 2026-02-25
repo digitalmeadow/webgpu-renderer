@@ -2,7 +2,6 @@ import { MaterialBase } from "../materials";
 import { MeshUniforms } from "./MeshUniforms";
 import { Entity } from "./Entity";
 import { Geometry } from "../geometries";
-import { Mat4 } from "../math";
 
 export class Mesh extends Entity {
   public geometry: Geometry;

@@ -8,11 +8,12 @@ export class LightingPass {
   private pipeline: GPURenderPipeline;
   outputTexture: GPUTexture;
   outputView: GPUTextureView;
+  private cameraBindGroupLayout: GPUBindGroupLayout;
 
   constructor(
     device: GPUDevice,
     geometryBuffer: GeometryBuffer,
-    camera: Camera,
+    cameraBindGroupLayout: GPUBindGroupLayout,
     lightManager: LightManager,
     width: number,
     height: number,
@@ -20,6 +21,8 @@ export class LightingPass {
     const shaderModule = device.createShaderModule({
       code: shader,
     });
+
+    this.cameraBindGroupLayout = cameraBindGroupLayout;
 
     this.outputTexture = device.createTexture({
       label: "Lighting Pass Output Texture",
@@ -38,7 +41,7 @@ export class LightingPass {
       layout: device.createPipelineLayout({
         bindGroupLayouts: [
           geometryBuffer.bindGroupLayout,
-          camera.uniforms.bindGroupLayout,
+          this.cameraBindGroupLayout,
           lightManager.lightingBindGroupLayout,
           lightManager.sceneLightBindGroupLayout,
         ],
@@ -87,6 +90,12 @@ export class LightingPass {
     camera: Camera,
     lightManager: LightManager,
   ): void {
+    console.log(`[LightingPass] === RENDER LIGHTING PASS ===`);
+    console.log(`[LightingPass] geometryBuffer.bindGroup:`, geometryBuffer.bindGroup !== null ? 'OK' : 'NULL');
+    console.log(`[LightingPass] camera.uniforms.bindGroup:`, camera.uniforms.bindGroup !== null ? 'OK' : 'NULL');
+    console.log(`[LightingPass] lightManager.lightingBindGroup:`, lightManager.lightingBindGroup !== null ? 'OK' : 'NULL');
+    console.log(`[LightingPass] lightManager.sceneLightBindGroup:`, lightManager.sceneLightBindGroup !== null ? 'OK' : 'NULL');
+
     const passEncoder = encoder.beginRenderPass({
       label: "Lighting Pass",
       colorAttachments: [

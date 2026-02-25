@@ -1,4 +1,4 @@
-import { Vec3 } from "../math";
+import { vec3 } from 'wgpu-matrix';
 
 export class FlyControls {
   private canvas: HTMLCanvasElement;
@@ -19,22 +19,23 @@ export class FlyControls {
     this.initKeyboard();
     this.initMouse();
 
-    // Set initial yaw/pitch based on camera orientation
-    this.updateFromCamera();
+    this.initFromCamera();
   }
 
-  private updateFromCamera(): void {
-    const forward = Vec3.sub(this.camera.target, this.camera.position);
-    const len = Vec3.len(forward);
-    this.yaw = Math.atan2(forward.x, forward.z);
-    this.pitch = Math.asin(forward.y / len);
+  private initFromCamera(): void {
+    const forward = vec3.create();
+    vec3.subtract(this.camera.target, this.camera.position, forward);
+    const len = vec3.length(forward);
+    if (len > 0.0001) {
+      this.yaw = Math.atan2(forward[0], forward[2]);
+      this.pitch = Math.asin(forward[1] / len);
+    }
   }
 
   private initKeyboard(): void {
     window.addEventListener("keydown", (e) => {
       this.keys.add(e.key.toLowerCase());
 
-      // Toggle pointer lock on click
       if (e.key === "Escape") {
         document.exitPointerLock();
       }
@@ -44,7 +45,6 @@ export class FlyControls {
       this.keys.delete(e.key.toLowerCase());
     });
 
-    // Mouse wheel for speed adjustment
     window.addEventListener(
       "wheel",
       (e) => {
@@ -54,7 +54,6 @@ export class FlyControls {
           this.minSpeed,
           Math.min(this.maxSpeed, this.speed),
         );
-        console.log(`Fly speed: ${this.speed.toFixed(1)}`);
       },
       { passive: false },
     );
@@ -78,7 +77,6 @@ export class FlyControls {
       this.yaw -= e.movementX * sensitivity;
       this.pitch -= e.movementY * sensitivity;
 
-      // Clamp pitch to prevent flipping
       this.pitch = Math.max(
         -Math.PI / 2 + 0.01,
         Math.min(Math.PI / 2 - 0.01, this.pitch),
@@ -87,69 +85,71 @@ export class FlyControls {
   }
 
   update(deltaTime: number): void {
-    // Calculate forward direction from camera orientation
-    let forward = Vec3.sub(this.camera.target, this.camera.position);
-    Vec3.normalize(forward, forward);
+    if (isNaN(this.yaw) || isNaN(this.pitch)) {
+      this.yaw = 0;
+      this.pitch = 0;
+    }
+    
+    const forward = vec3.fromValues(
+      Math.sin(this.yaw) * Math.cos(this.pitch),
+      Math.sin(this.pitch),
+      Math.cos(this.yaw) * Math.cos(this.pitch)
+    );
 
-    // Calculate right vector from forward cross world up
-    const worldUp = new Vec3(0, 1, 0);
-    let right = Vec3.cross(forward, worldUp);
-    Vec3.normalize(right, right);
+    const worldUp = vec3.fromValues(0, 1, 0);
+    const right = vec3.create();
+    vec3.cross(forward, worldUp, right);
+    vec3.normalize(right, right);
 
-    // Calculate local up from right cross forward
-    let localUp = Vec3.cross(right, forward);
-    Vec3.normalize(localUp, localUp);
+    const localUp = vec3.create();
+    vec3.cross(right, forward, localUp);
+    vec3.normalize(localUp, localUp);
 
     const actualSpeed = this.keys.has("shift") ? this.speed * 2 : this.speed;
     const moveSpeed = actualSpeed * deltaTime;
 
-    // Calculate movement using local vectors
-    const movement = new Vec3(0, 0, 0);
+    const movement = vec3.create();
 
     if (this.keys.has("w")) {
-      movement.x += forward.x * moveSpeed;
-      movement.y += forward.y * moveSpeed;
-      movement.z += forward.z * moveSpeed;
+      movement[0] += forward[0] * moveSpeed;
+      movement[1] += forward[1] * moveSpeed;
+      movement[2] += forward[2] * moveSpeed;
     }
     if (this.keys.has("s")) {
-      movement.x -= forward.x * moveSpeed;
-      movement.y -= forward.y * moveSpeed;
-      movement.z -= forward.z * moveSpeed;
+      movement[0] -= forward[0] * moveSpeed;
+      movement[1] -= forward[1] * moveSpeed;
+      movement[2] -= forward[2] * moveSpeed;
     }
     if (this.keys.has("a")) {
-      movement.x -= right.x * moveSpeed;
-      movement.y -= right.y * moveSpeed;
-      movement.z -= right.z * moveSpeed;
+      movement[0] -= right[0] * moveSpeed;
+      movement[1] -= right[1] * moveSpeed;
+      movement[2] -= right[2] * moveSpeed;
     }
     if (this.keys.has("d")) {
-      movement.x += right.x * moveSpeed;
-      movement.y += right.y * moveSpeed;
-      movement.z += right.z * moveSpeed;
+      movement[0] += right[0] * moveSpeed;
+      movement[1] += right[1] * moveSpeed;
+      movement[2] += right[2] * moveSpeed;
     }
     if (this.keys.has("q")) {
-      movement.x -= localUp.x * moveSpeed;
-      movement.y -= localUp.y * moveSpeed;
-      movement.z -= localUp.z * moveSpeed;
+      movement[0] -= localUp[0] * moveSpeed;
+      movement[1] -= localUp[1] * moveSpeed;
+      movement[2] -= localUp[2] * moveSpeed;
     }
     if (this.keys.has("e")) {
-      movement.x += localUp.x * moveSpeed;
-      movement.y += localUp.y * moveSpeed;
-      movement.z += localUp.z * moveSpeed;
+      movement[0] += localUp[0] * moveSpeed;
+      movement[1] += localUp[1] * moveSpeed;
+      movement[2] += localUp[2] * moveSpeed;
     }
 
-    // Apply movement
-    this.camera.position.x += movement.x;
-    this.camera.position.y += movement.y;
-    this.camera.position.z += movement.z;
+    this.camera.position[0] += movement[0];
+    this.camera.position[1] += movement[1];
+    this.camera.position[2] += movement[2];
 
-    // Update target based on yaw/pitch
-    const target = new Vec3(
-      this.camera.position.x + Math.sin(this.yaw) * Math.cos(this.pitch),
-      this.camera.position.y + Math.sin(this.pitch),
-      this.camera.position.z + Math.cos(this.yaw) * Math.cos(this.pitch),
-    );
+    // Update target based on where the camera is now looking
+    this.camera.target[0] = this.camera.position[0] + forward[0];
+    this.camera.target[1] = this.camera.position[1] + forward[1];
+    this.camera.target[2] = this.camera.position[2] + forward[2];
 
-    this.camera.target.set(target.x, target.y, target.z);
     this.camera.updateProjectionView();
   }
 
