@@ -100,15 +100,17 @@ export class ForwardPass {
       }
 
       let pipelineToUse: GPURenderPipeline | null = null;
-      
+
       if (mesh.material instanceof MaterialCustom) {
         pipelineToUse = this.materialManager.getCustomPipeline(
           mesh.material,
           this.camera,
           this.meshBindGroupLayout,
         );
-      } else if (mesh.material instanceof MaterialBasic || 
-                 (mesh.material instanceof MaterialPBR && mesh.material.hooks.albedo)) {
+      } else if (
+        mesh.material instanceof MaterialBasic ||
+        (mesh.material instanceof MaterialPBR && mesh.material.hooks.albedo)
+      ) {
         pipelineToUse = this.materialManager.getHookPipeline(
           mesh.material,
           this.camera,

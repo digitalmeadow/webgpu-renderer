@@ -14,7 +14,7 @@ struct LightDirectionalUniforms {
     direction: vec4<f32>,
     color: vec4<f32>,
     active_view_projection_index: u32,
-}
+};
 
 @group(0) @binding(0) var<uniform> light_directional_uniforms: LightDirectionalUniforms;
 

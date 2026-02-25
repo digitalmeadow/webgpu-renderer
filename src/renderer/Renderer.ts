@@ -243,6 +243,11 @@ export class Renderer {
       this.materialManager,
     );
 
+    // Shadow Pass
+    if (directionalLights.length > 0) {
+      this.shadowPass.render(commandEncoder, directionalLights, opaqueMeshes);
+    }
+
     // Lighting Pass
     this.lightingPass.render(
       commandEncoder,

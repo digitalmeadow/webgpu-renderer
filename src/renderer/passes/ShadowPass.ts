@@ -26,8 +26,7 @@ export class ShadowPass {
       },
       format: "depth32float",
       usage:
-        GPUTextureUsage.TEXTURE_BINDING |
-        GPUTextureUsage.RENDER_ATTACHMENT,
+        GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
     });
 
     this.shadowTextureView = this.shadowTexture.createView({
@@ -90,19 +89,36 @@ export class ShadowPass {
     directionalLights: DirectionalLight[],
     meshes: Mesh[],
   ): void {
-    for (let lightIndex = 0; lightIndex < directionalLights.length; lightIndex++) {
+    for (
+      let lightIndex = 0;
+      lightIndex < directionalLights.length;
+      lightIndex++
+    ) {
       const light = directionalLights[lightIndex];
-      
-      for (let cascadeIndex = 0; cascadeIndex < SHADOW_MAP_CASCADES_COUNT; cascadeIndex++) {
+
+      for (
+        let cascadeIndex = 0;
+        cascadeIndex < SHADOW_MAP_CASCADES_COUNT;
+        cascadeIndex++
+      ) {
+        // CRITICAL: Update the buffer BEFORE recording the render pass
         light.setActiveCascadeIndex(cascadeIndex);
-        
-        const frustumPlanes = frustumPlanesFromMatrix(light.viewProjectionMatrices[cascadeIndex]);
+
+        const frustumPlanes = frustumPlanesFromMatrix(
+          light.viewProjectionMatrices[cascadeIndex],
+        );
         const visibleMeshes = meshes.filter((mesh) => {
           mesh.updateWorldAABB();
           return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
         });
 
-        const passEncoder = encoder.beginRenderPass({
+        // Create a dedicated encoder for this cascade
+        // This ensures the writeBuffer executes before we record the render pass
+        const cascadeEncoder = this.device.createCommandEncoder({
+          label: `Shadow Pass Encoder Light ${lightIndex} Cascade ${cascadeIndex}`,
+        });
+
+        const passEncoder = cascadeEncoder.beginRenderPass({
           label: `Shadow Pass Light ${lightIndex} Cascade ${cascadeIndex}`,
           colorAttachments: [],
           depthStencilAttachment: {
@@ -114,7 +130,7 @@ export class ShadowPass {
         });
 
         passEncoder.setPipeline(this.pipeline);
-        
+
         for (const mesh of visibleMeshes) {
           const meshBindGroup = this.device.createBindGroup({
             label: "Shadow Pass Mesh Bind Group",
@@ -135,6 +151,9 @@ export class ShadowPass {
         }
 
         passEncoder.end();
+
+        // Submit immediately to ensure this cascade's buffer write has executed
+        this.device.queue.submit([cascadeEncoder.finish()]);
       }
     }
   }

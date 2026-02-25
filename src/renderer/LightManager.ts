@@ -14,13 +14,13 @@ export class LightManager {
   public uniformsBuffer: GPUBuffer;
   public lightBindGroupLayout: GPUBindGroupLayout;
   public lightBindGroup: GPUBindGroup;
-  
+
   public shadowSampler: GPUSampler;
   public shadowTextureView: GPUTextureView | null = null;
-  
+
   public lightingBindGroupLayout: GPUBindGroupLayout;
   public lightingBindGroup: GPUBindGroup | null = null;
-  
+
   public sceneLightBindGroupLayout: GPUBindGroupLayout;
   public sceneLightBindGroup: GPUBindGroup | null = null;
 
@@ -164,11 +164,11 @@ export class LightManager {
 
     if (directionalLights.length > 0) {
       const light = directionalLights[0];
-      
+
       // Only init shadow resources if we need them (not needed for basic lighting)
-      // if (!light.shadowBuffer) {
-      //   light.initShadowResources(this.device);
-      // }
+      if (!light.shadowBuffer) {
+        light.initShadowResources(this.device);
+      }
 
       // Get camera if available
       const camera = cameras.length > 0 ? cameras[0] : null;
@@ -178,10 +178,15 @@ export class LightManager {
           camera.target.data[1] - camera.position.data[1],
           camera.target.data[2] - camera.position.data[2],
         );
-        
+
         light.direction = light.transform.getForward();
         // Not updating cascade matrices since we're not using shadows
-        // light.updateCascadeMatrices(camera.position, cameraDirection, camera.near, camera.far);
+        light.updateCascadeMatrices(
+          camera.position,
+          cameraDirection,
+          camera.near,
+          camera.far,
+        );
       }
 
       const lightData = new Float32Array(MAX_LIGHTS * (LIGHT_SIZE / 4));

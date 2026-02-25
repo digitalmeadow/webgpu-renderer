@@ -34,7 +34,7 @@ async function main() {
 
   // Directional light at an angle for shadow casting
   const light = new DirectionalLight("main light");
-  light.transform.setPosition(0, 10, 5);
+  light.transform.setPosition(0, 5, 0);
   light.transform.lookAt(new Vec3(0, 0, 0));
   light.intensity = 1.5;
   scene.add(light);
@@ -76,8 +76,8 @@ async function main() {
     undefined,
     undefined,
     canvas.clientWidth / canvas.clientHeight,
-    0.01,
-    60.0,
+    1.0,
+    20.0,
   );
 
   // Initialize fly controls
