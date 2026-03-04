@@ -1,6 +1,6 @@
 import { Light, DirectionalLight } from "../lights";
 import { SHADOW_MAP_CASCADES_COUNT } from "../lights/DirectionalLight";
-import { Vec3, Mat4 } from "../math";
+import { Vec3 } from "../math";
 import { SceneUniforms } from "../uniforms";
 
 const MAX_LIGHTS = 1;
@@ -180,19 +180,12 @@ export class LightManager {
         );
 
         light.direction = light.transform.getForward();
-
-        console.log(`[LightManager] Light position: (${light.transform.translation.x.toFixed(2)}, ${light.transform.translation.y.toFixed(2)}, ${light.transform.translation.z.toFixed(2)})`);
-        console.log(`[LightManager] Light getForward(): (${light.direction.x.toFixed(3)}, ${light.direction.y.toFixed(3)}, ${light.direction.z.toFixed(3)})`);
-
-        const viewProjectionInverse = Mat4.create();
-        Mat4.invert(camera.viewProjectionMatrix, viewProjectionInverse);
-
+        // Not updating cascade matrices since we're not using shadows
         light.updateCascadeMatrices(
           camera.position,
           cameraDirection,
           camera.near,
           camera.far,
-          viewProjectionInverse,
         );
       }
 

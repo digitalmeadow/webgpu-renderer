@@ -88,35 +88,3 @@ export function aabbInFrustum(aabb: AABB, planes: FrustumPlane[]): boolean {
   }
   return true;
 }
-
-export function frustumCornersFromInverseViewProjection(
-  inverseViewProjection: Mat4,
-): Vec3[] {
-  const corners: Vec3[] = [];
-  
-  const ndcCorners = [
-    [-1, -1, -1],
-    [1, -1, -1],
-    [-1, 1, -1],
-    [1, 1, -1],
-    [-1, -1, 1],
-    [1, -1, 1],
-    [-1, 1, 1],
-    [1, 1, 1],
-  ];
-
-  for (const [x, y, z] of ndcCorners) {
-    const point = Vec3.create(x, y, z);
-    const transformed = Vec3.create();
-    Vec3.transformMat4(point, inverseViewProjection, transformed);
-    const w = transformed.z;
-    if (w !== 0) {
-      transformed.data[0] /= w;
-      transformed.data[1] /= w;
-      transformed.data[2] /= w;
-    }
-    corners.push(transformed);
-  }
-
-  return corners;
-}
