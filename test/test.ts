@@ -34,7 +34,7 @@ async function main() {
 
   // Directional light at an angle for shadow casting
   const light = new DirectionalLight("main light");
-  light.transform.setPosition(0, 5, 0);
+  light.transform.setPosition(0, 5, -5);
   light.transform.lookAt(new Vec3(0, 0, 0));
   light.intensity = 1.5;
   scene.add(light);
@@ -103,11 +103,11 @@ async function main() {
     flyControls.update(time.delta);
 
     // Rotate the caster cube
-    casterCube.transform.setRotation(
-      time.elapsed * 0.5,
-      time.elapsed * 0.7,
-      time.elapsed * 0.3,
-    );
+    // casterCube.transform.setRotation(
+    //   time.elapsed * 0.5,
+    //   time.elapsed * 0.7,
+    //   time.elapsed * 0.3,
+    // );
 
     renderer.render(world, camera, time);
     requestAnimationFrame(loop);
