@@ -10,9 +10,6 @@ export class ParticleInstance {
   public alpha: number;
   public billboard: number;
   public frameLerp: number;
-  public startAtlasIndex: number;
-  public endAtlasIndex: number;
-  public animationDuration: number;
 
   constructor(
     position: [number, number, number] = [0, 0, 0],
@@ -25,9 +22,6 @@ export class ParticleInstance {
     alpha: number = 1.0,
     billboard: number = 1,
     frameLerp: number = 0.0,
-    startAtlasIndex: number = 0,
-    endAtlasIndex: number = 0,
-    animationDuration: number = 0,
   ) {
     this.position = position;
     this.scale = scale;
@@ -40,9 +34,6 @@ export class ParticleInstance {
     this.alpha = alpha;
     this.billboard = billboard;
     this.frameLerp = frameLerp;
-    this.startAtlasIndex = startAtlasIndex;
-    this.endAtlasIndex = endAtlasIndex;
-    this.animationDuration = animationDuration;
   }
 
   get lifeRatio(): number {
@@ -63,14 +54,18 @@ export class ParticleInstance {
     gradientMapIndex: number = 0,
     alpha: number = 1.0,
     billboard: number = 1,
-    startAtlasIndex: number = 0,
-    endAtlasIndex: number = 0,
-    animationDuration: number = 0,
   ): void {
-    this.position = [...position];
+    this.position[0] = position[0];
+    this.position[1] = position[1];
+    this.position[2] = position[2];
     this.scale = scale;
-    this.rotation = [...rotation];
-    this.velocity = [...velocity];
+    this.rotation[0] = rotation[0];
+    this.rotation[1] = rotation[1];
+    this.rotation[2] = rotation[2];
+    this.rotation[3] = rotation[3];
+    this.velocity[0] = velocity[0];
+    this.velocity[1] = velocity[1];
+    this.velocity[2] = velocity[2];
     this.lifetime = lifetime;
     this.maxLifetime = lifetime;
     this.atlasRegionIndex = atlasRegionIndex;
@@ -78,9 +73,6 @@ export class ParticleInstance {
     this.alpha = alpha;
     this.billboard = billboard;
     this.frameLerp = 0.0;
-    this.startAtlasIndex = startAtlasIndex;
-    this.endAtlasIndex = endAtlasIndex;
-    this.animationDuration = animationDuration;
   }
 
   update(delta: number): void {

@@ -87,9 +87,6 @@ async function main() {
   particleDesc.spawnLifetimes = [2.0];
   particleDesc.spawnAlphas = [1.0];
   particleDesc.spawnBillboards = [1];
-  particleDesc.spawnStartAtlasIndices = [0];
-  particleDesc.spawnEndAtlasIndices = [4];
-  particleDesc.spawnAnimationDurations = [2.0];
 
   // Create particle material with textures
   const particleMaterial = new MaterialParticle();

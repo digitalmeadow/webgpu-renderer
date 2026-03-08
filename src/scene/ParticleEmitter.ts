@@ -17,15 +17,13 @@ export interface ParticleEmitterDesc {
   spawnLifetimes: number[];
   spawnAlphas: number[];
   spawnBillboards: number[];
-  spawnStartAtlasIndices?: number[];
-  spawnEndAtlasIndices?: number[];
-  spawnAnimationDurations?: number[];
 }
 
 export class ParticleEmitter extends Entity {
   private device: GPUDevice;
   public maxInstances: number;
   public instances: ParticleInstance[];
+  private deadPool: ParticleInstance[] = [];
   public aliveCount: number = 0;
 
   public material: MaterialParticle;
@@ -41,6 +39,13 @@ export class ParticleEmitter extends Entity {
   private timeSinceLastSpawn: number = 0;
 
   public desc: ParticleEmitterDesc;
+
+  private instanceBufferData: ArrayBuffer;
+  private floatView: Float32Array;
+  private uintView: Uint32Array;
+
+  private tempPos: Vec3 = new Vec3();
+  private tempVel: Vec3 = new Vec3();
 
   constructor(
     device: GPUDevice,
@@ -92,6 +97,12 @@ export class ParticleEmitter extends Entity {
       size: maxInstances * ParticleInstanceGPU.stride,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
+
+    this.instanceBufferData = new ArrayBuffer(
+      maxInstances * ParticleInstanceGPU.stride,
+    );
+    this.floatView = new Float32Array(this.instanceBufferData);
+    this.uintView = new Uint32Array(this.instanceBufferData);
 
     this.meshUniformsBuffer = device.createBuffer({
       label: `${name} Mesh Uniforms Buffer`,
@@ -154,7 +165,9 @@ export class ParticleEmitter extends Entity {
       instance.update(delta);
 
       if (!instance.isAlive()) {
-        this.instances.splice(i, 1);
+        this.deadPool.push(instance);
+        this.instances[i] = this.instances[this.instances.length - 1];
+        this.instances.pop();
       }
     }
 
@@ -166,10 +179,6 @@ export class ParticleEmitter extends Entity {
     const worldMatrix = this.transform.getWorldMatrix();
     const rotation = this.transform.rotation;
 
-    const startAtlasIndices = this.desc.spawnStartAtlasIndices ?? [0];
-    const endAtlasIndices = this.desc.spawnEndAtlasIndices ?? [0];
-    const animationDurations = this.desc.spawnAnimationDurations ?? [0];
-
     for (let i = 0; i < this.desc.spawnCount; i++) {
       if (this.instances.length >= this.maxInstances) {
         break;
@@ -179,73 +188,85 @@ export class ParticleEmitter extends Entity {
 
       const localPos = this.desc.spawnPositions[spawnIndex];
       const worldPos = Vec3.transformMat4(
-        Vec3.create(localPos[0], localPos[1], localPos[2]),
+        this.tempPos.set(localPos[0], localPos[1], localPos[2]),
         worldMatrix,
+        this.tempPos,
       );
 
       const localVel = this.desc.spawnVelocities[spawnIndex];
       const worldVel = Vec3.transformQuat(
-        Vec3.create(localVel[0], localVel[1], localVel[2]),
+        this.tempVel.set(localVel[0], localVel[1], localVel[2]),
         rotation,
+        this.tempVel,
       );
 
-      const startIdx = startAtlasIndices[spawnIndex % startAtlasIndices.length];
-      const endIdx = endAtlasIndices[spawnIndex % endAtlasIndices.length];
-      const animDur =
-        animationDurations[spawnIndex % animationDurations.length];
+      const rot = this.desc.spawnRotations[spawnIndex];
+      let instance: ParticleInstance;
 
-      const instance = new ParticleInstance(
-        [worldPos.x, worldPos.y, worldPos.z],
-        this.desc.spawnScales[spawnIndex],
-        [...this.desc.spawnRotations[spawnIndex]],
-        [worldVel.x, worldVel.y, worldVel.z],
-        this.desc.spawnLifetimes[spawnIndex],
-        startIdx,
-        0,
-        this.desc.spawnAlphas[spawnIndex],
-        this.desc.spawnBillboards[spawnIndex],
-        0.0,
-        startIdx,
-        endIdx,
-        animDur,
-      );
+      if (this.deadPool.length > 0) {
+        instance = this.deadPool.pop()!;
+        instance.reset(
+          [worldPos.x, worldPos.y, worldPos.z],
+          this.desc.spawnScales[spawnIndex],
+          [rot[0], rot[1], rot[2], rot[3]],
+          [worldVel.x, worldVel.y, worldVel.z],
+          this.desc.spawnLifetimes[spawnIndex],
+          0,
+          0,
+          this.desc.spawnAlphas[spawnIndex],
+          this.desc.spawnBillboards[spawnIndex],
+        );
+      } else {
+        instance = new ParticleInstance(
+          [worldPos.x, worldPos.y, worldPos.z],
+          this.desc.spawnScales[spawnIndex],
+          [rot[0], rot[1], rot[2], rot[3]],
+          [worldVel.x, worldVel.y, worldVel.z],
+          this.desc.spawnLifetimes[spawnIndex],
+          0,
+          0,
+          this.desc.spawnAlphas[spawnIndex],
+          this.desc.spawnBillboards[spawnIndex],
+          0.0,
+        );
+      }
 
       this.instances.push(instance);
     }
   }
 
   private updateInstanceBuffer(): void {
-    const buffer = new ArrayBuffer(
-      this.instances.length * ParticleInstanceGPU.stride,
-    );
-    const floatView = new Float32Array(buffer);
-    const uintView = new Uint32Array(buffer);
-
     for (let i = 0; i < this.instances.length; i++) {
       const instance = this.instances[i];
       const offset = i * 13;
 
-      floatView[offset + 0] = instance.position[0];
-      floatView[offset + 1] = instance.position[1];
-      floatView[offset + 2] = instance.position[2];
-      floatView[offset + 3] = instance.scale;
+      this.floatView[offset + 0] = instance.position[0];
+      this.floatView[offset + 1] = instance.position[1];
+      this.floatView[offset + 2] = instance.position[2];
+      this.floatView[offset + 3] = instance.scale;
 
-      floatView[offset + 4] = instance.rotation[0];
-      floatView[offset + 5] = instance.rotation[1];
-      floatView[offset + 6] = instance.rotation[2];
-      floatView[offset + 7] = instance.rotation[3];
+      this.floatView[offset + 4] = instance.rotation[0];
+      this.floatView[offset + 5] = instance.rotation[1];
+      this.floatView[offset + 6] = instance.rotation[2];
+      this.floatView[offset + 7] = instance.rotation[3];
 
-      uintView[offset + 8] = instance.atlasRegionIndex;
-      uintView[offset + 9] = instance.gradientMapIndex;
+      this.uintView[offset + 8] = instance.atlasRegionIndex;
+      this.uintView[offset + 9] = instance.gradientMapIndex;
 
-      floatView[offset + 10] = instance.alpha;
+      this.floatView[offset + 10] = instance.alpha;
 
-      uintView[offset + 11] = instance.billboard;
+      this.uintView[offset + 11] = instance.billboard;
 
-      floatView[offset + 12] = instance.frameLerp;
+      this.floatView[offset + 12] = instance.frameLerp;
     }
 
-    this.device.queue.writeBuffer(this.instanceBuffer, 0, buffer);
+    this.device.queue.writeBuffer(
+      this.instanceBuffer,
+      0,
+      this.instanceBufferData,
+      0,
+      this.instances.length * ParticleInstanceGPU.stride,
+    );
   }
 
   destroy(): void {
