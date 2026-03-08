@@ -3,14 +3,14 @@ import {
   World,
   Scene,
   DirectionalLight,
-  Texture,
-  MaterialPBR,
   MaterialBasic,
   Mesh,
   Camera,
   FlyControls,
   Time,
   Vec3,
+  ParticleEmitter,
+  createDefaultParticleEmitterDesc,
 } from "../src";
 import { createCubeGeometry, createPlaneGeometry } from "../src/geometries";
 
@@ -69,6 +69,30 @@ async function main() {
   );
   casterCube.transform.setPosition(0, 1, 0);
   scene.add(casterCube);
+
+  // Create particle emitter
+  const particleDesc = createDefaultParticleEmitterDesc();
+  particleDesc.spawnCount = 3;
+  particleDesc.spawnRate = 15;
+  particleDesc.spawnPositions = [[0, 0, 0]];
+  particleDesc.spawnScales = [0.2];
+  particleDesc.spawnVelocities = [
+    [-0.3, 1.5, -0.3],
+    [0, 1.5, 0],
+    [0.3, 1.5, 0.3],
+  ];
+  particleDesc.spawnLifetimes = [2.0];
+  particleDesc.spawnAlphas = [1.0];
+  particleDesc.spawnBillboards = [1];
+
+  const particleEmitter = new ParticleEmitter(
+    device,
+    "fire",
+    particleDesc,
+    500,
+  );
+  particleEmitter.transform.setPosition(0, 0, 5);
+  scene.add(particleEmitter);
 
   const camera = new Camera(
     device,

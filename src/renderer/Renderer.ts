@@ -1,4 +1,5 @@
 import { ForwardPass } from "./passes/ForwardPass";
+import { ParticlesPass } from "./passes/ParticlesPass";
 import { World } from "../scene";
 import { Camera } from "../camera";
 import { Time } from "../time";
@@ -8,7 +9,7 @@ import { LightingPass } from "./passes/LightingPass";
 import { OutputPass } from "./passes/OutputPass";
 import { ShadowPass } from "./passes/ShadowPass";
 import { MaterialManager } from "../materials";
-import { Mesh } from "../scene";
+import { Mesh, ParticleEmitter } from "../scene";
 
 import { LightManager } from "./LightManager";
 import { SceneUniforms } from "../uniforms";
@@ -29,9 +30,11 @@ export class Renderer {
   private outputPass: OutputPass;
   private shadowPass: ShadowPass;
   private forwardPass: ForwardPass;
+  private particlesPass: ParticlesPass;
   private materialManager: MaterialManager;
   private lightManager: LightManager;
   private sceneUniforms: SceneUniforms;
+  private camera: Camera | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -45,6 +48,7 @@ export class Renderer {
     this.outputPass = null as unknown as OutputPass;
     this.shadowPass = null as unknown as ShadowPass;
     this.forwardPass = null as unknown as ForwardPass;
+    this.particlesPass = null as unknown as ParticlesPass;
     this.materialManager = null as unknown as MaterialManager;
     this.lightManager = null as unknown as LightManager;
     this.sceneUniforms = null as unknown as SceneUniforms;
@@ -113,7 +117,7 @@ export class Renderer {
         this.canvas.height,
       );
 
-      const camera = new Camera(this.device);
+      this.camera = new Camera(this.device);
 
       this.geometryPass = new GeometryPass(
         this.device,
@@ -124,7 +128,7 @@ export class Renderer {
       this.lightingPass = new LightingPass(
         this.device,
         this.geometryBuffer,
-        camera,
+        this.camera,
         this.lightManager.lightingBindGroupLayout,
         this.sceneUniforms.bindGroupLayout,
         this.canvas.width,
@@ -134,6 +138,8 @@ export class Renderer {
       this.outputPass = new OutputPass(this.device);
 
       this.shadowPass = new ShadowPass(this.device);
+
+      this.particlesPass = new ParticlesPass(this.device, this.camera!);
 
       // ForwardPass will be initialized in the render loop on first use
       // to ensure we have a camera reference.
@@ -273,6 +279,21 @@ export class Renderer {
       );
     }
 
+    // Particles Pass
+    const emitters = this.collectParticleEmitters(world);
+    for (const emitter of emitters) {
+      emitter.update(time.delta);
+    }
+    if (this.particlesPass && emitters.length > 0) {
+      this.particlesPass.render(
+        commandEncoder,
+        camera,
+        emitters,
+        this.lightingPass.outputView,
+        this.geometryBuffer.depthView,
+      );
+    }
+
     // Output Pass
     const swapChainView = this.context.getCurrentTexture().createView();
     this.outputPass.render(
@@ -337,5 +358,17 @@ export class Renderer {
       lights.push(...scene.lights);
     }
     return lights;
+  }
+
+  private collectParticleEmitters(world: World): ParticleEmitter[] {
+    const emitters: ParticleEmitter[] = [];
+    for (const scene of world.scenes) {
+      for (const entity of scene.entities) {
+        if (entity instanceof ParticleEmitter) {
+          emitters.push(entity);
+        }
+      }
+    }
+    return emitters;
   }
 }

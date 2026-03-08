@@ -4,3 +4,4 @@ export * from "./Entity";
 export * from "./Transform";
 export * from "./Mesh";
 export * from "./MeshUniforms";
+export * from "./ParticleEmitter";
