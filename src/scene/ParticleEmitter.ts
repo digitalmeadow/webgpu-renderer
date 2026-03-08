@@ -1,5 +1,9 @@
 import { Entity } from "./Entity";
-import { VertexParticle, ParticleInstance, ParticleInstanceGPU } from "../particles";
+import {
+  VertexParticle,
+  ParticleInstance,
+  ParticleInstanceGPU,
+} from "../particles";
 import { Vec3, Mat4 } from "../math";
 import { MaterialParticle } from "../materials";
 
@@ -55,7 +59,9 @@ export class ParticleEmitter extends Entity {
     const vertices = VertexParticle.createQuad();
     const indices = VertexParticle.getIndexArray();
 
-    const vertexData = new Float32Array(vertices.length * VertexParticle.vertexSize / 4);
+    const vertexData = new Float32Array(
+      (vertices.length * VertexParticle.vertexSize) / 4,
+    );
     for (let i = 0; i < vertices.length; i++) {
       const vertexArray = vertices[i].toArray();
       vertexData.set(vertexArray, i * 10);
@@ -121,7 +127,11 @@ export class ParticleEmitter extends Entity {
       0,
       0,
     ]);
-    this.device.queue.writeBuffer(this.materialUniformsBuffer, 0, materialUniforms);
+    this.device.queue.writeBuffer(
+      this.materialUniformsBuffer,
+      0,
+      materialUniforms,
+    );
   }
 
   public updateMaterial(): void {
@@ -181,7 +191,8 @@ export class ParticleEmitter extends Entity {
 
       const startIdx = startAtlasIndices[spawnIndex % startAtlasIndices.length];
       const endIdx = endAtlasIndices[spawnIndex % endAtlasIndices.length];
-      const animDur = animationDurations[spawnIndex % animationDurations.length];
+      const animDur =
+        animationDurations[spawnIndex % animationDurations.length];
 
       const instance = new ParticleInstance(
         [worldPos.x, worldPos.y, worldPos.z],
@@ -204,7 +215,9 @@ export class ParticleEmitter extends Entity {
   }
 
   private updateInstanceBuffer(): void {
-    const buffer = new ArrayBuffer(this.instances.length * ParticleInstanceGPU.stride);
+    const buffer = new ArrayBuffer(
+      this.instances.length * ParticleInstanceGPU.stride,
+    );
     const floatView = new Float32Array(buffer);
     const uintView = new Uint32Array(buffer);
 
@@ -216,7 +229,7 @@ export class ParticleEmitter extends Entity {
       floatView[offset + 1] = instance.position[1];
       floatView[offset + 2] = instance.position[2];
       floatView[offset + 3] = instance.scale;
-      
+
       floatView[offset + 4] = instance.rotation[0];
       floatView[offset + 5] = instance.rotation[1];
       floatView[offset + 6] = instance.rotation[2];
@@ -224,11 +237,11 @@ export class ParticleEmitter extends Entity {
 
       uintView[offset + 8] = instance.atlasRegionIndex;
       uintView[offset + 9] = instance.gradientMapIndex;
-      
+
       floatView[offset + 10] = instance.alpha;
-      
+
       uintView[offset + 11] = instance.billboard;
-      
+
       floatView[offset + 12] = instance.frameLerp;
     }
 
