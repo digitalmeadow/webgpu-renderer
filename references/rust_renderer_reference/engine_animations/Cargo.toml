@@ -1,0 +1,10 @@
+[package]
+name = "engine_animations"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+engine_ids = { path = "../engine_ids" }
+engine_data = { path = "../engine_data" }
+engine_maths = { path = "../engine_maths" }
+engine_world = { path = "../engine_world" }

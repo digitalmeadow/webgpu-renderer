@@ -18,9 +18,9 @@ export class World {
     }
   }
 
-  update(): void {
+  update(deltaTime: number): void {
     for (const scene of this.scenes) {
-      scene.update();
+      scene.update(deltaTime);
     }
   }
 

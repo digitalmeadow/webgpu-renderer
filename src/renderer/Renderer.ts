@@ -224,7 +224,7 @@ export class Renderer {
       );
     }
 
-    world.update();
+    world.update(time.delta);
     camera.update(this.device);
 
     const lights = this.collectLights(world);

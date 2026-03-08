@@ -9,3 +9,4 @@ export * from "./materials";
 export * from "./textures";
 export * from "./uniforms";
 export * from "./particles";
+export * from "./animations";

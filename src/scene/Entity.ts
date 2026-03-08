@@ -10,5 +10,5 @@ export abstract class Entity {
     this.transform = new Transform();
   }
 
-  update(): void {}
+  update(deltaTime?: number): void {}
 }

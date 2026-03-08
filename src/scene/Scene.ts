@@ -1,23 +1,30 @@
 import { Transform } from "./Transform";
 import { Entity } from "./Entity";
 import { type Light, isLight } from "../lights";
+import { AnimationManager } from "../animations";
 
 export class Scene {
   name: string;
   root: Transform;
   entities: Entity[] = [];
   lights: Light[] = [];
+  animationManager: AnimationManager;
 
   constructor(name: string = "Scene") {
     this.name = name;
     this.root = new Transform();
+    this.animationManager = new AnimationManager();
   }
 
   add(entity: Entity): void {
-    this.entities.push(entity);
-    this.root.addChild(entity.transform);
-    if (isLight(entity)) {
-      this.lights.push(entity);
+    if (!this.entities.includes(entity)) {
+      this.entities.push(entity);
+    }
+    if (!entity.transform.parent) {
+      this.root.addChild(entity.transform);
+    }
+    if (isLight(entity) && !this.lights.includes(entity as Light)) {
+      this.lights.push(entity as Light);
     }
   }
 
@@ -36,11 +43,12 @@ export class Scene {
     }
   }
 
-  update(): void {
+  update(deltaTime: number): void {
+    this.animationManager.update(deltaTime);
     this.root.updateWorldMatrix();
     for (const entity of this.entities) {
       if (entity.enabled) {
-        entity.update();
+        entity.update(deltaTime);
       }
     }
   }
