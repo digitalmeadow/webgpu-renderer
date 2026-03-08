@@ -10,6 +10,9 @@ export class ParticleInstance {
   public alpha: number;
   public billboard: number;
   public frameLerp: number;
+  public startAtlasIndex: number;
+  public endAtlasIndex: number;
+  public animationDuration: number;
 
   constructor(
     position: [number, number, number] = [0, 0, 0],
@@ -22,6 +25,9 @@ export class ParticleInstance {
     alpha: number = 1.0,
     billboard: number = 1,
     frameLerp: number = 0.0,
+    startAtlasIndex: number = 0,
+    endAtlasIndex: number = 0,
+    animationDuration: number = 0,
   ) {
     this.position = position;
     this.scale = scale;
@@ -34,6 +40,9 @@ export class ParticleInstance {
     this.alpha = alpha;
     this.billboard = billboard;
     this.frameLerp = frameLerp;
+    this.startAtlasIndex = startAtlasIndex;
+    this.endAtlasIndex = endAtlasIndex;
+    this.animationDuration = animationDuration;
   }
 
   get lifeRatio(): number {
@@ -54,6 +63,9 @@ export class ParticleInstance {
     gradientMapIndex: number = 0,
     alpha: number = 1.0,
     billboard: number = 1,
+    startAtlasIndex: number = 0,
+    endAtlasIndex: number = 0,
+    animationDuration: number = 0,
   ): void {
     this.position = [...position];
     this.scale = scale;
@@ -66,6 +78,9 @@ export class ParticleInstance {
     this.alpha = alpha;
     this.billboard = billboard;
     this.frameLerp = 0.0;
+    this.startAtlasIndex = startAtlasIndex;
+    this.endAtlasIndex = endAtlasIndex;
+    this.animationDuration = animationDuration;
   }
 
   update(delta: number): void {

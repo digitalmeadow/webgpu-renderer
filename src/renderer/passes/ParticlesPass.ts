@@ -2,6 +2,7 @@ import { ParticleEmitter } from "../../scene/ParticleEmitter";
 import { Camera } from "../../camera";
 import { VertexParticle } from "../../particles";
 import { ParticleInstanceGPU } from "../../particles";
+import { Texture } from "../../textures";
 import shader from "./ParticlesPass.wgsl?raw";
 
 export class ParticlesPass {
@@ -12,6 +13,9 @@ export class ParticlesPass {
 
   private meshBindGroupLayout: GPUBindGroupLayout;
   private particlesPassBindGroupLayout: GPUBindGroupLayout;
+
+  private textureCache: Map<Texture, GPUTexture> = new Map();
+  private placeholderTextureView: GPUTextureView;
 
   constructor(device: GPUDevice, camera: Camera) {
     this.device = device;
@@ -118,6 +122,8 @@ export class ParticlesPass {
         format: "depth32float",
       },
     });
+
+    this.placeholderTextureView = this.createPlaceholderTextureView();
   }
 
   render(
@@ -180,11 +186,11 @@ export class ParticlesPass {
           },
           {
             binding: 2,
-            resource: this.createDefaultTextureView(),
+            resource: this.getTextureView(emitter.material.spriteTexture),
           },
           {
             binding: 3,
-            resource: this.createDefaultTextureView(),
+            resource: this.getTextureView(emitter.material.gradientMapTexture),
           },
         ],
       });
@@ -200,9 +206,40 @@ export class ParticlesPass {
     passEncoder.end();
   }
 
-  private createDefaultTextureView(): GPUTextureView {
+  private getTextureView(texture: Texture | null): GPUTextureView {
+    if (!texture) {
+      return this.placeholderTextureView;
+    }
+
+    if (!this.textureCache.has(texture)) {
+      if (!texture.bitmap) {
+        return this.placeholderTextureView;
+      }
+
+      const gpuTexture = this.device.createTexture({
+        size: [texture.bitmap.width, texture.bitmap.height],
+        format: "rgba8unorm",
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.COPY_DST |
+          GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+
+      this.device.queue.copyExternalImageToTexture(
+        { source: texture.bitmap },
+        { texture: gpuTexture },
+        { width: texture.bitmap.width, height: texture.bitmap.height },
+      );
+
+      this.textureCache.set(texture, gpuTexture);
+    }
+
+    return this.textureCache.get(texture)!.createView();
+  }
+
+  private createPlaceholderTextureView(): GPUTextureView {
     const texture = this.device.createTexture({
-      label: "Default Particle Texture",
+      label: "Placeholder Particle Texture",
       size: { width: 1, height: 1, depthOrArrayLayers: 1 },
       format: "rgba8unorm",
       usage:

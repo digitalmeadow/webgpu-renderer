@@ -1,5 +1,3 @@
-import { ParticleInstance } from "./ParticleInstance";
-
 export class ParticleInstanceGPU {
   public position: [number, number, number];
   public scale: number;
@@ -82,35 +80,5 @@ export class ParticleInstanceGPU {
       ],
     };
   }
-
-  toArray(): Float32Array {
-    const data = new Float32Array(13);
-    data[0] = this.position[0];
-    data[1] = this.position[1];
-    data[2] = this.position[2];
-    data[3] = this.scale;
-    data[4] = this.rotation[0];
-    data[5] = this.rotation[1];
-    data[6] = this.rotation[2];
-    data[7] = this.rotation[3];
-    data[8] = this.atlasRegionIndex;
-    data[9] = this.gradientMapIndex;
-    data[10] = this.alpha;
-    data[11] = this.billboard;
-    data[12] = this.frameLerp;
-    return data;
-  }
-
-  static fromRuntimeInstance(instance: ParticleInstance): ParticleInstanceGPU {
-    return new ParticleInstanceGPU(
-      instance.position,
-      instance.scale,
-      instance.rotation,
-      instance.atlasRegionIndex,
-      instance.gradientMapIndex,
-      instance.alpha,
-      instance.billboard,
-      instance.frameLerp,
-    );
-  }
 }
+

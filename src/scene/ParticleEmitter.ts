@@ -1,6 +1,7 @@
 import { Entity } from "./Entity";
 import { VertexParticle, ParticleInstance, ParticleInstanceGPU } from "../particles";
 import { Vec3, Mat4 } from "../math";
+import { MaterialParticle } from "../materials";
 
 export interface ParticleEmitterDesc {
   spawnCount: number;
@@ -12,6 +13,9 @@ export interface ParticleEmitterDesc {
   spawnLifetimes: number[];
   spawnAlphas: number[];
   spawnBillboards: number[];
+  spawnStartAtlasIndices?: number[];
+  spawnEndAtlasIndices?: number[];
+  spawnAnimationDurations?: number[];
 }
 
 export class ParticleEmitter extends Entity {
@@ -19,6 +23,8 @@ export class ParticleEmitter extends Entity {
   public maxInstances: number;
   public instances: ParticleInstance[];
   public aliveCount: number = 0;
+
+  public material: MaterialParticle;
 
   public vertexBuffer: GPUBuffer;
   public indexBuffer: GPUBuffer;
@@ -37,12 +43,14 @@ export class ParticleEmitter extends Entity {
     name: string,
     desc: ParticleEmitterDesc,
     maxInstances: number = 1000,
+    material?: MaterialParticle,
   ) {
     super(name);
     this.device = device;
     this.desc = desc;
     this.maxInstances = maxInstances;
     this.instances = [];
+    this.material = material ?? new MaterialParticle();
 
     const vertices = VertexParticle.createQuad();
     const indices = VertexParticle.getIndexArray();
@@ -91,11 +99,34 @@ export class ParticleEmitter extends Entity {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    const defaultAtlasRegions = new Float32Array([1, 1, 1]);
-    device.queue.writeBuffer(this.meshUniformsBuffer, 0, defaultAtlasRegions);
+    this.updateMeshUniforms();
+    this.updateMaterialUniforms();
+  }
 
-    const defaultMaterialUniforms = new Uint32Array([0, 1]);
-    device.queue.writeBuffer(this.materialUniformsBuffer, 0, defaultMaterialUniforms);
+  private updateMeshUniforms(): void {
+    const atlasRegions = new Float32Array([
+      this.material.atlasRegionsX,
+      this.material.atlasRegionsY,
+      this.material.atlasRegionsTotal,
+      0,
+    ]);
+    this.device.queue.writeBuffer(this.meshUniformsBuffer, 0, atlasRegions);
+  }
+
+  private updateMaterialUniforms(): void {
+    const gradientMapEnabled = this.material.gradientMapEnabled ? 1 : 0;
+    const materialUniforms = new Uint32Array([
+      gradientMapEnabled,
+      this.material.gradientMapCount,
+      0,
+      0,
+    ]);
+    this.device.queue.writeBuffer(this.materialUniformsBuffer, 0, materialUniforms);
+  }
+
+  public updateMaterial(): void {
+    this.updateMeshUniforms();
+    this.updateMaterialUniforms();
   }
 
   update(delta: number = 0): void {
@@ -125,6 +156,10 @@ export class ParticleEmitter extends Entity {
     const worldMatrix = this.transform.getWorldMatrix();
     const rotation = this.transform.rotation;
 
+    const startAtlasIndices = this.desc.spawnStartAtlasIndices ?? [0];
+    const endAtlasIndices = this.desc.spawnEndAtlasIndices ?? [0];
+    const animationDurations = this.desc.spawnAnimationDurations ?? [0];
+
     for (let i = 0; i < this.desc.spawnCount; i++) {
       if (this.instances.length >= this.maxInstances) {
         break;
@@ -144,16 +179,24 @@ export class ParticleEmitter extends Entity {
         rotation,
       );
 
+      const startIdx = startAtlasIndices[spawnIndex % startAtlasIndices.length];
+      const endIdx = endAtlasIndices[spawnIndex % endAtlasIndices.length];
+      const animDur = animationDurations[spawnIndex % animationDurations.length];
+
       const instance = new ParticleInstance(
         [worldPos.x, worldPos.y, worldPos.z],
         this.desc.spawnScales[spawnIndex],
         [...this.desc.spawnRotations[spawnIndex]],
         [worldVel.x, worldVel.y, worldVel.z],
         this.desc.spawnLifetimes[spawnIndex],
-        0,
+        startIdx,
         0,
         this.desc.spawnAlphas[spawnIndex],
         this.desc.spawnBillboards[spawnIndex],
+        0.0,
+        startIdx,
+        endIdx,
+        animDur,
       );
 
       this.instances.push(instance);
@@ -161,16 +204,35 @@ export class ParticleEmitter extends Entity {
   }
 
   private updateInstanceBuffer(): void {
-    const instanceData = new Float32Array(this.instances.length * 13);
+    const buffer = new ArrayBuffer(this.instances.length * ParticleInstanceGPU.stride);
+    const floatView = new Float32Array(buffer);
+    const uintView = new Uint32Array(buffer);
 
     for (let i = 0; i < this.instances.length; i++) {
       const instance = this.instances[i];
-      const gpuInstance = ParticleInstanceGPU.fromRuntimeInstance(instance);
-      const array = gpuInstance.toArray();
-      instanceData.set(array, i * 13);
+      const offset = i * 13;
+
+      floatView[offset + 0] = instance.position[0];
+      floatView[offset + 1] = instance.position[1];
+      floatView[offset + 2] = instance.position[2];
+      floatView[offset + 3] = instance.scale;
+      
+      floatView[offset + 4] = instance.rotation[0];
+      floatView[offset + 5] = instance.rotation[1];
+      floatView[offset + 6] = instance.rotation[2];
+      floatView[offset + 7] = instance.rotation[3];
+
+      uintView[offset + 8] = instance.atlasRegionIndex;
+      uintView[offset + 9] = instance.gradientMapIndex;
+      
+      floatView[offset + 10] = instance.alpha;
+      
+      uintView[offset + 11] = instance.billboard;
+      
+      floatView[offset + 12] = instance.frameLerp;
     }
 
-    this.device.queue.writeBuffer(this.instanceBuffer, 0, instanceData);
+    this.device.queue.writeBuffer(this.instanceBuffer, 0, buffer);
   }
 
   destroy(): void {

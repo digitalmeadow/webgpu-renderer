@@ -20,17 +20,6 @@ struct CameraUniforms {
     near_far: vec2<f32>,
 };
 
-struct ParticleInstanceData {
-  position: vec3<f32>,
-  scale: f32,
-  rotation: vec4<f32>,
-  atlas_region_index: u32,
-  gradient_map_index: u32,
-  alpha: f32,
-  billboard: u32,
-  frame_lerp: f32,
-};
-
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
 
 @group(1) @binding(0) var<uniform> mesh_particle_uniforms: MeshParticleUniforms;
@@ -58,8 +47,11 @@ struct ParticleInstanceInput {
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv_coords: vec2<f32>,
-    @location(1) world_position: vec3<f32>,
-    @location(2) alpha: f32,
+    @location(1) uv_coords_next: vec2<f32>,
+    @location(2) world_position: vec3<f32>,
+    @location(3) alpha: f32,
+    @location(4) @interpolate(flat) gradient_map_index: u32,
+    @location(5) @interpolate(flat) frame_lerp: f32,
 };
 
 fn quat_mul(q1: vec4<f32>, q2: vec4<f32>) -> vec4<f32> {
@@ -71,6 +63,13 @@ fn quat_mul(q1: vec4<f32>, q2: vec4<f32>) -> vec4<f32> {
 
 fn quat_rotate_vector(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
     return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
+}
+
+fn map_range(value: f32, from_min: f32, from_max: f32, to_min: f32, to_max: f32) -> f32 {
+    if from_max == from_min {
+        return to_min;
+    }
+    return to_min + (value - from_min) * (to_max - to_min) / (from_max - from_min);
 }
 
 @vertex
@@ -100,9 +99,37 @@ fn vs_main(
     let world_position = local_pos + instance_position;
 
     out.position = camera.view_projection_matrix * vec4<f32>(world_position, 1.0);
-    out.uv_coords = vertex.uv_coords;
     out.world_position = world_position;
     out.alpha = instance.alpha;
+    out.frame_lerp = instance.frame_lerp;
+    out.gradient_map_index = instance.gradient_map_index;
+
+    let regions_x = f32(mesh_particle_uniforms.regions_x);
+    let regions_y = f32(mesh_particle_uniforms.regions_y);
+    let regions_total = f32(mesh_particle_uniforms.regions_total);
+
+    let atlas_capacity = u32(regions_x * regions_y);
+    let max_frames = min(u32(regions_total), atlas_capacity);
+
+    let atlas_region_index = min(instance.atlas_region_index, max_frames - 1u);
+    let next_index = (atlas_region_index + 1u) % max_frames;
+
+    let region_x_current = f32(atlas_region_index % u32(regions_x));
+    let region_y_current = f32(atlas_region_index / u32(regions_x));
+
+    let region_x_next = f32(next_index % u32(regions_x));
+    let region_y_next = f32(next_index / u32(regions_x));
+
+    let region_width = 1.0 / regions_x;
+    let region_height = 1.0 / regions_y;
+
+    let uv_x_current = map_range(vertex.uv_coords.x, 0.0, 1.0, region_x_current / regions_x, (region_x_current + 1.0) / regions_x);
+    let uv_y_current = map_range(vertex.uv_coords.y, 0.0, 1.0, region_y_current / regions_y, (region_y_current + 1.0) / regions_y);
+    out.uv_coords = vec2<f32>(uv_x_current, uv_y_current);
+
+    let uv_x_next = map_range(vertex.uv_coords.x, 0.0, 1.0, region_x_next / regions_x, (region_x_next + 1.0) / regions_x);
+    let uv_y_next = map_range(vertex.uv_coords.y, 0.0, 1.0, region_y_next / regions_y, (region_y_next + 1.0) / regions_y);
+    out.uv_coords_next = vec2<f32>(uv_x_next, uv_y_next);
 
     return out;
 }
@@ -111,25 +138,21 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let regions_x = mesh_particle_uniforms.regions_x;
-    let regions_y = mesh_particle_uniforms.regions_y;
-    let atlas_region_index = 0u;
+    let albedo = textureSample(atlas_texture, texture_sampler, in.uv_coords);
+    let albedo_next = textureSample(atlas_texture, texture_sampler, in.uv_coords_next);
 
-    let region_width = 1.0 / regions_x;
-    let region_height = 1.0 / regions_y;
+    var color = mix(albedo, albedo_next, in.frame_lerp);
 
-    let region_x = f32(atlas_region_index % u32(regions_x));
-    let region_y = f32(atlas_region_index / u32(regions_x));
+    let alpha = color.a * in.alpha;
 
-    let uv = vec2<f32>(
-        region_width * (in.uv_coords.x + region_x),
-        region_height * (in.uv_coords.y + region_y)
-    );
+    let luminance = clamp(dot(color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    let gradient_selection = f32(in.gradient_map_index) / max(1.0, f32(material_particle_uniforms.gradient_map_count));
+    
+    let gradient_map_uv = vec2<f32>(luminance, gradient_selection);
+    let color_mapped = textureSample(gradient_map_texture, texture_sampler, gradient_map_uv);
 
-    let color = textureSample(atlas_texture, texture_sampler, uv);
+    let is_gradient_enabled = material_particle_uniforms.gradient_map_enabled == 1u;
+    let color_decided = select(color.rgb, color_mapped.rgb, is_gradient_enabled);
 
-    var final_color = color;
-    final_color.a *= in.alpha;
-
-    return final_color;
+    return vec4<f32>(color_decided, alpha);
 }
