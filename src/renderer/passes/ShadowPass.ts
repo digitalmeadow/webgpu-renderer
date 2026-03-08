@@ -71,15 +71,15 @@ export class ShadowPass {
       },
       primitive: {
         topology: "triangle-list",
-        cullMode: "front",
+        cullMode: "back",
       },
       depthStencil: {
         depthWriteEnabled: true,
         depthCompare: "less-equal",
         format: "depth32float",
-        depthBias: 4,
-        depthBiasSlopeScale: 2.0,
-        depthBiasClamp: 0.0,
+        depthBias: 5000,
+        depthBiasSlopeScale: 1.5,
+        depthBiasClamp: 0,
       },
     });
   }

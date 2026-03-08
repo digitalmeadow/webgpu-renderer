@@ -107,56 +107,20 @@ fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
     }
 }
 
-const TAU: f32 = 6.283185307179586;
-const GOLDEN_ANGLE: f32 = 3.883222077450933;
-const VOGEL_SAMPLES: u32 = 12u;
-const FILTER_RADIUS: f32 = 2.0;
-
-// Vogel disk sampling pattern
-fn vogel_offset(i: u32, n: u32, rotation: f32) -> vec2<f32> {
-    let f_i = f32(i);
-    let f_n = f32(n);
-    let r = sqrt((f_i + 0.5) / f_n);
-    let th = rotation + f_i * GOLDEN_ANGLE;
-    return vec2<f32>(cos(th), sin(th)) * r;
-}
-
-// Interleaved gradient noise for dithering
-fn ign(px: i32, py: i32) -> f32 {
-    let fx = f32(px);
-    let fy = f32(py);
-    return fract(52.9829189 * fract(0.06711056 * fx + 0.00583715 * fy));
-}
-
-// Fetch directional shadow with PCF filtering
-fn fetch_light_directional_shadow(cascade_id: u32, homogeneous_coords: vec4<f32>, frag_coord: vec2<f32>) -> f32 {
+// Fetch directional shadow
+fn fetch_light_directional_shadow(cascade_id: u32, homogeneous_coords: vec4<f32>) -> f32 {
     if (homogeneous_coords.w <= 0.0) {
         return 1.0;
     }
     
     let flip_correction = vec2<f32>(0.5, -0.5);
     let proj_correction = 1.0 / homogeneous_coords.w;
-    let light_local = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
+    let uv = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
     let depth = homogeneous_coords.z * proj_correction;
     
-    let px = i32(floor(frag_coord.x));
-    let py = i32(floor(frag_coord.y));
-    let rotation = TAU * ign(px, py);
-    let texel = 1.0 / 2048.0;
-    
-    var sum = 0.0;
-    let eps = 1e-5;
-    
-    for (var i = 0u; i < VOGEL_SAMPLES; i = i + 1u) {
-        let o = vogel_offset(i, VOGEL_SAMPLES, rotation);
-        let uv = light_local + o * texel * FILTER_RADIUS;
-        let uv_clamped = clamp(uv, vec2<f32>(eps, eps), vec2<f32>(1.0 - eps, 1.0 - eps));
-        sum = sum + textureSampleCompareLevel(
-            light_directional_shadow_texture, sampler_compare, uv_clamped, i32(cascade_id), depth
-        );
-    }
-    
-    return sum / f32(VOGEL_SAMPLES);
+    return textureSampleCompareLevel(
+        light_directional_shadow_texture, sampler_compare, uv, i32(cascade_id), depth
+    );
 }
 
 @fragment
@@ -166,7 +130,6 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     // Sample G-Buffer
     let albedo = textureSample(gbuffer_albedo, sampler_linear, in.uv_coords).rgb;
     let normal_roughness = textureSample(gbuffer_normal_roughness, sampler_linear, in.uv_coords);
-    let normal_view = normal_roughness.rgb;
     let roughness = normal_roughness.a;
     let depth = textureLoad(gbuffer_depth, vec2<i32>(in.uv_coords * vec2<f32>(textureDimensions(gbuffer_depth))), 0);
 
@@ -176,21 +139,23 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     // Transform to world space
     let inverse_view = inverse_mat4(camera_uniforms.view_matrix);
     let world_pos = (inverse_view * vec4(view_pos, 1.0)).xyz;
-    let world_normal = normalize((inverse_view * vec4(normalize(normal_view), 0.0)).xyz);
+    let world_normal = normalize(normal_roughness.rgb);
     
     var color = albedo * scene_uniforms.ambient_light_color.rgb;
 
+    let light_dir = normalize(-light_directional_uniforms.direction.xyz);
+    let diffuse = max(0.0, dot(world_normal, light_dir));
+    // let diffuse = 1.0;
+    
     // Directional light with cascade shadow
     let view_space_z = -view_pos.z;
     let cascade = select_cascade(view_space_z, light_directional_uniforms.cascade_splits);
-    
-    let shadow_matrix = light_directional_uniforms.view_projection_matrices[cascade];
-    let shadow_coords = shadow_matrix * vec4(world_pos, 1.0);
-    let shadow = fetch_light_directional_shadow(cascade, shadow_coords, in.position.xy);
 
-    let light_dir = normalize(-light_directional_uniforms.direction.xyz);
-    let diffuse = max(0.0, dot(world_normal, light_dir));
-    
+    let shadow_matrix = light_directional_uniforms.view_projection_matrices[cascade];
+    let shadow_coords = shadow_matrix * vec4<f32>(world_pos, 1.0);
+
+    let shadow = fetch_light_directional_shadow(cascade, shadow_coords);
+
     color += albedo * light_directional_uniforms.color.rgb * light_directional_uniforms.color.a * shadow * diffuse;
 
     output.color = vec4<f32>(color, 1.0);

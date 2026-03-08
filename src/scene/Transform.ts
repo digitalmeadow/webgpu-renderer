@@ -89,11 +89,9 @@ export class Transform {
       target.data[1] - this.translation.data[1],
       target.data[2] - this.translation.data[2],
     );
-    
+
     const len = Math.sqrt(
-      direction.data[0] ** 2 + 
-      direction.data[1] ** 2 + 
-      direction.data[2] ** 2
+      direction.data[0] ** 2 + direction.data[1] ** 2 + direction.data[2] ** 2,
     );
     if (len > 0) {
       direction.data[0] /= len;
@@ -101,13 +99,22 @@ export class Transform {
       direction.data[2] /= len;
     }
 
-    const up = new Vec3(0, 1, 0);
+    let up = new Vec3(0, 1, 0);
+    if (Math.abs(direction.data[1]) > 0.9999) {
+      up = new Vec3(1, 0, 0);
+    }
+
     let right = new Vec3();
-    right.data[0] = up.data[1] * direction.data[2] - up.data[2] * direction.data[1];
-    right.data[1] = up.data[2] * direction.data[0] - up.data[0] * direction.data[2];
-    right.data[2] = up.data[0] * direction.data[1] - up.data[1] * direction.data[0];
-    
-    const rightLen = Math.sqrt(right.data[0] ** 2 + right.data[1] ** 2 + right.data[2] ** 2);
+    right.data[0] =
+      up.data[1] * direction.data[2] - up.data[2] * direction.data[1];
+    right.data[1] =
+      up.data[2] * direction.data[0] - up.data[0] * direction.data[2];
+    right.data[2] =
+      up.data[0] * direction.data[1] - up.data[1] * direction.data[0];
+
+    const rightLen = Math.sqrt(
+      right.data[0] ** 2 + right.data[1] ** 2 + right.data[2] ** 2,
+    );
     if (rightLen > 0) {
       right.data[0] /= rightLen;
       right.data[1] /= rightLen;

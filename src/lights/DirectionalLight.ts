@@ -2,7 +2,8 @@ import { Light, LightType } from "./Light";
 import { Vec3, Mat4 } from "../math";
 
 export const SHADOW_MAP_CASCADES_COUNT = 3;
-export const SHADOW_CASCADE_SPLITS = [0.0, 0.2, 0.5, 1.0];
+export const SHADOW_CASCADE_SPLITS = [0.0, 0.1, 0.75, 1.0];
+export const OFFSET = 50;
 
 export class DirectionalLight extends Light {
   public direction: Vec3 = new Vec3(0, -1, 0);
@@ -155,8 +156,7 @@ export class DirectionalLight extends Light {
         dMin = Math.max(dMin, projection);
       }
       // Add a large Z-extrusion buffer to capture casters outside the visible frustum slice.
-      const shadowCasterExtrusion = 500.0;
-      const eyeDistance = dMin + shadowCasterExtrusion;
+      const eyeDistance = dMin + OFFSET;
 
       // Position eye along light direction from center
       const eye = Vec3.sub(
@@ -261,33 +261,6 @@ export class DirectionalLight extends Light {
     }
 
     return corners;
-  }
-
-  private interpolateFrustumCorners(
-    corners: Vec3[],
-    tNear: number,
-    tFar: number,
-  ): Vec3[] {
-    const result: Vec3[] = [];
-    for (let i = 0; i < 4; i++) {
-      const nearCorner = corners[i];
-      const farCorner = corners[i + 4];
-      result.push(Vec3.lerp(nearCorner, farCorner, tNear));
-      result.push(Vec3.lerp(nearCorner, farCorner, tFar));
-    }
-    return result;
-  }
-
-  private computeFrustumCenter(corners: Vec3[]): Vec3 {
-    let sumX = 0,
-      sumY = 0,
-      sumZ = 0;
-    for (const corner of corners) {
-      sumX += corner.x;
-      sumY += corner.y;
-      sumZ += corner.z;
-    }
-    return Vec3.create(sumX / 8, sumY / 8, sumZ / 8);
   }
 
   private lerp(a: number, b: number, t: number): number {

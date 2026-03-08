@@ -34,7 +34,7 @@ async function main() {
 
   // Directional light at an angle for shadow casting
   const light = new DirectionalLight("main light");
-  light.transform.setPosition(0, 5, 0);
+  light.transform.setPosition(5, 5, -5);
   light.transform.lookAt(new Vec3(0, 0, 0));
   light.intensity = 1.5;
   scene.add(light);
@@ -46,9 +46,10 @@ async function main() {
     renderPass: "geometry",
   });
   await materialManager.loadMaterial(floorMaterial);
+  // Assuming CreatePlaneGeometry generates a horizontal XZ plane
   const floor = new Mesh(device, "floor", floorGeometry, floorMaterial);
-  floor.transform.setPosition(0, 0.0, 0);
-  floor.transform.setRotation(-Math.PI, 0, 0);
+  floor.transform.setPosition(0, -0.1, 0);
+  floor.transform.setRotation(0, 0, 0); // DONT FLIP IT!
   scene.add(floor);
 
   // Cube geometry
@@ -104,9 +105,9 @@ async function main() {
 
     // Rotate the caster cube
     casterCube.transform.setRotation(
-      time.elapsed * 0.005,
-      time.elapsed * 0.007,
-      time.elapsed * 0.003,
+      time.elapsed * 0.2,
+      time.elapsed * 0.3,
+      time.elapsed * 0.1,
     );
 
     renderer.render(world, camera, time);

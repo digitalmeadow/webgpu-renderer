@@ -632,13 +632,13 @@ export class Mat4 {
   static getRotation(m: Mat4, out?: Quat): Quat {
     out ??= new Quat();
     const m00 = m.data[0],
-      m01 = m.data[1],
-      m02 = m.data[2];
-    const m10 = m.data[4],
+      m10 = m.data[1],
+      m20 = m.data[2];
+    const m01 = m.data[4],
       m11 = m.data[5],
-      m12 = m.data[6];
-    const m20 = m.data[8],
-      m21 = m.data[9],
+      m21 = m.data[6];
+    const m02 = m.data[8],
+      m12 = m.data[9],
       m22 = m.data[10];
     const trace = m00 + m11 + m22;
     let S = 0;
