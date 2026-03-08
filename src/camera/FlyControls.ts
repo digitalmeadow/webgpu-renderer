@@ -54,7 +54,6 @@ export class FlyControls {
           this.minSpeed,
           Math.min(this.maxSpeed, this.speed),
         );
-        console.log(`Fly speed: ${this.speed.toFixed(1)}`);
       },
       { passive: false },
     );

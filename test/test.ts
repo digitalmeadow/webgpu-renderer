@@ -104,9 +104,9 @@ async function main() {
 
     // Rotate the caster cube
     casterCube.transform.setRotation(
-      time.elapsed * 0.5,
-      time.elapsed * 0.7,
-      time.elapsed * 0.3,
+      time.elapsed * 0.005,
+      time.elapsed * 0.007,
+      time.elapsed * 0.003,
     );
 
     renderer.render(world, camera, time);
