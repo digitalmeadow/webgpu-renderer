@@ -158,8 +158,9 @@ export class LightManager {
   }
 
   public update(lights: Light[], cameras: any[] = []) {
+    // Use lightType property check instead of instanceof to avoid cross-boundary issues
     const directionalLights = lights.filter(
-      (l) => l instanceof DirectionalLight,
+      (l) => (l as any).lightType === "directional",
     ) as DirectionalLight[];
 
     if (directionalLights.length > 0) {

@@ -23,12 +23,9 @@ export class MaterialCustom extends MaterialBase {
   customUniforms: MaterialCustomUniforms = {};
   public uniforms: MaterialUniforms;
 
-  constructor(
-    device: GPUDevice,
-    name: string,
-    options: MaterialCustomOptions,
-  ) {
+  constructor(device: GPUDevice, name: string, options: MaterialCustomOptions) {
     super(name, options);
+    this.materialType = "custom";
     this.passes = options.passes ?? {};
     this.customUniforms = options.uniforms ?? {};
     this.specialization.isCustom = true;

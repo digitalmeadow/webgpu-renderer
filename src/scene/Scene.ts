@@ -35,8 +35,8 @@ export class Scene {
       entity.transform.remove();
     }
 
-    if (isLight(entity)) {
-      const lightIndex = this.lights.indexOf(entity);
+    if (isLight(entity) && "lightType" in entity) {
+      const lightIndex = this.lights.indexOf(entity as unknown as Light);
       if (lightIndex !== -1) {
         this.lights.splice(lightIndex, 1);
       }

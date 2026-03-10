@@ -22,6 +22,7 @@ export class DirectionalLight extends Light {
 
   constructor(name: string) {
     super(name, LightType.Directional);
+    this.lightType = "directional";
 
     for (let i = 0; i < SHADOW_MAP_CASCADES_COUNT; i++) {
       this.viewProjectionMatrices.push(Mat4.create());

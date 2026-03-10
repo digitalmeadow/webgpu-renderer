@@ -1,5 +1,6 @@
 export type AlphaMode = "opaque" | "blend" | "mask";
 export type RenderPass = "geometry" | "forward";
+export type MaterialType = "base" | "basic" | "pbr" | "custom";
 
 export interface MaterialSpecialization {
   isCustom?: boolean;
@@ -13,6 +14,7 @@ export abstract class MaterialBase {
   doubleSided: boolean = false;
   opacity: number = 1.0;
   specialization: MaterialSpecialization = {};
+  materialType: MaterialType = "base";
 
   constructor(
     name: string,

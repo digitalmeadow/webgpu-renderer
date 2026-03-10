@@ -233,9 +233,9 @@ export class Renderer {
 
     const commandEncoder = this.device.createCommandEncoder();
 
-    // Collect directional lights (for lighting, not shadows yet)
+    // Collect directional lights using lightType property check instead of instanceof
     const directionalLights = lights.filter(
-      (l) => l instanceof DirectionalLight,
+      (l) => (l as any).lightType === "directional",
     ) as DirectionalLight[];
     this.lightManager.update(directionalLights, [camera]);
 
@@ -317,8 +317,9 @@ export class Renderer {
     const meshes: Mesh[] = [];
     for (const scene of world.scenes) {
       for (const entity of scene.entities) {
-        if (entity instanceof Mesh) {
-          meshes.push(entity);
+        // Use geometry property check instead of instanceof to avoid cross-boundary issues
+        if ("geometry" in entity) {
+          meshes.push(entity as Mesh);
         }
       }
     }
@@ -364,8 +365,9 @@ export class Renderer {
     const emitters: ParticleEmitter[] = [];
     for (const scene of world.scenes) {
       for (const entity of scene.entities) {
-        if (entity instanceof ParticleEmitter) {
-          emitters.push(entity);
+        // Use property check instead of instanceof to avoid cross-boundary issues
+        if ("particles" in entity && "maxInstances" in entity) {
+          emitters.push(entity as unknown as ParticleEmitter);
         }
       }
     }

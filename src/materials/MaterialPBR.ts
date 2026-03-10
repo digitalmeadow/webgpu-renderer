@@ -35,6 +35,7 @@ export class MaterialPBR extends MaterialBase {
     options: MaterialPBROptions = {},
   ) {
     super(name, options);
+    this.materialType = "pbr";
     this.albedoTexture = options.albedoTexture ?? null;
     this.normalTexture = options.normalTexture ?? null;
     this.metalnessRoughnessTexture = options.metalnessRoughnessTexture ?? null;

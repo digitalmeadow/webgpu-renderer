@@ -1,4 +1,4 @@
-export { MaterialBase } from "./MaterialBase";
+export { MaterialBase, type MaterialType } from "./MaterialBase";
 export { MaterialPBR } from "./MaterialPBR";
 export { MaterialBasic } from "./MaterialBasic";
 export { MaterialCustom } from "./MaterialCustom";

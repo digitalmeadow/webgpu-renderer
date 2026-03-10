@@ -17,8 +17,12 @@ export class MaterialManager {
   private placeholderNormalTexture: GPUTexture;
   private placeholderMetalRoughnessTexture: GPUTexture;
 
-  private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> = new Map();
-  private hookPipelineCache: Map<MaterialPBR | MaterialBasic, GPURenderPipeline> = new Map();
+  private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> =
+    new Map();
+  private hookPipelineCache: Map<
+    MaterialPBR | MaterialBasic,
+    GPURenderPipeline
+  > = new Map();
 
   private baseGeometryShader: string;
   private baseForwardShader: string;
@@ -102,7 +106,8 @@ export class MaterialManager {
       return this.hookPipelineCache.get(cacheKey)!;
     }
 
-    const baseShader = pass === "geometry" ? this.baseGeometryShader : this.baseForwardShader;
+    const baseShader =
+      pass === "geometry" ? this.baseGeometryShader : this.baseForwardShader;
     let shader = baseShader;
 
     const materialHooks = (material as any).hooks || {};
@@ -200,7 +205,9 @@ export class MaterialManager {
     const customShader = material.passes[pass];
 
     if (!customShader) {
-      console.warn(`MaterialCustom "${material.name}" has no shader for pass: ${pass}`);
+      console.warn(
+        `MaterialCustom "${material.name}" has no shader for pass: ${pass}`,
+      );
       return null;
     }
 
@@ -273,11 +280,12 @@ export class MaterialManager {
   }
 
   async loadMaterial(material: MaterialBase): Promise<void> {
-    if (material instanceof MaterialPBR) {
+    if (material.materialType === "pbr") {
+      const pbrMaterial = material as import("./MaterialPBR").MaterialPBR;
       const textures = [
-        material.albedoTexture,
-        material.normalTexture,
-        material.metalnessRoughnessTexture,
+        pbrMaterial.albedoTexture,
+        pbrMaterial.normalTexture,
+        pbrMaterial.metalnessRoughnessTexture,
       ];
       for (const texture of textures) {
         if (texture && !this.textureCache.has(texture)) {
@@ -314,24 +322,43 @@ export class MaterialManager {
       return this.bindGroupCache.get(material)!;
     }
 
-    if (material instanceof MaterialPBR) {
-      if (!material.albedoTexture) return null;
+    // Handle materials without materialType (backwards compatibility / cross-boundary issue)
+    // Detect material type based on properties
+    let resolvedMaterialType = material.materialType;
+    if (!resolvedMaterialType || resolvedMaterialType === "base") {
+      // Check for PBR properties
+      if ("albedoTexture" in material || "normalTexture" in material) {
+        resolvedMaterialType = "pbr";
+      }
+      // Check for Basic properties
+      else if ("color" in material) {
+        resolvedMaterialType = "basic";
+      }
+      // Check for Custom properties
+      else if ("passes" in material) {
+        resolvedMaterialType = "custom";
+      }
+    }
+
+    if (resolvedMaterialType === "pbr") {
+      const pbrMaterial = material as import("./MaterialPBR").MaterialPBR;
+      if (!pbrMaterial.albedoTexture) return null;
       const albedoView = this.textureCache
-        .get(material.albedoTexture)
+        .get(pbrMaterial.albedoTexture)
         ?.createView();
       if (!albedoView) return null;
 
-      const normalTexture = material.normalTexture
-        ? this.textureCache.get(material.normalTexture)
+      const normalTexture = pbrMaterial.normalTexture
+        ? this.textureCache.get(pbrMaterial.normalTexture)
         : this.placeholderNormalTexture;
       const normalView = normalTexture!.createView();
 
-      const metalRoughnessTexture = material.metalnessRoughnessTexture
-        ? this.textureCache.get(material.metalnessRoughnessTexture)
+      const metalRoughnessTexture = pbrMaterial.metalnessRoughnessTexture
+        ? this.textureCache.get(pbrMaterial.metalnessRoughnessTexture)
         : this.placeholderMetalRoughnessTexture;
       const metalRoughnessView = metalRoughnessTexture!.createView();
 
-      material.uniforms.update(material);
+      pbrMaterial.uniforms.update(pbrMaterial);
 
       const bindGroup = this.device.createBindGroup({
         layout: this.materialBindGroupLayout,
@@ -340,14 +367,15 @@ export class MaterialManager {
           { binding: 1, resource: albedoView },
           { binding: 2, resource: normalView },
           { binding: 3, resource: metalRoughnessView },
-          { binding: 4, resource: { buffer: material.uniforms.buffer } },
+          { binding: 4, resource: { buffer: pbrMaterial.uniforms.buffer } },
         ],
       });
 
       this.bindGroupCache.set(material, bindGroup);
       return bindGroup;
-    } else if (material instanceof MaterialBasic) {
-      material.uniforms.update(material);
+    } else if (resolvedMaterialType === "basic") {
+      const basicMaterial = material as import("./MaterialBasic").MaterialBasic;
+      basicMaterial.uniforms.update(basicMaterial);
 
       const bindGroup = this.device.createBindGroup({
         layout: this.materialBindGroupLayout,
@@ -355,15 +383,20 @@ export class MaterialManager {
           { binding: 0, resource: this.defaultSampler },
           { binding: 1, resource: this.placeholderNormalTexture.createView() },
           { binding: 2, resource: this.placeholderNormalTexture.createView() },
-          { binding: 3, resource: this.placeholderMetalRoughnessTexture.createView() },
-          { binding: 4, resource: { buffer: material.uniforms.buffer } },
+          {
+            binding: 3,
+            resource: this.placeholderMetalRoughnessTexture.createView(),
+          },
+          { binding: 4, resource: { buffer: basicMaterial.uniforms.buffer } },
         ],
       });
 
       this.bindGroupCache.set(material, bindGroup);
       return bindGroup;
-    } else if (material instanceof MaterialCustom) {
-      material.uniforms.update(material);
+    } else if (resolvedMaterialType === "custom") {
+      const customMaterial =
+        material as import("./MaterialCustom").MaterialCustom;
+      customMaterial.uniforms.update(customMaterial);
 
       const bindGroup = this.device.createBindGroup({
         layout: this.materialBindGroupLayout,
@@ -371,8 +404,11 @@ export class MaterialManager {
           { binding: 0, resource: this.defaultSampler },
           { binding: 1, resource: this.placeholderNormalTexture.createView() },
           { binding: 2, resource: this.placeholderNormalTexture.createView() },
-          { binding: 3, resource: this.placeholderMetalRoughnessTexture.createView() },
-          { binding: 4, resource: { buffer: material.uniforms.buffer } },
+          {
+            binding: 3,
+            resource: this.placeholderMetalRoughnessTexture.createView(),
+          },
+          { binding: 4, resource: { buffer: customMaterial.uniforms.buffer } },
         ],
       });
 

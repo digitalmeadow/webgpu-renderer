@@ -26,21 +26,22 @@ export class MaterialBasic extends MaterialBase {
     options: MaterialBasicOptions = {},
   ) {
     super(name, options);
+    this.materialType = "basic";
     this.color = options.color ?? [1, 1, 1, 1];
     this.hooks = options.hooks ?? {};
-    
+
     if (!this.hooks.albedo) {
       this.hooks.albedo = `fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
         return material_albedo_color();
       }`;
     }
-    
+
     if (!this.hooks.uniforms) {
       this.hooks.uniforms = `fn material_albedo_color() -> vec4<f32> { 
         return vec4<f32>(material.color.rgb, material.color.a); 
       }`;
     }
-    
+
     this.uniforms = new MaterialUniforms(device, this);
   }
 }
