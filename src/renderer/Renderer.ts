@@ -1,6 +1,6 @@
 import { ForwardPass } from "./passes/ForwardPass";
 import { ParticlesPass } from "./passes/ParticlesPass";
-import { World } from "../scene";
+import { World, ENTITY_TYPE } from "../scene";
 import { Camera } from "../camera";
 import { Time } from "../time";
 import { GeometryBuffer } from "./GeometryBuffer";
@@ -365,9 +365,8 @@ export class Renderer {
     const emitters: ParticleEmitter[] = [];
     for (const scene of world.scenes) {
       for (const entity of scene.entities) {
-        // Use property check instead of instanceof to avoid cross-boundary issues
-        if ("particles" in entity && "maxInstances" in entity) {
-          emitters.push(entity as unknown as ParticleEmitter);
+        if (entity[ENTITY_TYPE] === "particle") {
+          emitters.push(entity as ParticleEmitter);
         }
       }
     }

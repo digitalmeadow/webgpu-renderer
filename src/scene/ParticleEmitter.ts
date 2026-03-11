@@ -1,4 +1,4 @@
-import { Entity } from "./Entity";
+import { Entity, ENTITY_TYPE } from "./Entity";
 import {
   VertexParticle,
   ParticleInstance,
@@ -25,6 +25,8 @@ export class ParticleEmitter extends Entity {
   public instances: ParticleInstance[];
   private deadPool: ParticleInstance[] = [];
   public aliveCount: number = 0;
+
+  [ENTITY_TYPE]: "particle" = "particle";
 
   public material: MaterialParticle;
 
