@@ -162,9 +162,10 @@ export class GeometryPass {
       passEncoder.setBindGroup(1, mesh.uniforms.bindGroup);
 
       const materialBindGroup = materialManager.getBindGroup(mesh.material);
-      if (materialBindGroup) {
-        passEncoder.setBindGroup(2, materialBindGroup);
+      if (!materialBindGroup) {
+        continue;
       }
+      passEncoder.setBindGroup(2, materialBindGroup);
 
       passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
       passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
