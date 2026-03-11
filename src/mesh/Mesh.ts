@@ -1,10 +1,10 @@
 import { MaterialBase } from "../materials";
 import { MeshUniforms } from "./MeshUniforms";
-import { Entity } from "./Entity";
+import { Entity, EntityType } from "../scene/Entity";
 import { Geometry } from "../geometries";
-import { Mat4 } from "../math";
 
 export class Mesh extends Entity {
+  public type = EntityType.Mesh;
   public geometry: Geometry;
   public uniforms: MeshUniforms;
   public material: MaterialBase | null = null;

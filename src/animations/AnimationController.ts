@@ -2,7 +2,7 @@ import { AnimationClip } from "./AnimationClip";
 
 export class AnimationController {
   clip: AnimationClip;
-  currentTime: number = 0;
+  playhead: number = 0;
   playing: boolean = true;
   loop: boolean = true;
   speed: number = 1;
@@ -21,29 +21,28 @@ export class AnimationController {
 
   stop() {
     this.playing = false;
-    this.currentTime = 0;
+    this.playhead = 0;
     this.evaluate();
   }
 
   update(deltaTime: number) {
     if (!this.playing) return;
 
-    this.currentTime += deltaTime * this.speed;
+    this.playhead += deltaTime * this.speed;
 
-    if (this.currentTime > this.clip.duration) {
+    if (this.playhead > this.clip.duration) {
       if (this.loop) {
-        this.currentTime = this.currentTime % this.clip.duration;
+        this.playhead = this.playhead % this.clip.duration;
       } else {
-        this.currentTime = this.clip.duration;
+        this.playhead = this.clip.duration;
         this.playing = false;
       }
-    } else if (this.currentTime < 0) {
+    } else if (this.playhead < 0) {
       if (this.loop) {
-        this.currentTime =
-          this.clip.duration -
-          (Math.abs(this.currentTime) % this.clip.duration);
+        this.playhead =
+          this.clip.duration - (Math.abs(this.playhead) % this.clip.duration);
       } else {
-        this.currentTime = 0;
+        this.playhead = 0;
         this.playing = false;
       }
     }
@@ -53,7 +52,7 @@ export class AnimationController {
 
   private evaluate() {
     for (const curve of this.clip.curves) {
-      curve.evaluate(this.currentTime);
+      curve.evaluate(this.playhead);
     }
   }
 }

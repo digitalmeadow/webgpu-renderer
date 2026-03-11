@@ -19,7 +19,6 @@ export class FlyControls {
     this.initKeyboard();
     this.initMouse();
 
-    // Set initial yaw/pitch based on camera orientation
     this.updateFromCamera();
   }
 

@@ -35,7 +35,7 @@ export class Scene {
       entity.transform.remove();
     }
 
-    if (isLight(entity) && "lightType" in entity) {
+    if (isLight(entity)) {
       const lightIndex = this.lights.indexOf(entity as unknown as Light);
       if (lightIndex !== -1) {
         this.lights.splice(lightIndex, 1);
@@ -46,6 +46,7 @@ export class Scene {
   update(deltaTime: number): void {
     this.animationManager.update(deltaTime);
     this.root.updateWorldMatrix();
+
     for (const entity of this.entities) {
       if (entity.enabled) {
         entity.update(deltaTime);

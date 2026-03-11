@@ -1,4 +1,4 @@
-import { ParticleEmitter } from "../../scene/ParticleEmitter";
+import { ParticleEmitter } from "../../particles/ParticleEmitter";
 import { Camera } from "../../camera";
 import { VertexParticle } from "../../particles";
 import { ParticleInstanceGPU } from "../../particles";
@@ -89,7 +89,10 @@ export class ParticlesPass {
       vertex: {
         module: shaderModule,
         entryPoint: "vs_main",
-        buffers: [VertexParticle.getBufferLayout(), ParticleInstanceGPU.getBufferLayout()],
+        buffers: [
+          VertexParticle.getBufferLayout(),
+          ParticleInstanceGPU.getBufferLayout(),
+        ],
       },
       fragment: {
         module: shaderModule,

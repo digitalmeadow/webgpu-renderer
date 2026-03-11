@@ -4,6 +4,8 @@
 2. Particles
 -- We can do GLTF step here for loading scenes
 3. Skinning
+4. Point light
+5. Transparency + Forward Pass
 
 
 ---- GLTF ------

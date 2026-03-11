@@ -1,6 +1,5 @@
-import { ForwardPass } from "./passes/ForwardPass";
 import { ParticlesPass } from "./passes/ParticlesPass";
-import { World, ENTITY_TYPE } from "../scene";
+import { World } from "../scene";
 import { Camera } from "../camera";
 import { Time } from "../time";
 import { GeometryBuffer } from "./GeometryBuffer";
@@ -13,7 +12,7 @@ import { Mesh, ParticleEmitter } from "../scene";
 
 import { LightManager } from "./LightManager";
 import { SceneUniforms } from "../uniforms";
-import { Light, DirectionalLight } from "../lights";
+import { Light, DirectionalLight, LightType } from "../lights";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../math";
 
 export class Renderer {
@@ -29,7 +28,6 @@ export class Renderer {
   private lightingPass: LightingPass;
   private outputPass: OutputPass;
   private shadowPass: ShadowPass;
-  private forwardPass: ForwardPass;
   private particlesPass: ParticlesPass;
   private materialManager: MaterialManager;
   private lightManager: LightManager;
@@ -39,7 +37,7 @@ export class Renderer {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.device = null as unknown as GPUDevice;
-    this.context = null as unknown as GPUCanvasContext;
+    // this.context = null as unknown as GPUCanvasContext;
     this.format = navigator.gpu.getPreferredCanvasFormat();
 
     this.geometryBuffer = null as unknown as GeometryBuffer;
@@ -47,11 +45,11 @@ export class Renderer {
     this.lightingPass = null as unknown as LightingPass;
     this.outputPass = null as unknown as OutputPass;
     this.shadowPass = null as unknown as ShadowPass;
-    this.forwardPass = null as unknown as ForwardPass;
     this.particlesPass = null as unknown as ParticlesPass;
     this.materialManager = null as unknown as MaterialManager;
     this.lightManager = null as unknown as LightManager;
     this.sceneUniforms = null as unknown as SceneUniforms;
+    this.resize(canvas.width, canvas.height);
   }
 
   async init(): Promise<void> {
@@ -139,10 +137,7 @@ export class Renderer {
 
       this.shadowPass = new ShadowPass(this.device);
 
-      this.particlesPass = new ParticlesPass(this.device, this.camera!);
-
-      // ForwardPass will be initialized in the render loop on first use
-      // to ensure we have a camera reference.
+      this.particlesPass = new ParticlesPass(this.device, this.camera);
     } else {
       this.geometryBuffer.resize(
         this.device,
@@ -174,55 +169,55 @@ export class Renderer {
     const opaqueMeshes = meshes.filter(
       (m) => m.material?.renderPass === "geometry",
     );
-    const transparentMeshes = meshes.filter(
-      (m) => m.material?.renderPass === "forward",
-    );
+    // const transparentMeshes = meshes.filter(
+    //   (m) => m.material?.renderPass === "forward",
+    // );
 
-    if (!this.forwardPass && transparentMeshes.length > 0) {
-      // Create Global Bind Group (Scene + Light)
-      // We need to combine Scene and Light into a single bind group to stay within the 4 bind group limit.
-      const globalBindGroupLayout = this.device.createBindGroupLayout({
-        label: "Global Bind Group Layout (Scene + Light)",
-        entries: [
-          {
-            binding: 0,
-            visibility: GPUShaderStage.FRAGMENT,
-            buffer: { type: "uniform" },
-          },
-          {
-            binding: 1,
-            visibility: GPUShaderStage.FRAGMENT,
-            buffer: { type: "uniform" },
-          },
-        ],
-      });
+    // if (!this.forwardPass && transparentMeshes.length > 0) {
+    //   // Create Global Bind Group (Scene + Light)
+    //   // We need to combine Scene and Light into a single bind group to stay within the 4 bind group limit.
+    //   const globalBindGroupLayout = this.device.createBindGroupLayout({
+    //     label: "Global Bind Group Layout (Scene + Light)",
+    //     entries: [
+    //       {
+    //         binding: 0,
+    //         visibility: GPUShaderStage.FRAGMENT,
+    //         buffer: { type: "uniform" },
+    //       },
+    //       {
+    //         binding: 1,
+    //         visibility: GPUShaderStage.FRAGMENT,
+    //         buffer: { type: "uniform" },
+    //       },
+    //     ],
+    //   });
 
-      const globalBindGroup = this.device.createBindGroup({
-        label: "Global Bind Group (Scene + Light)",
-        layout: globalBindGroupLayout,
-        entries: [
-          {
-            binding: 0,
-            resource: { buffer: this.sceneUniforms.buffer },
-          },
-          {
-            binding: 1,
-            resource: { buffer: this.lightManager.uniformsBuffer },
-          },
-        ],
-      });
+    //   const globalBindGroup = this.device.createBindGroup({
+    //     label: "Global Bind Group (Scene + Light)",
+    //     layout: globalBindGroupLayout,
+    //     entries: [
+    //       {
+    //         binding: 0,
+    //         resource: { buffer: this.sceneUniforms.buffer },
+    //       },
+    //       {
+    //         binding: 1,
+    //         resource: { buffer: this.lightManager.uniformsBuffer },
+    //       },
+    //     ],
+    //   });
 
-      this.forwardPass = new ForwardPass(
-        this.device,
-        camera,
-        this.sceneUniforms,
-        this.lightManager,
-        this.materialManager,
-        this.geometryPass.meshBindGroupLayout,
-        globalBindGroupLayout,
-        globalBindGroup,
-      );
-    }
+    //   this.forwardPass = new ForwardPass(
+    //     this.device,
+    //     camera,
+    //     this.sceneUniforms,
+    //     this.lightManager,
+    //     this.materialManager,
+    //     this.geometryPass.meshBindGroupLayout,
+    //     globalBindGroupLayout,
+    //     globalBindGroup,
+    //   );
+    // }
 
     world.update(time.delta);
     camera.update(this.device);
@@ -235,9 +230,9 @@ export class Renderer {
 
     // Collect directional lights using lightType property check instead of instanceof
     const directionalLights = lights.filter(
-      (l) => (l as any).lightType === "directional",
+      (light) => light.type === LightType.Directional,
     ) as DirectionalLight[];
-    this.lightManager.update(directionalLights, [camera]);
+    this.lightManager.update(directionalLights, camera);
 
     // Geometry Pass
     this.geometryPass.render(
@@ -269,16 +264,6 @@ export class Renderer {
       this.sceneUniforms.bindGroup,
     );
 
-    // Forward Pass (transparency) - must run BEFORE Output Pass
-    if (this.forwardPass && transparentMeshes.length > 0) {
-      this.forwardPass.render(
-        commandEncoder,
-        transparentMeshes,
-        this.lightingPass.outputView,
-        this.geometryBuffer.depthView,
-      );
-    }
-
     // Particles Pass
     const emitters = this.collectParticleEmitters(world);
     for (const emitter of emitters) {
@@ -293,6 +278,16 @@ export class Renderer {
         this.geometryBuffer.depthView,
       );
     }
+
+    // // Forward Pass (transparency) - must run BEFORE Output Pass
+    // if (this.forwardPass && transparentMeshes.length > 0) {
+    //   this.forwardPass.render(
+    //     commandEncoder,
+    //     transparentMeshes,
+    //     this.lightingPass.outputView,
+    //     this.geometryBuffer.depthView,
+    //   );
+    // }
 
     // Output Pass
     const swapChainView = this.context.getCurrentTexture().createView();
@@ -317,8 +312,7 @@ export class Renderer {
     const meshes: Mesh[] = [];
     for (const scene of world.scenes) {
       for (const entity of scene.entities) {
-        // Use geometry property check instead of instanceof to avoid cross-boundary issues
-        if ("geometry" in entity) {
+        if (entity.type === "mesh") {
           meshes.push(entity as Mesh);
         }
       }
@@ -365,7 +359,7 @@ export class Renderer {
     const emitters: ParticleEmitter[] = [];
     for (const scene of world.scenes) {
       for (const entity of scene.entities) {
-        if (entity[ENTITY_TYPE] === "particle") {
+        if (entity.type === "particleEmitter") {
           emitters.push(entity as ParticleEmitter);
         }
       }

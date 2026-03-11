@@ -11,9 +11,9 @@ export class AnimationClip {
 
   addCurve(curve: AnimationCurve) {
     this.curves.push(curve);
-    if (curve.timestamps.length > 0) {
-      const curveDuration = curve.timestamps[curve.timestamps.length - 1];
-      this.duration = Math.max(this.duration, curveDuration);
-    }
+    if (curve.timestamps.length <= 0) return;
+
+    const duration = curve.timestamps[curve.timestamps.length - 1];
+    this.duration = Math.max(this.duration, duration);
   }
 }

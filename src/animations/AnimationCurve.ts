@@ -7,11 +7,11 @@ export type AnimationInterpolation = "LINEAR" | "STEP" | "CUBICSPLINE";
 export class AnimationCurve {
   target: Transform;
   path: AnimationPath;
-  timestamps: Float32Array; // seconds
-  keyframes: Float32Array; // flat array of vectors/quats
+  timestamps: Float32Array;
+  keyframes: Float32Array;
   interpolation: AnimationInterpolation;
 
-  // temporary objects to avoid allocations during lerp
+  // Temporary objects to avoid allocations during lerp
   private _valA_v3 = new Vec3();
   private _valB_v3 = new Vec3();
   private _valA_q = new Quat();
@@ -34,18 +34,16 @@ export class AnimationCurve {
   evaluate(time: number) {
     if (this.timestamps.length === 0) return;
 
-    // Handle clamping (if time is out of bounds)
     if (time <= this.timestamps[0]) {
-      this.applyKeyframe(0, 0); // Apply first frame
+      this.applyKeyframe(0, 0);
       return;
     }
     const lastIdx = this.timestamps.length - 1;
     if (time >= this.timestamps[lastIdx]) {
-      this.applyKeyframe(lastIdx, 1); // Apply last frame
+      this.applyKeyframe(lastIdx, 1);
       return;
     }
 
-    // Find the current keyframe interval
     let prevIndex = 0;
     let nextIndex = 1;
     for (let i = 0; i < this.timestamps.length; i++) {
@@ -61,9 +59,9 @@ export class AnimationCurve {
     let factor = (time - t0) / (t1 - t0);
 
     if (this.interpolation === "STEP") {
-      factor = 0; // Just use previous keyframe directly
+      factor = 0;
     } else if (this.interpolation === "CUBICSPLINE") {
-      // Not implemented yet
+      // TODO
       return;
     }
 
@@ -99,10 +97,14 @@ export class AnimationCurve {
           this._valA_v3.y,
           this._valA_v3.z,
         );
-      } else {
+      }
+
+      if (this.path === "scale") {
         this.target.setScale(this._valA_v3.x, this._valA_v3.y, this._valA_v3.z);
       }
-    } else if (this.path === "rotation") {
+    }
+
+    if (this.path === "rotation") {
       const stride = 4;
       const offset0 = idx0 * stride;
       const offset1 = idx1 * stride;

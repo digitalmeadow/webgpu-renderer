@@ -1,11 +1,9 @@
-import { Light, DirectionalLight } from "../lights";
-import { SHADOW_MAP_CASCADES_COUNT } from "../lights/DirectionalLight";
-import { Vec3, Mat4 } from "../math";
+import { Camera } from "../camera";
+import { Light, DirectionalLight, LightType } from "../lights";
+import { Vec3 } from "../math";
 import { SceneUniforms } from "../uniforms";
 
 const MAX_LIGHTS = 1;
-const MAX_LIGHT_DIRECTIONAL_COUNT = 2;
-
 const LIGHT_SIZE = 48;
 
 export class LightManager {
@@ -157,10 +155,10 @@ export class LightManager {
     });
   }
 
-  public update(lights: Light[], cameras: any[] = []) {
+  public update(lights: Light[], camera: Camera) {
     // Use lightType property check instead of instanceof to avoid cross-boundary issues
     const directionalLights = lights.filter(
-      (l) => (l as any).lightType === "directional",
+      (light) => light.type === LightType.Directional,
     ) as DirectionalLight[];
 
     if (directionalLights.length > 0) {
@@ -172,37 +170,28 @@ export class LightManager {
       }
 
       // Get camera if available
-      const camera = cameras.length > 0 ? cameras[0] : null;
-      if (camera) {
-        const cameraDirection = new Vec3(
-          camera.target.data[0] - camera.position.data[0],
-          camera.target.data[1] - camera.position.data[1],
-          camera.target.data[2] - camera.position.data[2],
-        );
+      const cameraDirection = new Vec3(
+        camera.target.data[0] - camera.position.data[0],
+        camera.target.data[1] - camera.position.data[1],
+        camera.target.data[2] - camera.position.data[2],
+      );
 
-        light.direction = light.transform.getForward();
+      light.direction = light.transform.getForward();
 
-        light.updateCascadeMatrices(
-          camera.position,
-          cameraDirection,
-          camera.near,
-          camera.far,
-        );
-      }
+      light.updateCascadeMatrices(
+        camera.position,
+        cameraDirection,
+        camera.near,
+        camera.far,
+      );
 
       const lightData = new Float32Array(MAX_LIGHTS * (LIGHT_SIZE / 4));
-      const u32Data = new Uint32Array(lightData.buffer);
 
       lightData.set(light.color.data, 0);
       lightData.set(light.transform.getForward().data, 4);
       lightData[8] = light.intensity;
-      u32Data[9] = light.type;
 
       this.device.queue.writeBuffer(this.lightBuffer, 0, lightData);
     }
-  }
-
-  public getDirectionalLights(): DirectionalLight[] {
-    return [];
   }
 }

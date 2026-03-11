@@ -110,7 +110,7 @@ export class MaterialManager {
       pass === "geometry" ? this.baseGeometryShader : this.baseForwardShader;
     let shader = baseShader;
 
-    const materialHooks = (material as any).hooks || {};
+    const materialHooks = material.hooks || {};
 
     if (materialHooks.albedo) {
       const albedoFunctionRegex =
@@ -281,7 +281,7 @@ export class MaterialManager {
 
   async loadMaterial(material: MaterialBase): Promise<void> {
     if (material.materialType === "pbr") {
-      const pbrMaterial = material as import("./MaterialPBR").MaterialPBR;
+      const pbrMaterial = material as MaterialPBR;
       const textures = [
         pbrMaterial.albedoTexture,
         pbrMaterial.normalTexture,
@@ -341,7 +341,7 @@ export class MaterialManager {
     }
 
     if (resolvedMaterialType === "pbr") {
-      const pbrMaterial = material as import("./MaterialPBR").MaterialPBR;
+      const pbrMaterial = material as MaterialPBR;
       if (!pbrMaterial.albedoTexture) return null;
       const albedoView = this.textureCache
         .get(pbrMaterial.albedoTexture)
@@ -374,7 +374,7 @@ export class MaterialManager {
       this.bindGroupCache.set(material, bindGroup);
       return bindGroup;
     } else if (resolvedMaterialType === "basic") {
-      const basicMaterial = material as import("./MaterialBasic").MaterialBasic;
+      const basicMaterial = material as MaterialBasic;
       basicMaterial.uniforms.update(basicMaterial);
 
       const bindGroup = this.device.createBindGroup({
@@ -394,8 +394,7 @@ export class MaterialManager {
       this.bindGroupCache.set(material, bindGroup);
       return bindGroup;
     } else if (resolvedMaterialType === "custom") {
-      const customMaterial =
-        material as import("./MaterialCustom").MaterialCustom;
+      const customMaterial = material as MaterialCustom;
       customMaterial.uniforms.update(customMaterial);
 
       const bindGroup = this.device.createBindGroup({
