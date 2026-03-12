@@ -8,9 +8,9 @@ import { LightingPass } from "./passes/LightingPass";
 import { OutputPass } from "./passes/OutputPass";
 import { ShadowPass } from "./passes/ShadowPass";
 import { MaterialManager } from "../materials";
-import { Mesh, ParticleEmitter } from "../scene";
-
-import { LightManager } from "./LightManager";
+import { ParticleEmitter } from "../particles";
+import { Mesh } from "../mesh";
+import { LightManager } from "../lights/LightManager";
 import { SceneUniforms } from "../uniforms";
 import { Light, DirectionalLight, LightType } from "../lights";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../math";
@@ -37,7 +37,6 @@ export class Renderer {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.device = null as unknown as GPUDevice;
-    // this.context = null as unknown as GPUCanvasContext;
     this.format = navigator.gpu.getPreferredCanvasFormat();
 
     this.geometryBuffer = null as unknown as GeometryBuffer;

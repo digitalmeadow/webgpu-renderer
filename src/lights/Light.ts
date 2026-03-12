@@ -1,12 +1,6 @@
 import { Vec3 } from "../math";
 import { Entity } from "../scene";
-
-export const LightType = {
-  Directional: "directional",
-  Point: "point",
-  Spot: "spot",
-} as const;
-export type LightType = (typeof LightType)[keyof typeof LightType];
+import { LightType } from ".";
 
 export abstract class Light extends Entity {
   public color: Vec3 = new Vec3(1, 1, 1);

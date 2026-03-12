@@ -1,5 +1,5 @@
-import { Light, LightType } from "./Light";
 import { Vec3, Mat4 } from "../math";
+import { Light, LightType } from ".";
 
 export const SHADOW_MAP_CASCADES_COUNT = 3;
 export const SHADOW_CASCADE_SPLITS = [0.0, 0.1, 0.75, 1.0];

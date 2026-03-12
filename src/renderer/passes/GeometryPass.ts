@@ -1,5 +1,5 @@
 import shader from "./GeometryPass.wgsl?raw";
-import { Mesh } from "../../scene";
+import { Mesh } from "../../mesh";
 import { Vertex } from "../../geometries";
 import { Camera } from "../../camera";
 import { GeometryBuffer } from "../GeometryBuffer";

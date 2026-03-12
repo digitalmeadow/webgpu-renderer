@@ -1,5 +1,5 @@
 import { Camera } from "../camera";
-import { Light, DirectionalLight, LightType } from "../lights";
+import { Light, DirectionalLight, LightType } from ".";
 import { Vec3 } from "../math";
 import { SceneUniforms } from "../uniforms";
 

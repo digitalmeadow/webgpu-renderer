@@ -1,5 +1,5 @@
 import shader from "./ShadowPass.wgsl?raw";
-import { Mesh } from "../../scene";
+import { Mesh } from "../../mesh";
 import { DirectionalLight, SHADOW_MAP_CASCADES_COUNT } from "../../lights";
 import { Vertex } from "../../geometries";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";

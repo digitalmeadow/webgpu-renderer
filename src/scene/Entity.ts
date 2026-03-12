@@ -1,4 +1,4 @@
-import { LightType } from "../lights";
+import { LightType } from "../lights/LightType";
 import { Transform } from "./Transform";
 
 export const EntityType = {
