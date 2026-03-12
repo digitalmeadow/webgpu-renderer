@@ -33,6 +33,9 @@ export class MaterialManager {
     this.defaultSampler = device.createSampler({
       magFilter: "linear",
       minFilter: "linear",
+      mipmapFilter: "linear",
+      addressModeU: "repeat",
+      addressModeV: "repeat",
     });
 
     this.placeholderNormalTexture = this.createPlaceholderTexture([
@@ -293,6 +296,7 @@ export class MaterialManager {
           this.createTextureResources(texture);
         }
       }
+      this.bindGroupCache.delete(material);
     }
   }
 
@@ -348,15 +352,19 @@ export class MaterialManager {
         ?.createView();
       if (!albedoView) return null;
 
-      const normalTexture = pbrMaterial.normalTexture
-        ? this.textureCache.get(pbrMaterial.normalTexture)
-        : this.placeholderNormalTexture;
-      const normalView = normalTexture!.createView();
+      const normalTexture =
+        pbrMaterial.normalTexture &&
+        this.textureCache.get(pbrMaterial.normalTexture);
+      const normalView = normalTexture
+        ? normalTexture.createView()
+        : this.placeholderNormalTexture.createView();
 
-      const metalRoughnessTexture = pbrMaterial.metalnessRoughnessTexture
-        ? this.textureCache.get(pbrMaterial.metalnessRoughnessTexture)
-        : this.placeholderMetalRoughnessTexture;
-      const metalRoughnessView = metalRoughnessTexture!.createView();
+      const metalRoughnessTexture =
+        pbrMaterial.metalnessRoughnessTexture &&
+        this.textureCache.get(pbrMaterial.metalnessRoughnessTexture);
+      const metalRoughnessView = metalRoughnessTexture
+        ? metalRoughnessTexture.createView()
+        : this.placeholderMetalRoughnessTexture.createView();
 
       pbrMaterial.uniforms.update(pbrMaterial);
 

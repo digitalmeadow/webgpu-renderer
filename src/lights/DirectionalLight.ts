@@ -6,7 +6,7 @@ export const SHADOW_CASCADE_SPLITS = [0.0, 0.1, 0.75, 1.0];
 export const OFFSET = 50;
 
 export class DirectionalLight extends Light {
-  public direction: Vec3 = new Vec3(0, -1, 0);
+  public direction: Vec3 = new Vec3(0, -1, -0.5);
 
   public viewProjectionMatrices: Mat4[] = [];
   public cascadeSplits: number[] = [...SHADOW_CASCADE_SPLITS];
@@ -283,8 +283,8 @@ export class DirectionalLight extends Light {
     // direction
     data.set(this.direction.data, 52);
 
-    // color (just use white for now, or your light color)
-    data.set([1, 1, 1, 1], 56);
+    // color.rgb + intensity in alpha to match the lighting shader contract
+    data.set([...this.color.data, this.intensity], 56);
 
     this._device.queue.writeBuffer(this.shadowBuffer, 0, data);
   }

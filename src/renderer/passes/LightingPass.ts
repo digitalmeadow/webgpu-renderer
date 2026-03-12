@@ -1,7 +1,6 @@
 import shader from "./LightingPass.wgsl?raw";
 import { GeometryBuffer } from "../GeometryBuffer";
 import { Camera } from "../../camera";
-import { SceneUniforms } from "../../uniforms";
 
 export class LightingPass {
   private device: GPUDevice;

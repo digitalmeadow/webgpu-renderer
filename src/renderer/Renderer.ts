@@ -251,15 +251,18 @@ export class Renderer {
       this.lightManager.setShadowTexture(
         this.shadowPass.getShadowTextureView(),
       );
-      this.lightManager.updateLightingBindGroup(directionalLights);
+    } else {
+      this.lightManager.setShadowTexture(null);
     }
+
+    this.lightManager.updateLightingBindGroup(directionalLights);
 
     // Lighting Pass
     this.lightingPass.render(
       commandEncoder,
       this.geometryBuffer,
       camera,
-      this.lightManager.lightingBindGroup || this.lightManager.lightBindGroup,
+      this.lightManager.lightingBindGroup,
       this.sceneUniforms.bindGroup,
     );
 

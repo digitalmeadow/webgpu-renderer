@@ -53,8 +53,8 @@ export class GeometryBuffer {
       magFilter: "nearest",
       minFilter: "nearest",
       mipmapFilter: "nearest",
-      addressModeU: "clamp-to-edge",
-      addressModeV: "clamp-to-edge",
+      addressModeU: "repeat",
+      addressModeV: "repeat",
     });
 
     this.bindGroupLayout = device.createBindGroupLayout({

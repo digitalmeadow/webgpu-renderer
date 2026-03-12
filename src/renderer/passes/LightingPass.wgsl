@@ -139,24 +139,30 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     // Transform to world space
     let inverse_view = inverse_mat4(camera_uniforms.view_matrix);
     let world_pos = (inverse_view * vec4(view_pos, 1.0)).xyz;
-    let world_normal = normalize(normal_roughness.rgb);
+    var world_normal = normalize(normal_roughness.rgb);
+
+    // Fallback to up vector if normal is invalid (all zeros)
+    if (dot(world_normal, world_normal) < 0.001) {
+        world_normal = vec3<f32>(0.0, 1.0, 0.0);
+    }
     
     var color = albedo * scene_uniforms.ambient_light_color.rgb;
 
-    let light_dir = normalize(-light_directional_uniforms.direction.xyz);
-    let diffuse = max(0.0, dot(world_normal, light_dir));
-    // let diffuse = 1.0;
-    
-    // Directional light with cascade shadow
-    let view_space_z = -view_pos.z;
-    let cascade = select_cascade(view_space_z, light_directional_uniforms.cascade_splits);
+    if (light_directional_uniforms.color.a > 0.0) {
+        let light_dir = normalize(-light_directional_uniforms.direction.xyz);
+        let diffuse = max(0.0, dot(world_normal, light_dir));
+        
+        // Directional light with cascade shadow
+        let view_space_z = -view_pos.z;
+        let cascade = select_cascade(view_space_z, light_directional_uniforms.cascade_splits);
 
-    let shadow_matrix = light_directional_uniforms.view_projection_matrices[cascade];
-    let shadow_coords = shadow_matrix * vec4<f32>(world_pos, 1.0);
+        let shadow_matrix = light_directional_uniforms.view_projection_matrices[cascade];
+        let shadow_coords = shadow_matrix * vec4<f32>(world_pos, 1.0);
 
-    let shadow = fetch_light_directional_shadow(cascade, shadow_coords);
+        let shadow = fetch_light_directional_shadow(cascade, shadow_coords);
 
-    color += albedo * light_directional_uniforms.color.rgb * light_directional_uniforms.color.a * shadow * diffuse;
+        color += albedo * light_directional_uniforms.color.rgb * light_directional_uniforms.color.a * shadow * diffuse;
+    }
 
     output.color = vec4<f32>(color, 1.0);
     return output;

@@ -3,8 +3,13 @@
 1. Shadows
 2. Particles
 -- We can do GLTF step here for loading scenes
+
+-- We are up to here:
+
+4.a Support multiple DirectionalLights
+4. Spot lightes
+4.c Support multiple Spot Lights
 3. Skinning
-4. Point light
 5. Transparency + Forward Pass
 
 

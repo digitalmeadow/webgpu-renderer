@@ -7,7 +7,7 @@ export class SceneUniforms extends Uniforms {
 
   constructor(
     device: GPUDevice,
-    ambientLightColor: Vec3 = new Vec3(0.05, 0.05, 0.05),
+    ambientLightColor: Vec3 = new Vec3(0.25, 0.25, 0.25),
   ) {
     super(device);
     this._ambientLightColor = ambientLightColor;
@@ -51,7 +51,7 @@ export class SceneUniforms extends Uniforms {
     this.device.queue.writeBuffer(
       this.buffer,
       0,
-      new Float32Array(this._ambientLightColor.data),
+      new Float32Array([...this._ambientLightColor.data, 0.0]),
     );
   }
 
@@ -61,5 +61,6 @@ export class SceneUniforms extends Uniforms {
 
   set ambientLightColor(value: Vec3) {
     this._ambientLightColor = value;
+    this.update();
   }
 }
