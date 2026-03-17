@@ -8,9 +8,9 @@
 
 4.a Support multiple DirectionalLights
 
-/// intermediate step: move pass from init in resize() function, to a seperate function called on resize()
 
 4. Spot lightes
 4.c Support multiple Spot Lights
+/// intermediate step: move pass from init in resize() function, to a seperate function called on resize()
 3. Skinning
 5. Transparency + Forward Pass

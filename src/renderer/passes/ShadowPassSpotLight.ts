@@ -1,0 +1,149 @@
+import shader from "./ShadowPassSpotLight.wgsl?raw";
+import { Mesh } from "../../mesh";
+import { SpotLight, SPOT_SHADOW_MAP_SIZE } from "../../lights";
+import { Vertex } from "../../geometries";
+
+export class ShadowPassSpotLight {
+  private device: GPUDevice;
+  private maxSpotLights: number;
+  private pipeline: GPURenderPipeline;
+  private meshBindGroupLayout: GPUBindGroupLayout;
+  private shadowTexture: GPUTexture;
+  private shadowTextureView: GPUTextureView;
+  private shadowTextureViews: GPUTextureView[] = [];
+
+  constructor(device: GPUDevice, maxSpotLights: number = 1) {
+    this.device = device;
+    this.maxSpotLights = maxSpotLights;
+
+    this.shadowTexture = this.device.createTexture({
+      label: "Shadow Pass SpotLight Texture",
+      size: {
+        width: SPOT_SHADOW_MAP_SIZE,
+        height: SPOT_SHADOW_MAP_SIZE,
+        depthOrArrayLayers: maxSpotLights,
+      },
+      format: "depth32float",
+      usage:
+        GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
+    this.shadowTextureView = this.shadowTexture.createView({
+      label: "Shadow SpotLight Texture Array View",
+      dimension: "2d-array",
+    });
+
+    for (let i = 0; i < this.maxSpotLights; i++) {
+      const view = this.shadowTexture.createView({
+        label: `Shadow SpotLight Texture View ${i}`,
+        baseArrayLayer: i,
+        arrayLayerCount: 1,
+      });
+      this.shadowTextureViews.push(view);
+    }
+
+    this.meshBindGroupLayout = this.device.createBindGroupLayout({
+      label: "Shadow Pass SpotLight Mesh Bind Group Layout",
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: { type: "uniform" },
+        },
+      ],
+    });
+
+    const shaderModule = this.device.createShaderModule({ code: shader });
+
+    this.pipeline = this.device.createRenderPipeline({
+      label: "Shadow Pass SpotLight Pipeline",
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [
+          SpotLight.getShadowBindGroupLayout(this.device),
+          this.meshBindGroupLayout,
+        ],
+      }),
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vs_main",
+        buffers: [Vertex.getBufferLayout()],
+      },
+      primitive: {
+        topology: "triangle-list",
+        cullMode: "front",
+      },
+      depthStencil: {
+        depthWriteEnabled: true,
+        depthCompare: "less-equal",
+        format: "depth32float",
+        depthBias: 4,
+        depthBiasSlopeScale: 2.0,
+        depthBiasClamp: 0,
+      },
+    });
+  }
+
+  public render(
+    encoder: GPUCommandEncoder,
+    spotLights: SpotLight[],
+    meshes: Mesh[],
+  ): void {
+    for (let lightIndex = 0; lightIndex < spotLights.length; lightIndex++) {
+      const light = spotLights[lightIndex];
+
+      light.updateShadowMatrix();
+
+      const visibleMeshes = meshes;
+
+      const encoder = this.device.createCommandEncoder({
+        label: `Shadow Pass SpotLight Encoder Light ${lightIndex}`,
+      });
+
+      const passEncoder = encoder.beginRenderPass({
+        label: `Shadow Pass SpotLight Light ${lightIndex}`,
+        colorAttachments: [],
+        depthStencilAttachment: {
+          view: this.shadowTextureViews[lightIndex],
+          depthClearValue: 1.0,
+          depthLoadOp: "clear",
+          depthStoreOp: "store",
+        },
+      });
+
+      passEncoder.setPipeline(this.pipeline);
+
+      for (const mesh of visibleMeshes) {
+        mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+
+        const meshBindGroup = this.device.createBindGroup({
+          label: "Shadow Pass SpotLight Mesh Bind Group",
+          layout: this.meshBindGroupLayout,
+          entries: [
+            {
+              binding: 0,
+              resource: { buffer: mesh.uniforms.buffer },
+            },
+          ],
+        });
+
+        passEncoder.setBindGroup(0, light.shadowBindGroup);
+        passEncoder.setBindGroup(1, meshBindGroup);
+        passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
+        passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
+        passEncoder.drawIndexed(mesh.geometry.indexCount);
+      }
+
+      passEncoder.end();
+
+      this.device.queue.submit([encoder.finish()]);
+    }
+  }
+
+  public getShadowTextureView(): GPUTextureView {
+    return this.shadowTextureView;
+  }
+
+  public getShadowTextureViews(): GPUTextureView[] {
+    return this.shadowTextureViews;
+  }
+}

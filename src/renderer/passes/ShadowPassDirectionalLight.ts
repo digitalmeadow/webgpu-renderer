@@ -1,4 +1,4 @@
-import shader from "./ShadowPass.wgsl?raw";
+import shader from "./ShadowPassDirectionalLight.wgsl?raw";
 import { Mesh } from "../../mesh";
 import { DirectionalLight, SHADOW_MAP_CASCADES_COUNT } from "../../lights";
 import { Vertex } from "../../geometries";
@@ -6,7 +6,7 @@ import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
 
 const SHADOW_MAP_SIZE = 2048;
 
-export class ShadowPass {
+export class ShadowPassDirectionalLight {
   private device: GPUDevice;
   private maxDirectionalLights: number;
   private pipeline: GPURenderPipeline;

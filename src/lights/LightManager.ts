@@ -1,5 +1,5 @@
 import { Camera } from "../camera";
-import { DirectionalLight, SHADOW_MAP_CASCADES_COUNT } from ".";
+import { DirectionalLight, SpotLight, SHADOW_MAP_CASCADES_COUNT } from ".";
 import { Vec3 } from "../math";
 import { SceneUniforms } from "../uniforms";
 
@@ -8,22 +8,32 @@ const LIGHT_FLOAT_COUNT = LIGHT_SIZE / 4;
 const CASCADE_SPLITS_OFFSET = 48;
 const DIRECTION_OFFSET = 52;
 const COLOR_OFFSET = 56;
-const LIGHT_COUNT_OFFSET = 4 * LIGHT_SIZE; // Byte offset where light_count is stored (must match shader)
+const LIGHT_COUNT_OFFSET = 4 * LIGHT_SIZE;
 
-const MAX_DIRECTIONAL_LIGHTS = 4; // Must match MAX_DIRECTIONAL_LIGHTS in LightingPass.wgsl
+const MAX_DIRECTIONAL_LIGHTS = 4;
 const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
+
+const MAX_SPOT_LIGHTS = 8;
+const DEFAULT_MAX_SPOT_LIGHTS = 1;
+const SPOT_SHADOW_MAP_SIZE = 1024;
+const SPOT_LIGHT_SIZE = 272;
 
 export class LightManager {
   private device: GPUDevice;
   private maxDirectionalLights: number;
+  private maxSpotLights: number;
   public lightBuffer: GPUBuffer;
   public uniformsBuffer: GPUBuffer;
   public lightBindGroupLayout: GPUBindGroupLayout;
   public lightBindGroup: GPUBindGroup;
 
+  public spotLightBuffer: GPUBuffer;
+
   public shadowSampler: GPUSampler;
   public shadowTextureView: GPUTextureView | null = null;
   public shadowTextureViewArray: GPUTextureView[] | null = null;
+
+  public spotShadowTextureView: GPUTextureView | null = null;
 
   public lightingBindGroupLayout: GPUBindGroupLayout;
   public lightingBindGroup: GPUBindGroup;
@@ -39,14 +49,21 @@ export class LightManager {
   constructor(
     device: GPUDevice,
     maxDirectionalLights: number = DEFAULT_MAX_DIRECTIONAL_LIGHTS,
+    maxSpotLights: number = DEFAULT_MAX_SPOT_LIGHTS,
   ) {
     this.device = device;
     this.maxDirectionalLights = maxDirectionalLights;
+    this.maxSpotLights = maxSpotLights;
 
     const bufferSize = LIGHT_SIZE * MAX_DIRECTIONAL_LIGHTS + 4 + 12; // Must match shader's LightDirectionalUniformsArray
 
     this.lightBuffer = this.device.createBuffer({
       size: bufferSize,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    this.spotLightBuffer = this.device.createBuffer({
+      size: SPOT_LIGHT_SIZE * MAX_SPOT_LIGHTS + 16, // 272*8 + 16 = 2192
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -153,6 +170,19 @@ export class LightManager {
             viewDimension: "2d-array",
           },
         },
+        {
+          binding: 3,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
+        {
+          binding: 4,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: {
+            sampleType: "depth",
+            viewDimension: "2d-array",
+          },
+        },
       ],
     });
 
@@ -171,6 +201,14 @@ export class LightManager {
         },
         {
           binding: 2,
+          resource: this.dummyShadowTextureView,
+        },
+        {
+          binding: 3,
+          resource: { buffer: this.spotLightBuffer },
+        },
+        {
+          binding: 4,
           resource: this.dummyShadowTextureView,
         },
       ],
@@ -201,6 +239,99 @@ export class LightManager {
     this.shadowTextureViewArray = viewArray;
   }
 
+  public setSpotShadowTexture(view: GPUTextureView | null): void {
+    this.spotShadowTextureView = view;
+  }
+
+  public updateSpotLights(spotLights: SpotLight[]): void {
+    const activeLights = spotLights.slice(0, this.maxSpotLights);
+
+    for (let i = 0; i < this.maxSpotLights; i++) {
+      const light = activeLights[i];
+
+      if (light) {
+        if (!light.shadowBuffer) {
+          light.initShadowResources(this.device);
+        }
+
+        light.lightIndex = i;
+        light.updateShadowMatrix();
+
+        const lightData = this.createSpotLightData(light, i);
+        this.device.queue.writeBuffer(
+          this.spotLightBuffer,
+          i * SPOT_LIGHT_SIZE,
+          lightData as any,
+        );
+      } else {
+        const fallbackData = this.createSpotLightFallbackData();
+        this.device.queue.writeBuffer(
+          this.spotLightBuffer,
+          i * SPOT_LIGHT_SIZE,
+          fallbackData as any,
+        );
+      }
+    }
+
+    // Write light count at the end of the buffer (offset 2184 = 272*8)
+    const lightCount = new Uint32Array([activeLights.length]);
+    this.device.queue.writeBuffer(
+      this.spotLightBuffer,
+      SPOT_LIGHT_SIZE * MAX_SPOT_LIGHTS + 8,
+      lightCount,
+    );
+  }
+
+  private createSpotLightData(
+    light: SpotLight,
+    lightIndex: number,
+  ): Float32Array {
+    const lightData = this.createSpotLightFallbackData();
+
+    lightData.set(light.viewMatrix.data, 0);
+    lightData.set(light.projectionMatrix.data, 16);
+    lightData.set(light.viewProjectionMatrix.data, 32);
+
+    const position = light.transform.translation;
+    lightData.set(position.data, 48);
+
+    const nearFar = new Float32Array([light.near, light.far, 0, 0]);
+    lightData.set(nearFar, 52);
+
+    const colorIntensity = new Float32Array([
+      ...light.color.data,
+      light.intensity,
+    ]);
+    lightData.set(colorIntensity, 56);
+
+    const forward = light.transform.getForward();
+    lightData.set(forward.data, 60);
+
+    // FOV in radians, inner/outer cone angles in radians
+    const fovRad = (light.fov * Math.PI) / 180;
+    const outer = fovRad * 0.5;
+    const inner = outer - 0.15;
+    const fovInnerOuter = new Float32Array([fovRad, inner, outer, 0]);
+    lightData.set(fovInnerOuter, 64);
+
+    return lightData;
+  }
+
+  private createSpotLightFallbackData(): Float32Array {
+    const lightData = new Float32Array(68); // 272 bytes / 4 = 68 floats
+    lightData[56] = 1.0;
+    lightData[57] = 1.0;
+    lightData[58] = 1.0;
+    lightData[59] = 0.0;
+    // Fallback FOV (45 degrees in radians), inner, outer
+    const defaultFov = (45 * Math.PI) / 180;
+    lightData[64] = defaultFov;
+    lightData[65] = defaultFov * 0.5 - 0.15;
+    lightData[66] = defaultFov * 0.5;
+    lightData[67] = 0.0;
+    return lightData;
+  }
+
   public updateSceneLightBindGroup(sceneUniforms: SceneUniforms): void {
     this.sceneLightBindGroup = this.device.createBindGroup({
       label: "Scene + Light Bind Group",
@@ -218,16 +349,25 @@ export class LightManager {
     });
   }
 
-  public updateLightingBindGroup(directionalLights: DirectionalLight[]): void {
+  public updateLightingBindGroup(
+    directionalLights: DirectionalLight[],
+    spotLights: SpotLight[],
+  ): void {
     const activeLights = directionalLights.slice(0, this.maxDirectionalLights);
     const hasAnyShadowedLight = activeLights.some(
       (light) => light.shadowBuffer && this.shadowTextureView,
     );
 
+    const activeSpotLights = spotLights.slice(0, this.maxSpotLights);
+    const hasAnySpotShadow = activeSpotLights.some(
+      (light) => light.shadowBuffer && this.spotShadowTextureView,
+    );
+
     this.lightingBindGroup = this.device.createBindGroup({
-      label: hasAnyShadowedLight
-        ? "Lighting Bind Group"
-        : "Default Lighting Bind Group",
+      label:
+        hasAnyShadowedLight || hasAnySpotShadow
+          ? "Lighting Bind Group"
+          : "Default Lighting Bind Group",
       layout: this.lightingBindGroupLayout,
       entries: [
         {
@@ -245,6 +385,19 @@ export class LightManager {
           resource:
             hasAnyShadowedLight && this.shadowTextureView
               ? this.shadowTextureView
+              : this.dummyShadowTextureView,
+        },
+        {
+          binding: 3,
+          resource: {
+            buffer: this.spotLightBuffer,
+          },
+        },
+        {
+          binding: 4,
+          resource:
+            hasAnySpotShadow && this.spotShadowTextureView
+              ? this.spotShadowTextureView
               : this.dummyShadowTextureView,
         },
       ],

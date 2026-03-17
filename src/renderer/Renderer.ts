@@ -6,20 +6,23 @@ import { GeometryBuffer } from "./GeometryBuffer";
 import { GeometryPass } from "./passes/GeometryPass";
 import { LightingPass } from "./passes/LightingPass";
 import { OutputPass } from "./passes/OutputPass";
-import { ShadowPass } from "./passes/ShadowPass";
+import { ShadowPassDirectionalLight } from "./passes/ShadowPassDirectionalLight";
+import { ShadowPassSpotLight } from "./passes/ShadowPassSpotLight";
 import { MaterialManager } from "../materials";
 import { ParticleEmitter } from "../particles";
 import { Mesh } from "../mesh";
 import { LightManager } from "../lights/LightManager";
 import { SceneUniforms } from "../uniforms";
-import { Light, DirectionalLight, LightType } from "../lights";
+import { Light, DirectionalLight, SpotLight, LightType } from "../lights";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../math";
 
 export interface RendererOptions {
   maxDirectionalLights?: number;
+  maxSpotLights?: number;
 }
 
 const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
+const DEFAULT_MAX_SPOT_LIGHTS = 1;
 
 export class Renderer {
   private canvas: HTMLCanvasElement;
@@ -27,6 +30,7 @@ export class Renderer {
   private context: GPUCanvasContext | null = null;
   private format: GPUTextureFormat;
   private maxDirectionalLights: number;
+  private maxSpotLights: number;
 
   public frustumCulling: boolean = false;
 
@@ -34,7 +38,8 @@ export class Renderer {
   private geometryPass: GeometryPass;
   private lightingPass: LightingPass;
   private outputPass: OutputPass;
-  private shadowPass: ShadowPass;
+  private shadowPassDirectionalLight: ShadowPassDirectionalLight;
+  private shadowPassSpotLight: ShadowPassSpotLight;
   private particlesPass: ParticlesPass;
   private materialManager: MaterialManager;
   private lightManager: LightManager;
@@ -44,6 +49,7 @@ export class Renderer {
     this.canvas = canvas;
     this.maxDirectionalLights =
       options.maxDirectionalLights ?? DEFAULT_MAX_DIRECTIONAL_LIGHTS;
+    this.maxSpotLights = options.maxSpotLights ?? DEFAULT_MAX_SPOT_LIGHTS;
     this.device = null as unknown as GPUDevice;
     this.format = navigator.gpu.getPreferredCanvasFormat();
 
@@ -51,7 +57,9 @@ export class Renderer {
     this.geometryPass = null as unknown as GeometryPass;
     this.lightingPass = null as unknown as LightingPass;
     this.outputPass = null as unknown as OutputPass;
-    this.shadowPass = null as unknown as ShadowPass;
+    this.shadowPassDirectionalLight =
+      null as unknown as ShadowPassDirectionalLight;
+    this.shadowPassSpotLight = null as unknown as ShadowPassSpotLight;
     this.particlesPass = null as unknown as ParticlesPass;
     this.materialManager = null as unknown as MaterialManager;
     this.lightManager = null as unknown as LightManager;
@@ -87,6 +95,7 @@ export class Renderer {
     this.lightManager = new LightManager(
       this.device,
       this.maxDirectionalLights,
+      this.maxSpotLights,
     );
     this.sceneUniforms = new SceneUniforms(this.device);
 
@@ -154,7 +163,15 @@ export class Renderer {
 
       this.outputPass = new OutputPass(this.device);
 
-      this.shadowPass = new ShadowPass(this.device, this.maxDirectionalLights);
+      this.shadowPassDirectionalLight = new ShadowPassDirectionalLight(
+        this.device,
+        this.maxDirectionalLights,
+      );
+
+      this.shadowPassSpotLight = new ShadowPassSpotLight(
+        this.device,
+        this.maxSpotLights,
+      );
 
       this.particlesPass = new ParticlesPass(
         this.device,
@@ -266,20 +283,41 @@ export class Renderer {
     ) as DirectionalLight[];
     this.lightManager.update(directionalLights, camera);
 
-    // Shadow Pass
+    // Collect spot lights
+    const spotLights = lights.filter(
+      (light) => light.type === LightType.Spot,
+    ) as SpotLight[];
+    if (spotLights.length > 0) {
+      this.lightManager.updateSpotLights(spotLights);
+    }
+
+    // Shadow Pass - Directional Lights
     if (directionalLights.length > 0) {
-      this.shadowPass.render(commandEncoder, directionalLights, opaqueMeshes);
+      this.shadowPassDirectionalLight.render(
+        commandEncoder,
+        directionalLights,
+        opaqueMeshes,
+      );
 
       // Set shadow texture and update lighting bind group
       this.lightManager.setShadowTexture(
-        this.shadowPass.getShadowTextureView(),
-        this.shadowPass.getShadowTextureViews(),
+        this.shadowPassDirectionalLight.getShadowTextureView(),
+        this.shadowPassDirectionalLight.getShadowTextureViews(),
       );
     } else {
       this.lightManager.setShadowTexture(null, null);
     }
 
-    this.lightManager.updateLightingBindGroup(directionalLights);
+    // Shadow Pass - Spot Lights
+    if (spotLights.length > 0) {
+      this.shadowPassSpotLight.render(commandEncoder, spotLights, opaqueMeshes);
+
+      this.lightManager.setSpotShadowTexture(
+        this.shadowPassSpotLight.getShadowTextureView(),
+      );
+    }
+
+    this.lightManager.updateLightingBindGroup(directionalLights, spotLights);
 
     // Lighting Pass
     this.lightingPass.render(

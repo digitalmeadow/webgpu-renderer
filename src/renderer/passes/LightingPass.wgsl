@@ -42,9 +42,30 @@ struct LightDirectionalUniformsArray {
     light_count: u32,
 };
 
+// Spot Light Uniforms
+const MAX_SPOT_LIGHTS: u32 = 8;
+
+struct LightSpotUniforms {
+    view_matrix: mat4x4<f32>,
+    projection_matrix: mat4x4<f32>,
+    view_projection_matrix: mat4x4<f32>,
+    position: vec4<f32>,
+    near_far: vec4<f32>,
+    color_intensity: vec4<f32>,
+    forward: vec4<f32>,
+    fov_inner_outer: vec4<f32>,
+}
+
+struct LightSpotUniformsArray {
+    lights: array<LightSpotUniforms, MAX_SPOT_LIGHTS>,
+    light_count: u32,
+};
+
 @group(2) @binding(0) var sampler_compare: sampler_comparison;
 @group(2) @binding(1) var<uniform> light_directional_uniforms: LightDirectionalUniformsArray;
 @group(2) @binding(2) var light_directional_shadow_texture: texture_depth_2d_array;
+@group(2) @binding(3) var<uniform> light_spot_uniforms: LightSpotUniformsArray;
+@group(2) @binding(4) var light_spot_shadow_texture: texture_depth_2d_array;
 
 // Scene (group 3)
 struct SceneUniforms {
@@ -69,7 +90,7 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     output.position = vec4<f32>(positions[vertex_index], 0.0, 1.0);
     output.uv_coords = positions[vertex_index] * 0.5 + 0.5;
     output.uv_coords.y = 1.0 - output.uv_coords.y;
-    
+
     return output;
 }
 
@@ -78,10 +99,10 @@ fn position_from_depth(uv: vec2<f32>, depth: f32) -> vec3<f32> {
     let ndc_x = uv.x * 2.0 - 1.0;
     let ndc_y = (1.0 - uv.y) * 2.0 - 1.0;
     let ndc_z = depth;
-    
+
     let clip_pos = vec4<f32>(ndc_x, ndc_y, ndc_z, 1.0);
     let view_pos = camera_uniforms.projection_matrix_inverse * clip_pos;
-    
+
     return view_pos.xyz / view_pos.w;
 }
 
@@ -92,9 +113,9 @@ fn inverse_mat4(m: mat4x4<f32>) -> mat4x4<f32> {
         m[1].xyz,
         m[2].xyz
     ));
-    
+
     let inv_trans = -(inv_rot * m[3].xyz);
-    
+
     return mat4x4<f32>(
         vec4(inv_rot[0], 0.0),
         vec4(inv_rot[1], 0.0),
@@ -105,9 +126,9 @@ fn inverse_mat4(m: mat4x4<f32>) -> mat4x4<f32> {
 
 // Select cascade based on view-space depth
 fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
-    if (view_space_z < splits.y) {
+    if view_space_z < splits.y {
         return 0u;
-    } else if (view_space_z < splits.z) {
+    } else if view_space_z < splits.z {
         return 1u;
     } else {
         return 2u;
@@ -116,20 +137,41 @@ fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
 
 // Fetch directional shadow
 fn fetch_light_directional_shadow(light_index: u32, cascade_id: u32, homogeneous_coords: vec4<f32>) -> f32 {
-    if (homogeneous_coords.w <= 0.0) {
+    if homogeneous_coords.w <= 0.0 {
         return 1.0;
     }
-    
+
     let flip_correction = vec2<f32>(0.5, -0.5);
     let proj_correction = 1.0 / homogeneous_coords.w;
     let uv = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
     let depth = homogeneous_coords.z * proj_correction;
-    
+
     // Texture layers are organized as: [light0-c0, light0-c1, light0-c2, light1-c0, light1-c1, light1-c2, ...]
     let layer_index = light_index * 3u + cascade_id;
-    
+
     return textureSampleCompareLevel(
         light_directional_shadow_texture, sampler_compare, uv, i32(layer_index), depth
+    );
+}
+
+// Fetch spot shadow
+fn fetch_light_spot_shadow(light_index: u32, homogeneous_coords: vec4<f32>) -> f32 {
+    if homogeneous_coords.w <= 0.0 {
+        return 1.0;
+    }
+
+    let flip_correction = vec2<f32>(0.5, -0.5);
+    let proj_correction = 1.0 / homogeneous_coords.w;
+    let uv = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
+    let depth = homogeneous_coords.z * proj_correction;
+
+    // Check if position is within spotlight frustum
+    if uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || depth < 0.0 || depth > 1.0 {
+        return 0.0; // Outside spotlight cone
+    }
+
+    return textureSampleCompareLevel(
+        light_spot_shadow_texture, sampler_compare, uv, i32(light_index), depth
     );
 }
 
@@ -145,26 +187,26 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
     // Reconstruct view-space position
     let view_pos = position_from_depth(in.uv_coords, depth);
-    
+
     // Transform to world space
     let inverse_view = inverse_mat4(camera_uniforms.view_matrix);
     let world_pos = (inverse_view * vec4(view_pos, 1.0)).xyz;
     var world_normal = normalize(normal_roughness.rgb);
 
     // Fallback to up vector if normal is invalid (all zeros)
-    if (dot(world_normal, world_normal) < 0.001) {
+    if dot(world_normal, world_normal) < 0.001 {
         world_normal = vec3<f32>(0.0, 1.0, 0.0);
     }
-    
+
     var color = albedo * scene_uniforms.ambient_light_color.rgb;
 
     for (var i: u32 = 0u; i < light_directional_uniforms.light_count; i++) {
         let light_uniforms = light_directional_uniforms.lights[i];
-        
-        if (light_uniforms.color.a > 0.0) {
+
+        if light_uniforms.color.a > 0.0 {
             let light_dir = normalize(-light_uniforms.direction.xyz);
             let diffuse = max(0.0, dot(world_normal, light_dir));
-            
+
             // Directional light with cascade shadow
             let view_space_z = -view_pos.z;
             let cascade = select_cascade(view_space_z, light_uniforms.cascade_splits);
@@ -175,6 +217,39 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let shadow = fetch_light_directional_shadow(i, cascade, shadow_coords);
 
             color += albedo * light_uniforms.color.rgb * light_uniforms.color.a * shadow * diffuse;
+        }
+    }
+
+    // Spot lights
+    for (var j: u32 = 0u; j < light_spot_uniforms.light_count; j++) {
+        let light_spot = light_spot_uniforms.lights[j];
+
+        if light_spot.color_intensity.a > 0.0 {
+            // Transform world position to light space
+            let shadow_coords = light_spot.view_projection_matrix * vec4<f32>(world_pos, 1.0);
+
+            // Sample shadow map
+            let shadow = fetch_light_spot_shadow(j, shadow_coords);
+
+            // Calculate light direction
+            let light_to_frag = world_pos - light_spot.position.xyz;
+            let light_dir = normalize(-light_to_frag);
+
+            // Get forward direction from uniform
+            let forward = normalize(light_spot.forward.xyz);
+
+            // Calculate cone angles from FOV (stored in uniform)
+            let fov = light_spot.fov_inner_outer.x;
+            let outer = cos(fov * 0.5);
+            let inner = cos(fov * 0.5 - 0.15);
+            let cos_angle = dot(forward, light_dir);
+            let spot_factor = smoothstep(outer, inner, cos_angle);
+
+            // Diffuse lighting
+            let diffuse = max(0.0, dot(world_normal, light_dir));
+
+            // Accumulate light contribution
+            color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * shadow * diffuse * spot_factor;
         }
     }
 
