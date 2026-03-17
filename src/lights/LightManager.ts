@@ -258,6 +258,7 @@ export class LightManager {
         light.updateShadowMatrix();
 
         const lightData = this.createSpotLightData(light, i);
+        
         this.device.queue.writeBuffer(
           this.spotLightBuffer,
           i * SPOT_LIGHT_SIZE,
@@ -273,11 +274,11 @@ export class LightManager {
       }
     }
 
-    // Write light count at the end of the buffer (offset 2184 = 272*8)
+    // Write light count at the end of the buffer (offset 2176 = 272*8, matches shader)
     const lightCount = new Uint32Array([activeLights.length]);
     this.device.queue.writeBuffer(
       this.spotLightBuffer,
-      SPOT_LIGHT_SIZE * MAX_SPOT_LIGHTS + 8,
+      SPOT_LIGHT_SIZE * MAX_SPOT_LIGHTS,
       lightCount,
     );
   }
