@@ -88,7 +88,13 @@ export class SpotLight extends Light {
 
     const position = this.transform.translation;
     const forward = this.transform.getForward();
-    const up = Vec3.create(0, 1, 0);
+
+    let up: Vec3;
+    if (Math.abs(forward.y) > 0.99) {
+      up = Vec3.create(1, 0, 0);
+    } else {
+      up = Vec3.create(0, 1, 0);
+    }
 
     this.viewMatrix = Mat4.lookAt(
       position,
