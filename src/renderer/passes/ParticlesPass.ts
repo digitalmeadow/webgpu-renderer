@@ -17,9 +17,9 @@ export class ParticlesPass {
   private textureCache: Map<Texture, GPUTexture> = new Map();
   private placeholderTextureView: GPUTextureView;
 
-  constructor(device: GPUDevice, camera: Camera) {
+  constructor(device: GPUDevice, cameraBindGroupLayout: GPUBindGroupLayout) {
     this.device = device;
-    this.cameraBindGroupLayout = camera.uniforms.bindGroupLayout;
+    this.cameraBindGroupLayout = cameraBindGroupLayout;
 
     const shaderModule = device.createShaderModule({
       code: shader,

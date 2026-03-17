@@ -15,11 +15,18 @@ import { SceneUniforms } from "../uniforms";
 import { Light, DirectionalLight, LightType } from "../lights";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../math";
 
+export interface RendererOptions {
+  maxDirectionalLights?: number;
+}
+
+const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
+
 export class Renderer {
   private canvas: HTMLCanvasElement;
   private device: GPUDevice;
   private context: GPUCanvasContext | null = null;
   private format: GPUTextureFormat;
+  private maxDirectionalLights: number;
 
   public frustumCulling: boolean = false;
 
@@ -32,10 +39,11 @@ export class Renderer {
   private materialManager: MaterialManager;
   private lightManager: LightManager;
   private sceneUniforms: SceneUniforms;
-  private camera: Camera | null = null;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, options: RendererOptions = {}) {
     this.canvas = canvas;
+    this.maxDirectionalLights =
+      options.maxDirectionalLights ?? DEFAULT_MAX_DIRECTIONAL_LIGHTS;
     this.device = null as unknown as GPUDevice;
     this.format = navigator.gpu.getPreferredCanvasFormat();
 
@@ -76,7 +84,10 @@ export class Renderer {
     });
 
     this.materialManager = new MaterialManager(this.device);
-    this.lightManager = new LightManager(this.device);
+    this.lightManager = new LightManager(
+      this.device,
+      this.maxDirectionalLights,
+    );
     this.sceneUniforms = new SceneUniforms(this.device);
 
     const rect = this.canvas.getBoundingClientRect();
@@ -114,7 +125,16 @@ export class Renderer {
         this.canvas.height,
       );
 
-      this.camera = new Camera(this.device);
+      const cameraBindGroupLayout = this.device.createBindGroupLayout({
+        label: "Camera Bind Group Layout",
+        entries: [
+          {
+            binding: 0,
+            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+            buffer: { type: "uniform" },
+          },
+        ],
+      });
 
       this.geometryPass = new GeometryPass(
         this.device,
@@ -125,7 +145,7 @@ export class Renderer {
       this.lightingPass = new LightingPass(
         this.device,
         this.geometryBuffer,
-        this.camera,
+        cameraBindGroupLayout,
         this.lightManager.lightingBindGroupLayout,
         this.sceneUniforms.bindGroupLayout,
         this.canvas.width,
@@ -134,9 +154,12 @@ export class Renderer {
 
       this.outputPass = new OutputPass(this.device);
 
-      this.shadowPass = new ShadowPass(this.device);
+      this.shadowPass = new ShadowPass(this.device, this.maxDirectionalLights);
 
-      this.particlesPass = new ParticlesPass(this.device, this.camera);
+      this.particlesPass = new ParticlesPass(
+        this.device,
+        cameraBindGroupLayout,
+      );
     } else {
       this.geometryBuffer.resize(
         this.device,
@@ -163,6 +186,9 @@ export class Renderer {
     ) {
       return;
     }
+
+    world.update(time.delta);
+    camera.update(this.device);
 
     const meshes = this.collectVisibleMeshes(world, camera);
     const opaqueMeshes = meshes.filter(
@@ -218,20 +244,11 @@ export class Renderer {
     //   );
     // }
 
-    world.update(time.delta);
-    camera.update(this.device);
-
     const lights = this.collectLights(world);
     this.sceneUniforms.ambientLightColor = world.ambientLightColor;
     this.sceneUniforms.update();
 
     const commandEncoder = this.device.createCommandEncoder();
-
-    // Collect directional lights using lightType property check instead of instanceof
-    const directionalLights = lights.filter(
-      (light) => light.type === LightType.Directional,
-    ) as DirectionalLight[];
-    this.lightManager.update(directionalLights, camera);
 
     // Geometry Pass
     this.geometryPass.render(
@@ -243,6 +260,12 @@ export class Renderer {
       this.materialManager,
     );
 
+    // Collect directional lights using lightType property check instead of instanceof
+    const directionalLights = lights.filter(
+      (light) => light.type === LightType.Directional,
+    ) as DirectionalLight[];
+    this.lightManager.update(directionalLights, camera);
+
     // Shadow Pass
     if (directionalLights.length > 0) {
       this.shadowPass.render(commandEncoder, directionalLights, opaqueMeshes);
@@ -250,9 +273,10 @@ export class Renderer {
       // Set shadow texture and update lighting bind group
       this.lightManager.setShadowTexture(
         this.shadowPass.getShadowTextureView(),
+        this.shadowPass.getShadowTextureViews(),
       );
     } else {
-      this.lightManager.setShadowTexture(null);
+      this.lightManager.setShadowTexture(null, null);
     }
 
     this.lightManager.updateLightingBindGroup(directionalLights);

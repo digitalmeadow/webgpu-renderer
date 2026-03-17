@@ -27,6 +27,8 @@ struct CameraUniforms {
 @group(1) @binding(0) var<uniform> camera_uniforms: CameraUniforms;
 
 // Directional Light Uniforms (group 2)
+const MAX_DIRECTIONAL_LIGHTS: u32 = 4;
+
 struct LightDirectionalUniforms {
     view_projection_matrices: array<mat4x4<f32>, 3>,
     cascade_splits: vec4<f32>,
@@ -35,8 +37,13 @@ struct LightDirectionalUniforms {
     active_view_projection_index: u32,
 };
 
+struct LightDirectionalUniformsArray {
+    lights: array<LightDirectionalUniforms, MAX_DIRECTIONAL_LIGHTS>,
+    light_count: u32,
+};
+
 @group(2) @binding(0) var sampler_compare: sampler_comparison;
-@group(2) @binding(1) var<uniform> light_directional_uniforms: LightDirectionalUniforms;
+@group(2) @binding(1) var<uniform> light_directional_uniforms: LightDirectionalUniformsArray;
 @group(2) @binding(2) var light_directional_shadow_texture: texture_depth_2d_array;
 
 // Scene (group 3)
@@ -108,7 +115,7 @@ fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
 }
 
 // Fetch directional shadow
-fn fetch_light_directional_shadow(cascade_id: u32, homogeneous_coords: vec4<f32>) -> f32 {
+fn fetch_light_directional_shadow(light_index: u32, cascade_id: u32, homogeneous_coords: vec4<f32>) -> f32 {
     if (homogeneous_coords.w <= 0.0) {
         return 1.0;
     }
@@ -118,8 +125,11 @@ fn fetch_light_directional_shadow(cascade_id: u32, homogeneous_coords: vec4<f32>
     let uv = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
     let depth = homogeneous_coords.z * proj_correction;
     
+    // Texture layers are organized as: [light0-c0, light0-c1, light0-c2, light1-c0, light1-c1, light1-c2, ...]
+    let layer_index = light_index * 3u + cascade_id;
+    
     return textureSampleCompareLevel(
-        light_directional_shadow_texture, sampler_compare, uv, i32(cascade_id), depth
+        light_directional_shadow_texture, sampler_compare, uv, i32(layer_index), depth
     );
 }
 
@@ -148,22 +158,27 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     
     var color = albedo * scene_uniforms.ambient_light_color.rgb;
 
-    if (light_directional_uniforms.color.a > 0.0) {
-        let light_dir = normalize(-light_directional_uniforms.direction.xyz);
-        let diffuse = max(0.0, dot(world_normal, light_dir));
+    for (var i: u32 = 0u; i < light_directional_uniforms.light_count; i++) {
+        let light_uniforms = light_directional_uniforms.lights[i];
         
-        // Directional light with cascade shadow
-        let view_space_z = -view_pos.z;
-        let cascade = select_cascade(view_space_z, light_directional_uniforms.cascade_splits);
+        if (light_uniforms.color.a > 0.0) {
+            let light_dir = normalize(-light_uniforms.direction.xyz);
+            let diffuse = max(0.0, dot(world_normal, light_dir));
+            
+            // Directional light with cascade shadow
+            let view_space_z = -view_pos.z;
+            let cascade = select_cascade(view_space_z, light_uniforms.cascade_splits);
 
-        let shadow_matrix = light_directional_uniforms.view_projection_matrices[cascade];
-        let shadow_coords = shadow_matrix * vec4<f32>(world_pos, 1.0);
+            let shadow_matrix = light_uniforms.view_projection_matrices[cascade];
+            let shadow_coords = shadow_matrix * vec4<f32>(world_pos, 1.0);
 
-        let shadow = fetch_light_directional_shadow(cascade, shadow_coords);
+            let shadow = fetch_light_directional_shadow(i, cascade, shadow_coords);
 
-        color += albedo * light_directional_uniforms.color.rgb * light_directional_uniforms.color.a * shadow * diffuse;
+            color += albedo * light_uniforms.color.rgb * light_uniforms.color.a * shadow * diffuse;
+        }
     }
 
     output.color = vec4<f32>(color, 1.0);
+
     return output;
 }

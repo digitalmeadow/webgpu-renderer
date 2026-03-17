@@ -3,14 +3,19 @@ import { DirectionalLight, SHADOW_MAP_CASCADES_COUNT } from ".";
 import { Vec3 } from "../math";
 import { SceneUniforms } from "../uniforms";
 
-const LIGHT_SIZE = 256; // Must match LightDirectionalUniforms in LightingPass.wgsl
+const LIGHT_SIZE = 256;
 const LIGHT_FLOAT_COUNT = LIGHT_SIZE / 4;
 const CASCADE_SPLITS_OFFSET = 48;
 const DIRECTION_OFFSET = 52;
 const COLOR_OFFSET = 56;
+const LIGHT_COUNT_OFFSET = 4 * LIGHT_SIZE; // Byte offset where light_count is stored (must match shader)
+
+const MAX_DIRECTIONAL_LIGHTS = 4; // Must match MAX_DIRECTIONAL_LIGHTS in LightingPass.wgsl
+const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
 
 export class LightManager {
   private device: GPUDevice;
+  private maxDirectionalLights: number;
   public lightBuffer: GPUBuffer;
   public uniformsBuffer: GPUBuffer;
   public lightBindGroupLayout: GPUBindGroupLayout;
@@ -18,6 +23,7 @@ export class LightManager {
 
   public shadowSampler: GPUSampler;
   public shadowTextureView: GPUTextureView | null = null;
+  public shadowTextureViewArray: GPUTextureView[] | null = null;
 
   public lightingBindGroupLayout: GPUBindGroupLayout;
   public lightingBindGroup: GPUBindGroup;
@@ -28,12 +34,19 @@ export class LightManager {
   private dummyShadowBuffer: GPUBuffer;
   private dummyShadowTexture: GPUTexture;
   private dummyShadowTextureView: GPUTextureView;
+  private dummyShadowTextureViewArray: GPUTextureView[];
 
-  constructor(device: GPUDevice) {
+  constructor(
+    device: GPUDevice,
+    maxDirectionalLights: number = DEFAULT_MAX_DIRECTIONAL_LIGHTS,
+  ) {
     this.device = device;
+    this.maxDirectionalLights = maxDirectionalLights;
+
+    const bufferSize = LIGHT_SIZE * MAX_DIRECTIONAL_LIGHTS + 4 + 12; // Must match shader's LightDirectionalUniformsArray
 
     this.lightBuffer = this.device.createBuffer({
-      size: LIGHT_SIZE,
+      size: bufferSize,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -76,7 +89,7 @@ export class LightManager {
 
     // Create dummy resources for fallback when no shadows
     this.dummyShadowBuffer = this.device.createBuffer({
-      size: 256, // Must match LightDirectionalUniforms size in LightingPass.wgsl
+      size: LIGHT_SIZE * MAX_DIRECTIONAL_LIGHTS + 4 + 12, // Must match LightDirectionalUniformsArray size in shader
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -92,6 +105,20 @@ export class LightManager {
       label: "Dummy Shadow Texture View",
       dimension: "2d-array",
     });
+
+    this.dummyShadowTextureViewArray = [];
+    for (
+      let i = 0;
+      i < this.maxDirectionalLights * SHADOW_MAP_CASCADES_COUNT;
+      i++
+    ) {
+      const view = this.dummyShadowTexture.createView({
+        label: `Dummy Shadow Texture View Array ${i}`,
+        baseArrayLayer: 0,
+        arrayLayerCount: 1,
+      });
+      this.dummyShadowTextureViewArray.push(view);
+    }
 
     const fallbackLightData = this.createFallbackLightData();
     this.device.queue.writeBuffer(
@@ -166,8 +193,12 @@ export class LightManager {
     });
   }
 
-  public setShadowTexture(view: GPUTextureView | null): void {
+  public setShadowTexture(
+    view: GPUTextureView | null,
+    viewArray: GPUTextureView[] | null = null,
+  ): void {
     this.shadowTextureView = view;
+    this.shadowTextureViewArray = viewArray;
   }
 
   public updateSceneLightBindGroup(sceneUniforms: SceneUniforms): void {
@@ -188,13 +219,13 @@ export class LightManager {
   }
 
   public updateLightingBindGroup(directionalLights: DirectionalLight[]): void {
-    const light = directionalLights[0];
-    const useShadowedLight = Boolean(
-      light && light.shadowBuffer && this.shadowTextureView,
+    const activeLights = directionalLights.slice(0, this.maxDirectionalLights);
+    const hasAnyShadowedLight = activeLights.some(
+      (light) => light.shadowBuffer && this.shadowTextureView,
     );
 
     this.lightingBindGroup = this.device.createBindGroup({
-      label: useShadowedLight
+      label: hasAnyShadowedLight
         ? "Lighting Bind Group"
         : "Default Lighting Bind Group",
       layout: this.lightingBindGroupLayout,
@@ -206,62 +237,104 @@ export class LightManager {
         {
           binding: 1,
           resource: {
-            buffer: useShadowedLight
-              ? light.shadowBuffer!
-              : this.dummyShadowBuffer,
+            buffer: this.lightBuffer,
           },
         },
         {
           binding: 2,
-          resource: useShadowedLight
-            ? this.shadowTextureView!
-            : this.dummyShadowTextureView,
+          resource:
+            hasAnyShadowedLight && this.shadowTextureView
+              ? this.shadowTextureView
+              : this.dummyShadowTextureView,
         },
       ],
     });
   }
 
   public update(directionalLights: DirectionalLight[], camera: Camera): void {
-    if (directionalLights.length > 0) {
-      const light = directionalLights[0];
+    const activeLights = directionalLights.slice(0, this.maxDirectionalLights);
 
-      if (!light.shadowBuffer) {
-        light.initShadowResources(this.device);
-      }
-
-      // Get camera if available
+    if (activeLights.length > 0) {
       const cameraDirection = new Vec3(
         camera.target.data[0] - camera.position.data[0],
         camera.target.data[1] - camera.position.data[1],
         camera.target.data[2] - camera.position.data[2],
       );
 
-      light.direction = light.transform.getForward();
+      for (let i = 0; i < this.maxDirectionalLights; i++) {
+        const light = activeLights[i];
 
-      light.updateCascadeMatrices(
-        camera.position,
-        cameraDirection,
-        camera.near,
-        camera.far,
-      );
+        if (light) {
+          if (!light.shadowBuffer) {
+            light.initShadowResources(this.device);
+          }
 
+          light.lightIndex = i;
+          light.direction = light.transform.getForward();
+
+          light.updateCascadeMatrices(
+            camera.position,
+            cameraDirection,
+            camera.near,
+            camera.far,
+            camera.fov,
+            camera.aspect,
+          );
+
+          const lightData = this.createLightData(light, i);
+          this.device.queue.writeBuffer(
+            this.lightBuffer,
+            i * LIGHT_SIZE,
+            lightData as any,
+          );
+        } else {
+          const fallbackData = this.createSingleFallbackLightData(i);
+          this.device.queue.writeBuffer(
+            this.lightBuffer,
+            i * LIGHT_SIZE,
+            fallbackData as any,
+          );
+        }
+      }
+
+      const lightCountData = new Uint32Array([activeLights.length]);
       this.device.queue.writeBuffer(
         this.lightBuffer,
-        0,
-        this.createLightData(light) as any,
+        LIGHT_COUNT_OFFSET,
+        lightCountData,
       );
 
       return;
     }
 
+    const fallbackData = this.createFallbackLightData();
+    this.device.queue.writeBuffer(this.lightBuffer, 0, fallbackData as any);
+
+    const zeroLightCount = new Uint32Array([0]);
     this.device.queue.writeBuffer(
       this.lightBuffer,
-      0,
-      this.createFallbackLightData() as any,
+      LIGHT_COUNT_OFFSET,
+      zeroLightCount,
     );
   }
 
   private createFallbackLightData(): Float32Array {
+    const totalSize = LIGHT_FLOAT_COUNT * MAX_DIRECTIONAL_LIGHTS;
+    const lightData = new Float32Array(totalSize);
+
+    for (let i = 0; i < MAX_DIRECTIONAL_LIGHTS; i++) {
+      const offset = i * LIGHT_FLOAT_COUNT;
+      lightData[DIRECTION_OFFSET + 1] = -1.0;
+      lightData[COLOR_OFFSET] = 1.0;
+      lightData[COLOR_OFFSET + 1] = 1.0;
+      lightData[COLOR_OFFSET + 2] = 1.0;
+      lightData[COLOR_OFFSET + 3] = 0.0;
+    }
+
+    return lightData;
+  }
+
+  private createSingleFallbackLightData(lightIndex: number): Float32Array {
     const lightData = new Float32Array(LIGHT_FLOAT_COUNT);
     lightData[DIRECTION_OFFSET + 1] = -1.0;
     lightData[COLOR_OFFSET] = 1.0;
@@ -271,8 +344,11 @@ export class LightManager {
     return lightData;
   }
 
-  private createLightData(light: DirectionalLight): Float32Array {
-    const lightData = this.createFallbackLightData();
+  private createLightData(
+    light: DirectionalLight,
+    lightIndex: number,
+  ): Float32Array {
+    const lightData = this.createSingleFallbackLightData(lightIndex);
 
     for (let i = 0; i < SHADOW_MAP_CASCADES_COUNT; i++) {
       lightData.set(light.viewProjectionMatrices[i].data, i * 16);

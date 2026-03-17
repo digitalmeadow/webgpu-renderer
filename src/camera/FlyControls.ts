@@ -10,7 +10,6 @@ export class FlyControls {
   private speed: number = 5;
   private minSpeed: number = 0.5;
   private maxSpeed: number = 50;
-  private isPointerLocked: boolean = false;
 
   constructor(canvas: HTMLCanvasElement, camera: any) {
     this.canvas = canvas;
@@ -30,19 +29,6 @@ export class FlyControls {
   }
 
   private initKeyboard(): void {
-    window.addEventListener("keydown", (e) => {
-      this.keys.add(e.key.toLowerCase());
-
-      // Toggle pointer lock on click
-      if (e.key === "Escape") {
-        document.exitPointerLock();
-      }
-    });
-
-    window.addEventListener("keyup", (e) => {
-      this.keys.delete(e.key.toLowerCase());
-    });
-
     // Mouse wheel for speed adjustment
     window.addEventListener(
       "wheel",
@@ -59,19 +45,7 @@ export class FlyControls {
   }
 
   private initMouse(): void {
-    this.canvas.addEventListener("click", () => {
-      if (!this.isPointerLocked) {
-        this.canvas.requestPointerLock();
-      }
-    });
-
-    document.addEventListener("pointerlockchange", () => {
-      this.isPointerLocked = document.pointerLockElement === this.canvas;
-    });
-
     document.addEventListener("mousemove", (e) => {
-      if (!this.isPointerLocked) return;
-
       const sensitivity = 0.002;
       this.yaw -= e.movementX * sensitivity;
       this.pitch -= e.movementY * sensitivity;

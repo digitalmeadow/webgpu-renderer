@@ -11,7 +11,7 @@ export class LightingPass {
   constructor(
     device: GPUDevice,
     geometryBuffer: GeometryBuffer,
-    camera: Camera,
+    cameraBindGroupLayout: GPUBindGroupLayout,
     lightingBindGroupLayout: GPUBindGroupLayout,
     sceneBindGroupLayout: GPUBindGroupLayout,
     width: number,
@@ -40,7 +40,7 @@ export class LightingPass {
       layout: device.createPipelineLayout({
         bindGroupLayouts: [
           geometryBuffer.bindGroupLayout,
-          camera.uniforms.bindGroupLayout,
+          cameraBindGroupLayout,
           lightingBindGroupLayout,
           sceneBindGroupLayout,
         ],

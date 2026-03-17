@@ -2,11 +2,13 @@ import { Vec3, Mat4 } from "../math";
 import { Light, LightType } from ".";
 
 export const SHADOW_MAP_CASCADES_COUNT = 3;
-export const SHADOW_CASCADE_SPLITS = [0.0, 0.1, 0.75, 1.0];
-export const OFFSET = 50;
+export const SHADOW_CASCADE_SPLITS = [0.0, 0.33, 0.66, 1.0];
+export const OFFSET = 10;
+export const SHADOW_XY_PADDING = 0;
 
 export class DirectionalLight extends Light {
   public direction: Vec3 = new Vec3(0, -1, -0.5);
+  public lightIndex: number = 0;
 
   public viewProjectionMatrices: Mat4[] = [];
   public cascadeSplits: number[] = [...SHADOW_CASCADE_SPLITS];
@@ -89,8 +91,12 @@ export class DirectionalLight extends Light {
     cameraDirection: Vec3,
     cameraNear: number,
     cameraFar: number,
+    cameraFov: number,
+    cameraAspect: number,
   ): void {
-    if (!this.shadowBuffer || !this._device) return;
+    if (!this.shadowBuffer || !this._device) {
+      return;
+    }
 
     // Light direction represents the direction light rays travel (towards objects)
     // For a downward light (0,-1,0), we want the camera positioned ABOVE looking DOWN
@@ -107,6 +113,8 @@ export class DirectionalLight extends Light {
       cameraDirection,
       cameraNear,
       cameraFar,
+      cameraFov,
+      cameraAspect,
     );
 
     const actualSplits: number[] = [cameraNear];
@@ -178,6 +186,12 @@ export class DirectionalLight extends Light {
         max.data[2] = Math.max(max.data[2], lc.z);
       }
 
+      // Add lateral padding to ensure objects moving within the camera frustum are still captured
+      min.x -= SHADOW_XY_PADDING;
+      min.y -= SHADOW_XY_PADDING;
+      max.x += SHADOW_XY_PADDING;
+      max.y += SHADOW_XY_PADDING;
+
       const projMatrix = Mat4.ortho(
         min.x,
         max.x,
@@ -204,14 +218,16 @@ export class DirectionalLight extends Light {
     cameraDirection: Vec3,
     cameraNear: number,
     cameraFar: number,
+    cameraFov: number,
+    cameraAspect: number,
   ): Vec3[] {
     const corners: Vec3[] = [];
     const forward = Vec3.normalize(cameraDirection.copy());
     const right = Vec3.normalize(Vec3.cross(forward, Vec3.create(0, 1, 0)));
     const up = Vec3.cross(right, forward);
 
-    const fov = Math.PI / 4;
-    const aspect = 16 / 9;
+    const fov = cameraFov;
+    const aspect = cameraAspect;
     const nearHeight = 2 * Math.tan(fov / 2) * cameraNear;
     const nearWidth = nearHeight * aspect;
     const farHeight = 2 * Math.tan(fov / 2) * cameraFar;
@@ -285,6 +301,9 @@ export class DirectionalLight extends Light {
 
     // color.rgb + intensity in alpha to match the lighting shader contract
     data.set([...this.color.data, this.intensity], 56);
+
+    // light_index (stored at offset 240, same as active_view_projection_index)
+    data[60] = this.lightIndex;
 
     this._device.queue.writeBuffer(this.shadowBuffer, 0, data);
   }

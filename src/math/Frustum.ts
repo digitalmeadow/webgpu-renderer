@@ -22,10 +22,16 @@ export function frustumPlanesFromMatrix(
 
   const m = viewProjectionMatrix.data;
 
-  const row0 = [m[0], m[1], m[2], m[3]];
-  const row1 = [m[4], m[5], m[6], m[7]];
-  const row2 = [m[8], m[9], m[10], m[11]];
-  const row3 = [m[12], m[13], m[14], m[15]];
+  // Matrix is stored in column-major order (standard for WebGPU/GLSL).
+  // So we need to read across columns to form rows:
+  // - row0 = [m[0], m[4], m[8], m[12]]  (first row)
+  // - row1 = [m[1], m[5], m[9], m[13]]  (second row)
+  // - row2 = [m[2], m[6], m[10], m[14]] (third row)
+  // - row3 = [m[3], m[7], m[11], m[15]] (fourth row / w row)
+  const row0 = [m[0], m[4], m[8], m[12]];
+  const row1 = [m[1], m[5], m[9], m[13]];
+  const row2 = [m[2], m[6], m[10], m[14]];
+  const row3 = [m[3], m[7], m[11], m[15]];
 
   // Left: row3 + row0
   let p = [

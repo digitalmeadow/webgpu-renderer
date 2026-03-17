@@ -213,6 +213,7 @@ export class ParticleEmitter extends Entity {
           0,
           this.desc.spawnAlphas[spawnIndex],
           this.desc.spawnBillboards[spawnIndex],
+          spawnIndex,
         );
       } else {
         instance = new ParticleInstance(
@@ -226,6 +227,7 @@ export class ParticleEmitter extends Entity {
           this.desc.spawnAlphas[spawnIndex],
           this.desc.spawnBillboards[spawnIndex],
           0.0,
+          spawnIndex,
         );
       }
 

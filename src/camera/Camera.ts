@@ -113,6 +113,8 @@ export class Camera {
   }
 
   update(device: GPUDevice): void {
+    this.updateProjection();
+    this.updateView();
     this.uniforms.update(
       device,
       this.viewMatrix,
