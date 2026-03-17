@@ -155,9 +155,18 @@ fn fetch_light_directional_shadow(light_index: u32, cascade_id: u32, homogeneous
 }
 
 // Fetch spot shadow
-fn fetch_light_spot_shadow(light_index: u32, homogeneous_coords: vec4<f32>) -> f32 {
+fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: mat4x4<f32>, homogeneous_coords: vec4<f32>) -> f32 {
+    // Transform world position to light view space to check if behind the light
+    let light_view_pos = view_matrix * vec4<f32>(world_pos, 1.0);
+
+    // In right-handed view space, -Z is forward. Points behind the light have Z >= 0
+    if light_view_pos.z >= 0.0 {
+        return 0.0; // Behind the light - no contribution
+    }
+
+    // Points behind the NDC camera should not contribute to lighting
     if homogeneous_coords.w <= 0.0 {
-        return 1.0;
+        return 0.0;
     }
 
     let flip_correction = vec2<f32>(0.5, -0.5);
@@ -167,7 +176,7 @@ fn fetch_light_spot_shadow(light_index: u32, homogeneous_coords: vec4<f32>) -> f
 
     // Check if position is within spotlight frustum
     if uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || depth < 0.0 || depth > 1.0 {
-        return 0.0; // Outside spotlight cone
+        return 0.0; // Outside spotlight frustum - fully shadowed
     }
 
     return textureSampleCompareLevel(
@@ -229,7 +238,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let shadow_coords = light_spot.view_projection_matrix * vec4<f32>(world_pos, 1.0);
 
             // Sample shadow map
-            let shadow = fetch_light_spot_shadow(j, shadow_coords);
+            let shadow = fetch_light_spot_shadow(j, world_pos, light_spot.view_matrix, shadow_coords);
 
             // Calculate light direction
             let light_to_frag = world_pos - light_spot.position.xyz;
@@ -249,7 +258,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
             // Accumulate light contribution
-            color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * shadow * diffuse * spot_factor;
+            color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * shadow * diffuse;
         }
     }
 
