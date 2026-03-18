@@ -16,7 +16,7 @@ const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
 const MAX_SPOT_LIGHTS = 8;
 const DEFAULT_MAX_SPOT_LIGHTS = 1;
 const SPOT_SHADOW_MAP_SIZE = 1024;
-const SPOT_LIGHT_SIZE = 272;
+const SPOT_LIGHT_SIZE = 288;
 
 export class LightManager {
   private device: GPUDevice;
@@ -64,7 +64,7 @@ export class LightManager {
     });
 
     this.spotLightBuffer = this.device.createBuffer({
-      size: SPOT_LIGHT_SIZE * MAX_SPOT_LIGHTS + 16, // 272*8 + 16 = 2192
+      size: SPOT_LIGHT_SIZE * MAX_SPOT_LIGHTS + 16, // 288*8 + 16 = 2320
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -309,26 +309,32 @@ export class LightManager {
     const forward = light.transform.getForward();
     lightData.set(forward.data, 60);
 
-    // FOV in radians (outer angle), penumbra as percentage (0-1), unused, unused
+    // FOV in radians (outer angle), prenumbra as percentage (0-1), unused, unused
     const fovRad = (light.fov * Math.PI) / 180;
-    const penumbra = Math.max(0, Math.min(1, light.penumbra));
-    const fovPenumbra = new Float32Array([fovRad, penumbra, 0, 0]);
-    lightData.set(fovPenumbra, 64);
+    const prenumbra = Math.max(0, Math.min(1, light.prenumbra));
+    const fovPrenumbra = new Float32Array([fovRad, prenumbra, 0, 0]);
+    lightData.set(fovPrenumbra, 64);
+
+    // Aspect ratio, radius, unused, unused
+    const aspectRadius = new Float32Array([light.aspectRatio, light.radius, 0, 0]);
+    lightData.set(aspectRadius, 68);
 
     return lightData;
   }
 
   private createSpotLightFallbackData(): Float32Array {
-    const lightData = new Float32Array(68); // 272 bytes / 4 = 68 floats
+    const lightData = new Float32Array(72); // 288 bytes / 4 = 72 floats
     lightData[56] = 1.0;
     lightData[57] = 1.0;
     lightData[58] = 1.0;
     lightData[59] = 0.0;
-    // Fallback FOV (45 degrees in radians), penumbra percentage (0-1)
+    // Fallback FOV (45 degrees in radians), prenumbra percentage (0-1)
     const defaultFov = (45 * Math.PI) / 180;
     lightData[64] = defaultFov;
     lightData[65] = 0.0;
-    lightData[67] = 0.0;
+    // Default aspect ratio (1.0 = square), radius (0.0 = rectangular)
+    lightData[68] = 1.0;
+    lightData[69] = 0.0;
     return lightData;
   }
 

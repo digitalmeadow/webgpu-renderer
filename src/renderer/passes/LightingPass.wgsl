@@ -53,7 +53,8 @@ struct LightSpotUniforms {
     near_far: vec4<f32>,
     color_intensity: vec4<f32>,
     forward: vec4<f32>,
-    fov_penumbra: vec4<f32>,
+    fov_prenumbra: vec4<f32>,
+    aspect_radius: vec4<f32>,
 }
 
 struct LightSpotUniformsArray {
@@ -246,15 +247,11 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             // Light forward direction (should already be light → forward)
             let forward = normalize(light_spot.forward.xyz);
 
-            var angle = light_spot.fov_penumbra.x;
-            var penumbra_percent = light_spot.fov_penumbra.y;
-
-            // DEBUG
-            penumbra_percent = 0.0;
-            angle = radians(45.0);
+            var angle = light_spot.fov_prenumbra.x;
+            var prenumbra_percent = light_spot.fov_prenumbra.y;
 
             // Cone angles
-            let inner = angle * (1.0 - penumbra_percent);
+            let inner = angle * (1.0 - prenumbra_percent);
             let outer = angle;
 
             // Cosines
@@ -267,13 +264,46 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             // Smooth falloff: outer → inner
             let spot_factor = smoothstep(cos_outer, cos_inner, cos_angle);
 
+            // Get aspect ratio and radius for rectangular to circular falloff
+            let aspect = light_spot.aspect_radius.x;
+            let radius = light_spot.aspect_radius.y;
+
+            // Build basis vectors for rectangular/circular adjustment
+            let right = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), forward));
+            let up = cross(forward, right);
+
+            // Project light-to-fragment onto right/up vectors
+            let to_frag = world_pos - light_spot.position.xyz;
+            let local_x = dot(to_frag, right);
+            let local_y = dot(to_frag, up);
+
+            // Adjust Y by aspect ratio for rectangular falloff
+            let adjusted_y = local_y * aspect;
+            let outer_dist = length(vec2<f32>(local_x, adjusted_y));
+            let max_dist = tan(outer) * length(to_frag);
+
+            // Normalized distance in the cone (0 = center, 1 = edge)
+            var radial_factor = 0.0;
+            if (max_dist > 0.0) {
+                radial_factor = outer_dist / max_dist;
+            }
+
+            // Apply radius: 0 = square/rectangular, 1 = circular
+            // For rectangular (radius = 0), use adjusted distance
+            // For circular (radius = 1), use actual distance
+            var adjusted_spot_factor = spot_factor;
+            if (radius < 1.0) {
+                // Interpolate between rectangular and circular falloff
+                let rect_factor = smoothstep(1.0, 1.0 - prenumbra_percent, radial_factor);
+                let circ_factor = spot_factor;
+                adjusted_spot_factor = mix(rect_factor, circ_factor, radius);
+            }
+
             // Diffuse lighting
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
             // Accumulate light contribution
-            color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * spot_factor;
-            color = vec3<f32>(spot_factor);
-            color = vec3<f32>(shadow, spot_factor, 0.0);
+            color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * shadow * adjusted_spot_factor;
         }
     }
 

@@ -6,7 +6,9 @@ export const SPOT_SHADOW_MAP_SIZE = 1024;
 export class SpotLight extends Light {
   public direction: Vec3 = new Vec3(0, -1, 0);
   public fov: number = 45;
-  public penumbra: number = 0.0;
+  public prenumbra: number = 0.0;
+  public aspectRatio: number = 1.0;
+  public radius: number = 0.0;
   public near: number = 0.1;
   public far: number = 50;
   public lightIndex: number = 0;
@@ -32,7 +34,7 @@ export class SpotLight extends Light {
 
     this.shadowBuffer = device.createBuffer({
       label: "SpotLight Shadow Buffer",
-      size: 256,
+      size: 288,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -103,7 +105,7 @@ export class SpotLight extends Light {
       up,
     );
 
-    const aspect = 1.0;
+    const aspect = this.aspectRatio;
     this.projectionMatrix = Mat4.perspective(
       (this.fov * Math.PI) / 180,
       aspect,
@@ -123,7 +125,7 @@ export class SpotLight extends Light {
   private updateShadowBuffer(): void {
     if (!this.shadowBuffer || !this._device) return;
 
-    const data = new Float32Array(64);
+    const data = new Float32Array(72);
 
     data.set(this.viewMatrix.data, 0);
     data.set(this.projectionMatrix.data, 16);
@@ -140,6 +142,25 @@ export class SpotLight extends Light {
       this.intensity,
     ]);
     data.set(colorIntensity, 56);
+
+    const forward = this.transform.getForward();
+    data.set(forward.data, 60);
+
+    const fovPrenumbra = new Float32Array([
+      this.fov,
+      this.prenumbra,
+      0,
+      0,
+    ]);
+    data.set(fovPrenumbra, 64);
+
+    const aspectRadius = new Float32Array([
+      this.aspectRatio,
+      this.radius,
+      0,
+      0,
+    ]);
+    data.set(aspectRadius, 68);
 
     this._device.queue.writeBuffer(this.shadowBuffer, 0, data);
   }
