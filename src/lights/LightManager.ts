@@ -309,12 +309,11 @@ export class LightManager {
     const forward = light.transform.getForward();
     lightData.set(forward.data, 60);
 
-    // FOV in radians, inner/outer cone angles in radians
+    // FOV in radians (outer angle), penumbra as percentage (0-1), unused, unused
     const fovRad = (light.fov * Math.PI) / 180;
-    const outer = fovRad * 0.5;
-    const inner = outer - 0.15;
-    const fovInnerOuter = new Float32Array([fovRad, inner, outer, 0]);
-    lightData.set(fovInnerOuter, 64);
+    const penumbra = Math.max(0, Math.min(1, light.penumbra));
+    const fovPenumbra = new Float32Array([fovRad, penumbra, 0, 0]);
+    lightData.set(fovPenumbra, 64);
 
     return lightData;
   }
@@ -325,11 +324,10 @@ export class LightManager {
     lightData[57] = 1.0;
     lightData[58] = 1.0;
     lightData[59] = 0.0;
-    // Fallback FOV (45 degrees in radians), inner, outer
+    // Fallback FOV (45 degrees in radians), penumbra percentage (0-1)
     const defaultFov = (45 * Math.PI) / 180;
     lightData[64] = defaultFov;
-    lightData[65] = defaultFov * 0.5 - 0.15;
-    lightData[66] = defaultFov * 0.5;
+    lightData[65] = 0.0;
     lightData[67] = 0.0;
     return lightData;
   }

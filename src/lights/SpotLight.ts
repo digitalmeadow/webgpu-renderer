@@ -6,6 +6,7 @@ export const SPOT_SHADOW_MAP_SIZE = 1024;
 export class SpotLight extends Light {
   public direction: Vec3 = new Vec3(0, -1, 0);
   public fov: number = 45;
+  public penumbra: number = 0.0;
   public near: number = 0.1;
   public far: number = 50;
   public lightIndex: number = 0;

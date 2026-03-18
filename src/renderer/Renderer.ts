@@ -153,10 +153,7 @@ export class Renderer {
       this.maxSpotLights,
     );
 
-    this.particlesPass = new ParticlesPass(
-      this.device,
-      cameraBindGroupLayout,
-    );
+    this.particlesPass = new ParticlesPass(this.device, cameraBindGroupLayout);
 
     this.forwardPass = new ForwardPass(
       this.device,
@@ -310,15 +307,15 @@ export class Renderer {
     }
 
     // Forward Pass (transparency) - must run BEFORE Output Pass
-    if (this.forwardPass && transparentMeshes.length > 0) {
-      this.forwardPass.render(
-        commandEncoder,
-        transparentMeshes,
-        camera,
-        this.lightingPass.outputView,
-        this.geometryBuffer.depthView,
-      );
-    }
+    // if (this.forwardPass && transparentMeshes.length > 0) {
+    //   this.forwardPass.render(
+    //     commandEncoder,
+    //     transparentMeshes,
+    //     camera,
+    //     this.lightingPass.outputView,
+    //     this.geometryBuffer.depthView,
+    //   );
+    // }
 
     // Output Pass
     const swapChainView = this.context.getCurrentTexture().createView();

@@ -84,7 +84,9 @@ struct MaterialUniforms {
 
 @group(3) @binding(0) var material_sampler: sampler;
 @group(3) @binding(1) var albedo_texture: texture_2d<f32>;
-@group(3) @binding(2) var<uniform> material_uniforms: MaterialUniforms;
+@group(3) @binding(2) var normal_texture: texture_2d<f32>;
+@group(3) @binding(3) var metalness_roughness_texture: texture_2d<f32>;
+@group(3) @binding(4) var<uniform> material_uniforms: MaterialUniforms;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -101,6 +103,24 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.world_normal = (mesh_uniforms.model_matrix * vec4<f32>(in.normal, 0.0)).xyz;
     out.uv_coords = in.uv;
     return out;
+}
+
+// Helper: 4x4 matrix inverse (for view matrices)
+fn inverse_mat4(m: mat4x4<f32>) -> mat4x4<f32> {
+    let inv_rot = transpose(mat3x3<f32>(
+        m[0].xyz,
+        m[1].xyz,
+        m[2].xyz
+    ));
+
+    let inv_trans = -(inv_rot * m[3].xyz);
+
+    return mat4x4<f32>(
+        vec4(inv_rot[0], 0.0),
+        vec4(inv_rot[1], 0.0),
+        vec4(inv_rot[2], 0.0),
+        vec4(inv_trans, 1.0)
+    );
 }
 
 // Helper: Select cascade based on view-space depth
@@ -180,7 +200,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
             // Get view-space Z for cascade selection
-            let inv_view = inverse(camera_uniforms.view_matrix);
+            let inv_view = inverse_mat4(camera_uniforms.view_matrix);
             let view_pos = camera_uniforms.view_matrix * vec4<f32>(in.world_position, 1.0);
             let view_space_z = -view_pos.z;
             let cascade = select_cascade(view_space_z, light_uniforms.cascade_splits);
@@ -203,18 +223,17 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let shadow = fetch_light_spot_shadow(j, in.world_position, light_spot.view_matrix, shadow_coords);
 
             let light_to_frag = in.world_position - light_spot.position.xyz;
-            let light_dir = normalize(-light_to_frag);
+            let light_dir = normalize(light_to_frag);
 
             let forward = normalize(light_spot.forward.xyz);
-            let fov = light_spot.fov_inner_outer.x;
-            let outer = cos(fov * 0.5);
-            let inner = cos(fov * 0.5 - 0.15);
+            let outer = light_spot.fov_inner_outer.y;
+            let inner = light_spot.fov_inner_outer.z;
             let cos_angle = dot(forward, light_dir);
             let spot_factor = smoothstep(outer, inner, cos_angle);
 
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
-            color += albedo.rgb * light_spot.color_intensity.rgb * light_spot.color_intensity.a * shadow * diffuse;
+            color += albedo.rgb * light_spot.color_intensity.rgb * light_spot.color_intensity.a * shadow * diffuse * spot_factor;
         }
     }
 

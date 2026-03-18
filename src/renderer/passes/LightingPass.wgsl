@@ -53,7 +53,7 @@ struct LightSpotUniforms {
     near_far: vec4<f32>,
     color_intensity: vec4<f32>,
     forward: vec4<f32>,
-    fov_inner_outer: vec4<f32>,
+    fov_penumbra: vec4<f32>,
 }
 
 struct LightSpotUniformsArray {
@@ -240,25 +240,40 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             // Sample shadow map
             let shadow = fetch_light_spot_shadow(j, world_pos, light_spot.view_matrix, shadow_coords);
 
-            // Calculate light direction
-            let light_to_frag = world_pos - light_spot.position.xyz;
-            let light_dir = normalize(-light_to_frag);
+            // Calculate light direction (light → fragment)
+            let light_dir = normalize(light_spot.position.xyz - world_pos);
 
-            // Get forward direction from uniform
+            // Light forward direction (should already be light → forward)
             let forward = normalize(light_spot.forward.xyz);
 
-            // Calculate cone angles from FOV (stored in uniform)
-            let fov = light_spot.fov_inner_outer.x;
-            let outer = cos(fov * 0.5);
-            let inner = cos(fov * 0.5 - 0.15);
-            let cos_angle = dot(forward, light_dir);
-            let spot_factor = smoothstep(outer, inner, cos_angle);
+            var angle = light_spot.fov_penumbra.x;
+            var penumbra_percent = light_spot.fov_penumbra.y;
+
+            // DEBUG
+            penumbra_percent = 0.0;
+            angle = radians(45.0);
+
+            // Cone angles
+            let inner = angle * (1.0 - penumbra_percent);
+            let outer = angle;
+
+            // Cosines
+            let cos_inner = cos(inner);
+            let cos_outer = cos(outer);
+
+            // Angle between light forward and fragment direction
+            let cos_angle = dot(-forward, light_dir);
+
+            // Smooth falloff: outer → inner
+            let spot_factor = smoothstep(cos_outer, cos_inner, cos_angle);
 
             // Diffuse lighting
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
             // Accumulate light contribution
-            color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * shadow * diffuse;
+            color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * spot_factor;
+            color = vec3<f32>(spot_factor);
+            color = vec3<f32>(shadow, spot_factor, 0.0);
         }
     }
 
