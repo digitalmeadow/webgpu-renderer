@@ -64,7 +64,6 @@ export class Renderer {
     this.materialManager = null as unknown as MaterialManager;
     this.lightManager = null as unknown as LightManager;
     this.sceneUniforms = null as unknown as SceneUniforms;
-    this.resize(canvas.width, canvas.height);
   }
 
   async init(): Promise<void> {
@@ -99,8 +98,62 @@ export class Renderer {
     );
     this.sceneUniforms = new SceneUniforms(this.device);
 
+    this.setup();
+
     const rect = this.canvas.getBoundingClientRect();
     this.resize(rect.width, rect.height);
+  }
+
+  setup(): void {
+    this.geometryBuffer = new GeometryBuffer(
+      this.device,
+      this.canvas.width,
+      this.canvas.height,
+    );
+
+    const cameraBindGroupLayout = this.device.createBindGroupLayout({
+      label: "Camera Bind Group Layout",
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
+      ],
+    });
+
+    this.geometryPass = new GeometryPass(
+      this.device,
+      this.geometryBuffer,
+      this.materialManager,
+    );
+
+    this.lightingPass = new LightingPass(
+      this.device,
+      this.geometryBuffer,
+      cameraBindGroupLayout,
+      this.lightManager.lightingBindGroupLayout,
+      this.sceneUniforms.bindGroupLayout,
+      this.canvas.width,
+      this.canvas.height,
+    );
+
+    this.outputPass = new OutputPass(this.device);
+
+    this.shadowPassDirectionalLight = new ShadowPassDirectionalLight(
+      this.device,
+      this.maxDirectionalLights,
+    );
+
+    this.shadowPassSpotLight = new ShadowPassSpotLight(
+      this.device,
+      this.maxSpotLights,
+    );
+
+    this.particlesPass = new ParticlesPass(
+      this.device,
+      cameraBindGroupLayout,
+    );
   }
 
   resize(width: number, height: number): void {
@@ -127,69 +180,17 @@ export class Renderer {
       alphaMode: "premultiplied",
     });
 
-    if (!this.geometryBuffer) {
-      this.geometryBuffer = new GeometryBuffer(
-        this.device,
-        this.canvas.width,
-        this.canvas.height,
-      );
+    this.geometryBuffer.resize(
+      this.device,
+      this.canvas.width,
+      this.canvas.height,
+    );
 
-      const cameraBindGroupLayout = this.device.createBindGroupLayout({
-        label: "Camera Bind Group Layout",
-        entries: [
-          {
-            binding: 0,
-            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-            buffer: { type: "uniform" },
-          },
-        ],
-      });
-
-      this.geometryPass = new GeometryPass(
-        this.device,
-        this.geometryBuffer,
-        this.materialManager,
-      );
-
-      this.lightingPass = new LightingPass(
-        this.device,
-        this.geometryBuffer,
-        cameraBindGroupLayout,
-        this.lightManager.lightingBindGroupLayout,
-        this.sceneUniforms.bindGroupLayout,
-        this.canvas.width,
-        this.canvas.height,
-      );
-
-      this.outputPass = new OutputPass(this.device);
-
-      this.shadowPassDirectionalLight = new ShadowPassDirectionalLight(
-        this.device,
-        this.maxDirectionalLights,
-      );
-
-      this.shadowPassSpotLight = new ShadowPassSpotLight(
-        this.device,
-        this.maxSpotLights,
-      );
-
-      this.particlesPass = new ParticlesPass(
-        this.device,
-        cameraBindGroupLayout,
-      );
-    } else {
-      this.geometryBuffer.resize(
-        this.device,
-        this.canvas.width,
-        this.canvas.height,
-      );
-
-      this.lightingPass.resize(
-        this.device,
-        this.canvas.width,
-        this.canvas.height,
-      );
-    }
+    this.lightingPass.resize(
+      this.device,
+      this.canvas.width,
+      this.canvas.height,
+    );
   }
 
   render(world: World, camera: Camera, time: Time): void {
