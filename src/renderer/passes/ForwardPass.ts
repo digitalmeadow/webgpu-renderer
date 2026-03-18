@@ -1,37 +1,94 @@
 import { Mesh } from "../../mesh";
-import { LightManager } from "../../lights/LightManager";
 import { MaterialManager } from "../../materials";
-import { MaterialPBR, MaterialBasic, MaterialCustom } from "../../materials";
+import { LightManager } from "../../lights/LightManager";
+import { SceneUniforms } from "../../uniforms";
 import { Camera } from "../../camera";
 import { Vertex } from "../../geometries";
-import { SceneUniforms } from "../../uniforms";
 import shader from "./ForwardPass.wgsl?raw";
 
 export class ForwardPass {
+  private device: GPUDevice;
   private pipeline: GPURenderPipeline;
+  private materialBindGroupLayout: GPUBindGroupLayout;
+  private materialManager: MaterialManager;
+  private meshBindGroupLayout: GPUBindGroupLayout;
+  private globalBindGroupLayout: GPUBindGroupLayout;
+  private lightManager: LightManager;
+  private sceneUniforms: SceneUniforms;
 
   constructor(
-    private device: GPUDevice,
-    private camera: Camera,
-    private sceneUniforms: SceneUniforms,
-    private lightManager: LightManager,
-    private materialManager: MaterialManager,
-    private meshBindGroupLayout: GPUBindGroupLayout,
-    private globalBindGroupLayout: GPUBindGroupLayout,
-    private globalBindGroup: GPUBindGroup,
+    device: GPUDevice,
+    materialManager: MaterialManager,
+    meshBindGroupLayout: GPUBindGroupLayout,
+    lightManager: LightManager,
+    sceneUniforms: SceneUniforms,
   ) {
-    const shaderModule = this.device.createShaderModule({
+    this.device = device;
+    this.materialManager = materialManager;
+    this.materialBindGroupLayout = materialManager.materialBindGroupLayout;
+    this.meshBindGroupLayout = meshBindGroupLayout;
+    this.lightManager = lightManager;
+    this.sceneUniforms = sceneUniforms;
+
+    const shaderModule = device.createShaderModule({
       code: shader,
     });
 
-    this.pipeline = this.device.createRenderPipeline({
+    const cameraBindGroupLayout = device.createBindGroupLayout({
+      label: "Forward Pass Camera Bind Group Layout",
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
+      ],
+    });
+
+    this.globalBindGroupLayout = device.createBindGroupLayout({
+      label: "Forward Pass Global Bind Group Layout",
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "comparison" },
+        },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
+        {
+          binding: 3,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: "depth", viewDimension: "2d-array" },
+        },
+        {
+          binding: 4,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
+        {
+          binding: 5,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: "depth", viewDimension: "2d-array" },
+        },
+      ],
+    });
+
+    this.pipeline = device.createRenderPipeline({
       label: "Forward Pass Pipeline",
-      layout: this.device.createPipelineLayout({
+      layout: device.createPipelineLayout({
         bindGroupLayouts: [
-          this.camera.uniforms.bindGroupLayout,
+          cameraBindGroupLayout,
           this.meshBindGroupLayout,
           this.globalBindGroupLayout,
-          this.materialManager.materialBindGroupLayout,
+          this.materialBindGroupLayout,
         ],
       }),
       vertex: {
@@ -75,62 +132,63 @@ export class ForwardPass {
   render(
     encoder: GPUCommandEncoder,
     meshes: Mesh[],
-    swapChainView: GPUTextureView,
-    depthTextureView: GPUTextureView,
-  ) {
+    camera: Camera,
+    outputView: GPUTextureView,
+    depthView: GPUTextureView,
+  ): void {
+    const globalBindGroup = this.device.createBindGroup({
+      label: "Forward Pass Global Bind Group",
+      layout: this.globalBindGroupLayout,
+      entries: [
+        {
+          binding: 0,
+          resource: { buffer: this.sceneUniforms.buffer },
+        },
+        {
+          binding: 1,
+          resource: this.lightManager.shadowSampler,
+        },
+        {
+          binding: 2,
+          resource: { buffer: this.lightManager.lightBuffer },
+        },
+        {
+          binding: 3,
+          resource: this.lightManager.shadowTextureView || this.lightManager.dummyShadowTextureView,
+        },
+        {
+          binding: 4,
+          resource: { buffer: this.lightManager.spotLightBuffer },
+        },
+        {
+          binding: 5,
+          resource: this.lightManager.spotShadowTextureView || this.lightManager.dummyShadowTextureView,
+        },
+      ],
+    });
+
     const passEncoder = encoder.beginRenderPass({
+      label: "Forward Pass",
       colorAttachments: [
         {
-          view: swapChainView,
+          view: outputView,
           loadOp: "load",
           storeOp: "store",
         },
       ],
       depthStencilAttachment: {
-        view: depthTextureView,
+        view: depthView,
         depthReadOnly: true,
       },
     });
 
-    let currentPipeline: GPURenderPipeline | null = null;
+    passEncoder.setPipeline(this.pipeline);
+    passEncoder.setBindGroup(0, camera.uniforms.bindGroup);
+    passEncoder.setBindGroup(2, globalBindGroup);
 
     for (const mesh of meshes) {
       if (!mesh.material) {
         continue;
-      }
-
-      let pipelineToUse: GPURenderPipeline | null = null;
-
-      if (mesh.material.materialType === "custom") {
-        pipelineToUse = this.materialManager.getCustomPipeline(
-          mesh.material as import("../../materials/MaterialCustom").MaterialCustom,
-          this.camera,
-          this.meshBindGroupLayout,
-        );
-      } else if (
-        mesh.material.materialType === "basic" ||
-        (mesh.material.materialType === "pbr" &&
-          (mesh.material as any).hooks.albedo)
-      ) {
-        const basicOrPbr =
-          mesh.material.materialType === "basic"
-            ? (mesh.material as import("../../materials/MaterialBasic").MaterialBasic)
-            : (mesh.material as import("../../materials/MaterialPBR").MaterialPBR);
-        pipelineToUse = this.materialManager.getHookPipeline(
-          basicOrPbr,
-          this.camera,
-          this.meshBindGroupLayout,
-          "forward",
-        );
-      } else {
-        pipelineToUse = this.pipeline;
-      }
-
-      if (!pipelineToUse) continue;
-
-      if (pipelineToUse !== currentPipeline) {
-        passEncoder.setPipeline(pipelineToUse);
-        currentPipeline = pipelineToUse;
       }
 
       mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
@@ -140,9 +198,7 @@ export class ForwardPass {
         entries: [
           {
             binding: 0,
-            resource: {
-              buffer: mesh.uniforms.buffer,
-            },
+            resource: { buffer: mesh.uniforms.buffer },
           },
         ],
       });
@@ -155,13 +211,12 @@ export class ForwardPass {
         continue;
       }
 
-      passEncoder.setBindGroup(0, this.camera.uniforms.bindGroup);
-      passEncoder.setBindGroup(2, this.globalBindGroup);
       passEncoder.setBindGroup(3, materialBindGroup);
       passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
       passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
       passEncoder.drawIndexed(mesh.geometry.indexCount);
     }
+
     passEncoder.end();
   }
 }

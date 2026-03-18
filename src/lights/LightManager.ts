@@ -35,6 +35,8 @@ export class LightManager {
 
   public spotShadowTextureView: GPUTextureView | null = null;
 
+  public dummyShadowTextureView: GPUTextureView;
+
   public lightingBindGroupLayout: GPUBindGroupLayout;
   public lightingBindGroup: GPUBindGroup;
 
@@ -43,7 +45,6 @@ export class LightManager {
 
   private dummyShadowBuffer: GPUBuffer;
   private dummyShadowTexture: GPUTexture;
-  private dummyShadowTextureView: GPUTextureView;
   private dummyShadowTextureViewArray: GPUTextureView[];
 
   constructor(

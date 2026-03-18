@@ -12,5 +12,11 @@
 4. Spot lightes
 4.c Support multiple Spot Lights
 /// intermediate step: move pass from init in resize() function, to a seperate function called on resize()
-3. Skinning
+
 5. Transparency + Forward Pass
+6. Skinning
+
+--- Visuals ---
+1. Ambient occlusion
+2. Soft shadows (PCF and then softer-when-further-away)
+3. Bloom/Emission

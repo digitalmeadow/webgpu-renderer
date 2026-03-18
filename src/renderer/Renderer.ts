@@ -6,6 +6,7 @@ import { GeometryBuffer } from "./GeometryBuffer";
 import { GeometryPass } from "./passes/GeometryPass";
 import { LightingPass } from "./passes/LightingPass";
 import { OutputPass } from "./passes/OutputPass";
+import { ForwardPass } from "./passes/ForwardPass";
 import { ShadowPassDirectionalLight } from "./passes/ShadowPassDirectionalLight";
 import { ShadowPassSpotLight } from "./passes/ShadowPassSpotLight";
 import { MaterialManager } from "../materials";
@@ -41,6 +42,7 @@ export class Renderer {
   private shadowPassDirectionalLight: ShadowPassDirectionalLight;
   private shadowPassSpotLight: ShadowPassSpotLight;
   private particlesPass: ParticlesPass;
+  private forwardPass: ForwardPass;
   private materialManager: MaterialManager;
   private lightManager: LightManager;
   private sceneUniforms: SceneUniforms;
@@ -61,6 +63,7 @@ export class Renderer {
       null as unknown as ShadowPassDirectionalLight;
     this.shadowPassSpotLight = null as unknown as ShadowPassSpotLight;
     this.particlesPass = null as unknown as ParticlesPass;
+    this.forwardPass = null as unknown as ForwardPass;
     this.materialManager = null as unknown as MaterialManager;
     this.lightManager = null as unknown as LightManager;
     this.sceneUniforms = null as unknown as SceneUniforms;
@@ -154,6 +157,14 @@ export class Renderer {
       this.device,
       cameraBindGroupLayout,
     );
+
+    this.forwardPass = new ForwardPass(
+      this.device,
+      this.materialManager,
+      this.geometryPass.meshBindGroupLayout,
+      this.lightManager,
+      this.sceneUniforms,
+    );
   }
 
   resize(width: number, height: number): void {
@@ -212,55 +223,9 @@ export class Renderer {
     const opaqueMeshes = meshes.filter(
       (m) => m.material?.renderPass === "geometry",
     );
-    // const transparentMeshes = meshes.filter(
-    //   (m) => m.material?.renderPass === "forward",
-    // );
-
-    // if (!this.forwardPass && transparentMeshes.length > 0) {
-    //   // Create Global Bind Group (Scene + Light)
-    //   // We need to combine Scene and Light into a single bind group to stay within the 4 bind group limit.
-    //   const globalBindGroupLayout = this.device.createBindGroupLayout({
-    //     label: "Global Bind Group Layout (Scene + Light)",
-    //     entries: [
-    //       {
-    //         binding: 0,
-    //         visibility: GPUShaderStage.FRAGMENT,
-    //         buffer: { type: "uniform" },
-    //       },
-    //       {
-    //         binding: 1,
-    //         visibility: GPUShaderStage.FRAGMENT,
-    //         buffer: { type: "uniform" },
-    //       },
-    //     ],
-    //   });
-
-    //   const globalBindGroup = this.device.createBindGroup({
-    //     label: "Global Bind Group (Scene + Light)",
-    //     layout: globalBindGroupLayout,
-    //     entries: [
-    //       {
-    //         binding: 0,
-    //         resource: { buffer: this.sceneUniforms.buffer },
-    //       },
-    //       {
-    //         binding: 1,
-    //         resource: { buffer: this.lightManager.uniformsBuffer },
-    //       },
-    //     ],
-    //   });
-
-    //   this.forwardPass = new ForwardPass(
-    //     this.device,
-    //     camera,
-    //     this.sceneUniforms,
-    //     this.lightManager,
-    //     this.materialManager,
-    //     this.geometryPass.meshBindGroupLayout,
-    //     globalBindGroupLayout,
-    //     globalBindGroup,
-    //   );
-    // }
+    const transparentMeshes = meshes.filter(
+      (m) => m.material?.renderPass === "forward",
+    );
 
     const lights = this.collectLights(world);
     this.sceneUniforms.ambientLightColor = world.ambientLightColor;
@@ -344,15 +309,16 @@ export class Renderer {
       );
     }
 
-    // // Forward Pass (transparency) - must run BEFORE Output Pass
-    // if (this.forwardPass && transparentMeshes.length > 0) {
-    //   this.forwardPass.render(
-    //     commandEncoder,
-    //     transparentMeshes,
-    //     this.lightingPass.outputView,
-    //     this.geometryBuffer.depthView,
-    //   );
-    // }
+    // Forward Pass (transparency) - must run BEFORE Output Pass
+    if (this.forwardPass && transparentMeshes.length > 0) {
+      this.forwardPass.render(
+        commandEncoder,
+        transparentMeshes,
+        camera,
+        this.lightingPass.outputView,
+        this.geometryBuffer.depthView,
+      );
+    }
 
     // Output Pass
     const swapChainView = this.context.getCurrentTexture().createView();
