@@ -260,6 +260,7 @@ export class Renderer {
         commandEncoder,
         directionalLights,
         opaqueMeshes,
+        transparentMeshes,
       );
 
       // Set shadow texture and update lighting bind group
@@ -273,7 +274,12 @@ export class Renderer {
 
     // Shadow Pass - Spot Lights
     if (spotLights.length > 0) {
-      this.shadowPassSpotLight.render(commandEncoder, spotLights, opaqueMeshes);
+      this.shadowPassSpotLight.render(
+        commandEncoder,
+        spotLights,
+        opaqueMeshes,
+        transparentMeshes,
+      );
 
       this.lightManager.setSpotShadowTexture(
         this.shadowPassSpotLight.getShadowTextureView(),
@@ -307,15 +313,15 @@ export class Renderer {
     }
 
     // Forward Pass (transparency) - must run BEFORE Output Pass
-    // if (this.forwardPass && transparentMeshes.length > 0) {
-    //   this.forwardPass.render(
-    //     commandEncoder,
-    //     transparentMeshes,
-    //     camera,
-    //     this.lightingPass.outputView,
-    //     this.geometryBuffer.depthView,
-    //   );
-    // }
+    if (this.forwardPass && transparentMeshes.length > 0) {
+      this.forwardPass.render(
+        commandEncoder,
+        transparentMeshes,
+        camera,
+        this.lightingPass.outputView,
+        this.geometryBuffer.depthView,
+      );
+    }
 
     // Output Pass
     const swapChainView = this.context.getCurrentTexture().createView();

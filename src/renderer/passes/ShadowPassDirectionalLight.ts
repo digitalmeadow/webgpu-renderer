@@ -10,6 +10,7 @@ export class ShadowPassDirectionalLight {
   private device: GPUDevice;
   private maxDirectionalLights: number;
   private pipeline: GPURenderPipeline;
+  private transparentPipeline: GPURenderPipeline;
   private meshBindGroupLayout: GPUBindGroupLayout;
   private shadowTexture: GPUTexture;
   private shadowTextureView: GPUTextureView;
@@ -93,7 +94,34 @@ export class ShadowPassDirectionalLight {
         depthWriteEnabled: true,
         depthCompare: "less-equal",
         format: "depth32float",
-        depthBias: 5000, // unsure why this has to be so large?
+        depthBias: 5000,
+        depthBiasSlopeScale: 1.5,
+        depthBiasClamp: 0,
+      },
+    });
+
+    this.transparentPipeline = this.device.createRenderPipeline({
+      label: "Shadow Pass Transparent Pipeline",
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [
+          DirectionalLight.getShadowBindGroupLayout(this.device),
+          this.meshBindGroupLayout,
+        ],
+      }),
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vs_main",
+        buffers: [Vertex.getBufferLayout()],
+      },
+      primitive: {
+        topology: "triangle-list",
+        cullMode: "none",
+      },
+      depthStencil: {
+        depthWriteEnabled: true,
+        depthCompare: "less-equal",
+        format: "depth32float",
+        depthBias: 5000,
         depthBiasSlopeScale: 1.5,
         depthBiasClamp: 0,
       },
@@ -104,6 +132,7 @@ export class ShadowPassDirectionalLight {
     encoder: GPUCommandEncoder,
     directionalLights: DirectionalLight[],
     meshes: Mesh[],
+    transparentMeshes: Mesh[] = [],
   ): void {
     for (
       let lightIndex = 0;
@@ -117,7 +146,6 @@ export class ShadowPassDirectionalLight {
         cascadeIndex < SHADOW_MAP_CASCADES_COUNT;
         cascadeIndex++
       ) {
-        // CRITICAL: Update the buffer BEFORE recording the render pass
         light.setActiveCascadeIndex(cascadeIndex);
 
         const frustumPlanes = frustumPlanesFromMatrix(
@@ -129,8 +157,11 @@ export class ShadowPassDirectionalLight {
           return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
         });
 
-        // Create a dedicated encoder for this cascade
-        // This ensures the writeBuffer executes before we record the render pass
+        const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
+          mesh.updateWorldAABB();
+          return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+        });
+
         const cascadeEncoder = this.device.createCommandEncoder({
           label: `Shadow Pass Encoder Light ${lightIndex} Cascade ${cascadeIndex}`,
         });
@@ -151,8 +182,6 @@ export class ShadowPassDirectionalLight {
         passEncoder.setPipeline(this.pipeline);
 
         for (const mesh of visibleMeshes) {
-          // Update mesh world matrix for shadow pass
-          // TODO: We probably don't need this since it's called in the GeoPass
           mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
 
           const meshBindGroup = this.device.createBindGroup({
@@ -173,9 +202,33 @@ export class ShadowPassDirectionalLight {
           passEncoder.drawIndexed(mesh.geometry.indexCount);
         }
 
+        if (visibleTransparentMeshes.length > 0) {
+          passEncoder.setPipeline(this.transparentPipeline);
+
+          for (const mesh of visibleTransparentMeshes) {
+            mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+
+            const meshBindGroup = this.device.createBindGroup({
+              label: "Shadow Pass Transparent Mesh Bind Group",
+              layout: this.meshBindGroupLayout,
+              entries: [
+                {
+                  binding: 0,
+                  resource: { buffer: mesh.uniforms.buffer },
+                },
+              ],
+            });
+
+            passEncoder.setBindGroup(0, light.shadowBindGroup);
+            passEncoder.setBindGroup(1, meshBindGroup);
+            passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
+            passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
+            passEncoder.drawIndexed(mesh.geometry.indexCount);
+          }
+        }
+
         passEncoder.end();
 
-        // Submit immediately to ensure this cascade's buffer write has executed
         this.device.queue.submit([cascadeEncoder.finish()]);
       }
     }

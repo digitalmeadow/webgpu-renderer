@@ -65,8 +65,8 @@ struct GBufferOutput {
 fn fs_main(in: VertexOutput) -> GBufferOutput {
     var output: GBufferOutput;
 
-    output.albedo = get_albedo_color(in.uv_coords);
-    output.albedo.a = output.albedo.a * material.opacity;
+    let albedo_tex = get_albedo_color(in.uv_coords);
+    output.albedo = vec4<f32>(albedo_tex.rgb * material.color.rgb, albedo_tex.a * material.opacity);
     output.normal = vec4<f32>(normalize(in.world_normal), 1.0);
     
     let metal_rough = textureSample(metalnessRoughnessTexture, defaultSampler, in.uv_coords);

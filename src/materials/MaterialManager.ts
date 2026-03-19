@@ -16,6 +16,7 @@ export class MaterialManager {
   public readonly materialBindGroupLayout: GPUBindGroupLayout;
   private placeholderNormalTexture: GPUTexture;
   private placeholderMetalRoughnessTexture: GPUTexture;
+  private placeholderAlbedoTexture: GPUTexture;
 
   private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> =
     new Map();
@@ -43,6 +44,9 @@ export class MaterialManager {
     ]);
     this.placeholderMetalRoughnessTexture = this.createPlaceholderTexture([
       0, 255, 0, 255,
+    ]);
+    this.placeholderAlbedoTexture = this.createPlaceholderTexture([
+      255, 255, 255, 255,
     ]);
 
     this.baseGeometryShader = geometryPassShader;
@@ -389,7 +393,7 @@ export class MaterialManager {
         layout: this.materialBindGroupLayout,
         entries: [
           { binding: 0, resource: this.defaultSampler },
-          { binding: 1, resource: this.placeholderNormalTexture.createView() },
+          { binding: 1, resource: this.placeholderAlbedoTexture.createView() },
           { binding: 2, resource: this.placeholderNormalTexture.createView() },
           {
             binding: 3,
@@ -409,7 +413,7 @@ export class MaterialManager {
         layout: this.materialBindGroupLayout,
         entries: [
           { binding: 0, resource: this.defaultSampler },
-          { binding: 1, resource: this.placeholderNormalTexture.createView() },
+          { binding: 1, resource: this.placeholderAlbedoTexture.createView() },
           { binding: 2, resource: this.placeholderNormalTexture.createView() },
           {
             binding: 3,

@@ -7,6 +7,7 @@ export class ShadowPassSpotLight {
   private device: GPUDevice;
   private maxSpotLights: number;
   private pipeline: GPURenderPipeline;
+  private transparentPipeline: GPURenderPipeline;
   private meshBindGroupLayout: GPUBindGroupLayout;
   private shadowTexture: GPUTexture;
   private shadowTextureView: GPUTextureView;
@@ -81,12 +82,40 @@ export class ShadowPassSpotLight {
         depthBiasClamp: 0,
       },
     });
+
+    this.transparentPipeline = this.device.createRenderPipeline({
+      label: "Shadow Pass SpotLight Transparent Pipeline",
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [
+          SpotLight.getShadowBindGroupLayout(this.device),
+          this.meshBindGroupLayout,
+        ],
+      }),
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vs_main",
+        buffers: [Vertex.getBufferLayout()],
+      },
+      primitive: {
+        topology: "triangle-list",
+        cullMode: "none",
+      },
+      depthStencil: {
+        depthWriteEnabled: true,
+        depthCompare: "less-equal",
+        format: "depth32float",
+        depthBias: 4,
+        depthBiasSlopeScale: 2.0,
+        depthBiasClamp: 0,
+      },
+    });
   }
 
   public render(
     encoder: GPUCommandEncoder,
     spotLights: SpotLight[],
     meshes: Mesh[],
+    transparentMeshes: Mesh[] = [],
   ): void {
     for (let lightIndex = 0; lightIndex < spotLights.length; lightIndex++) {
       const light = spotLights[lightIndex];
@@ -94,12 +123,13 @@ export class ShadowPassSpotLight {
       light.updateShadowMatrix();
 
       const visibleMeshes = meshes;
+      const visibleTransparentMeshes = transparentMeshes;
 
-      const encoder = this.device.createCommandEncoder({
+      const shadowEncoder = this.device.createCommandEncoder({
         label: `Shadow Pass SpotLight Encoder Light ${lightIndex}`,
       });
 
-      const passEncoder = encoder.beginRenderPass({
+      const passEncoder = shadowEncoder.beginRenderPass({
         label: `Shadow Pass SpotLight Light ${lightIndex}`,
         colorAttachments: [],
         depthStencilAttachment: {
@@ -133,9 +163,34 @@ export class ShadowPassSpotLight {
         passEncoder.drawIndexed(mesh.geometry.indexCount);
       }
 
+      if (visibleTransparentMeshes.length > 0) {
+        passEncoder.setPipeline(this.transparentPipeline);
+
+        for (const mesh of visibleTransparentMeshes) {
+          mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+
+          const meshBindGroup = this.device.createBindGroup({
+            label: "Shadow Pass SpotLight Transparent Mesh Bind Group",
+            layout: this.meshBindGroupLayout,
+            entries: [
+              {
+                binding: 0,
+                resource: { buffer: mesh.uniforms.buffer },
+              },
+            ],
+          });
+
+          passEncoder.setBindGroup(0, light.shadowBindGroup);
+          passEncoder.setBindGroup(1, meshBindGroup);
+          passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
+          passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
+          passEncoder.drawIndexed(mesh.geometry.indexCount);
+        }
+      }
+
       passEncoder.end();
 
-      this.device.queue.submit([encoder.finish()]);
+      this.device.queue.submit([shadowEncoder.finish()]);
     }
   }
 

@@ -80,6 +80,7 @@ struct LightSpotUniformsArray {
 
 // Material uniforms (group 3)
 struct MaterialUniforms {
+    color: vec4<f32>,
     opacity: f32,
 }
 
@@ -187,10 +188,12 @@ struct FragmentOutput {
 fn fs_main(in: VertexOutput) -> FragmentOutput {
     var output: FragmentOutput;
 
-    let albedo = textureSample(albedo_texture, material_sampler, in.uv_coords);
+    let albedo_tex = textureSample(albedo_texture, material_sampler, in.uv_coords);
+
+    let albedo = vec4<f32>(albedo_tex.rgb * material_uniforms.color.rgb, albedo_tex.a);
     let world_normal = normalize(in.world_normal);
 
-    var color = albedo.rgb * scene_uniforms.ambient_light_color.rgb;
+    var color = albedo.rgb * max(scene_uniforms.ambient_light_color.rgb, vec3<f32>(0.15));
 
     // Directional lights
     for (var i: u32 = 0u; i < light_directional_uniforms.light_count; i++) {
@@ -210,8 +213,9 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let shadow_coords = shadow_matrix * vec4<f32>(in.world_position, 1.0);
 
             let shadow = fetch_light_directional_shadow(i, cascade, shadow_coords);
+            let effective_shadow = mix(1.0, shadow, material_uniforms.opacity);
 
-            color += albedo.rgb * light_uniforms.color.rgb * light_uniforms.color.a * shadow * diffuse;
+            color += albedo.rgb * light_uniforms.color.rgb * light_uniforms.color.a * effective_shadow * diffuse;
         }
     }
 
@@ -221,7 +225,6 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
         if light_spot.color_intensity.a > 0.0 {
             let shadow_coords = light_spot.view_projection_matrix * vec4<f32>(in.world_position, 1.0);
-            let shadow = fetch_light_spot_shadow(j, in.world_position, light_spot.view_matrix, shadow_coords);
 
             let light_to_frag = in.world_position - light_spot.position.xyz;
             let light_dir = normalize(light_to_frag);
@@ -229,29 +232,32 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let forward = normalize(light_spot.forward.xyz);
             let prenumbra_percent = light_spot.fov_prenumbra.y;
 
-            // Extract shadow UV from shadow coords (already aspect-correct)
+            // Extract shadow UV from shadow coords
             let proj_correction = 1.0 / shadow_coords.w;
             let shadow_uv = shadow_coords.xy * vec2<f32>(0.5, -0.5) * proj_correction + vec2<f32>(0.5, 0.5);
             let uv_centered = shadow_uv - vec2<f32>(0.5, 0.5);
 
-            // Get aspect ratio and radius for rectangular to circular falloff
-            let aspect = light_spot.aspect_radius.x;
+            // Get radius for rectangular to circular falloff
             let radius = light_spot.aspect_radius.y;
 
-            // Rectangular falloff: max of |x| and |y| normalized to frustum bounds
-            let rect_factor = max(abs(uv_centered.x) * 2.0, abs(uv_centered.y) * 2.0);
+            let p = uv_centered * 2.0; // [-1,1]
 
-            // Circular falloff: ellipse that matches frustum bounds
-            let ellipse_y = uv_centered.y / aspect;
-            let radial_dist = length(vec2<f32>(uv_centered.x, ellipse_y)) * 2.0 * aspect;
+            // Rectangular
+            let rect_factor = max(abs(p.x), abs(p.y));
+            let radial_dist = length(vec2<f32>(
+                p.x,
+                p.y
+            ));
 
-            // Mix based on radius: 0 = rectangular, 1 = circular
+            // Blend
             var normalized_dist = mix(rect_factor, radial_dist, radius);
 
             // Apply prenumbra with smooth falloff
             let spot_factor = smoothstep(1.0, 1.0 - prenumbra_percent, normalized_dist);
 
             let diffuse = max(0.0, dot(world_normal, light_dir));
+
+            let shadow = fetch_light_spot_shadow(j, in.world_position, light_spot.view_matrix, shadow_coords);
 
             color += albedo.rgb * light_spot.color_intensity.rgb * light_spot.color_intensity.a * shadow * diffuse * spot_factor;
         }

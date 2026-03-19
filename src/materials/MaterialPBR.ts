@@ -28,6 +28,7 @@ export class MaterialPBR extends MaterialBase {
   metalnessRoughnessTexture: Texture | null = null;
   hooks: ShaderHooks = {};
   public uniforms: MaterialUniforms;
+  baseColorFactor: [number, number, number, number] = [1, 1, 1, 1];
 
   constructor(
     device: GPUDevice,
