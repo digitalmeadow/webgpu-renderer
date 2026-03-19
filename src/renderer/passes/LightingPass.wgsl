@@ -246,64 +246,39 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
             // Light forward direction (should already be light → forward)
             let forward = normalize(light_spot.forward.xyz);
+            let prenumbra_percent = light_spot.fov_prenumbra.y;
 
-            var angle = light_spot.fov_prenumbra.x;
-            var prenumbra_percent = light_spot.fov_prenumbra.y;
-
-            // Cone angles
-            let inner = angle * (1.0 - prenumbra_percent);
-            let outer = angle;
-
-            // Cosines
-            let cos_inner = cos(inner);
-            let cos_outer = cos(outer);
-
-            // Angle between light forward and fragment direction
-            let cos_angle = dot(-forward, light_dir);
-
-            // Smooth falloff: outer → inner
-            let spot_factor = smoothstep(cos_outer, cos_inner, cos_angle);
+            // Extract shadow UV from shadow coords (already aspect-correct)
+            let proj_correction = 1.0 / shadow_coords.w;
+            let shadow_uv = shadow_coords.xy * vec2<f32>(0.5, -0.5) * proj_correction + vec2<f32>(0.5, 0.5);
+            let uv_centered = shadow_uv - vec2<f32>(0.5, 0.5);
 
             // Get aspect ratio and radius for rectangular to circular falloff
             let aspect = light_spot.aspect_radius.x;
             let radius = light_spot.aspect_radius.y;
 
-            // Build basis vectors for rectangular/circular adjustment
-            let right = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), forward));
-            let up = cross(forward, right);
+            // Rectangular falloff: max of |x| and |y| normalized to frustum bounds
+            // uv_centered * 2 gives 0 at center, 1 at frustum edge
+            let rect_factor = max(abs(uv_centered.x) * 2.0, abs(uv_centered.y) * 2.0);
 
-            // Project light-to-fragment onto right/up vectors
-            let to_frag = world_pos - light_spot.position.xyz;
-            let local_x = dot(to_frag, right);
-            let local_y = dot(to_frag, up);
+            // Circular falloff: ellipse that matches frustum bounds
+            // Divide y by aspect to compensate for UV stretch, scale to match frustum
+            let ellipse_y = uv_centered.y / aspect;
+            let radial_dist = length(vec2<f32>(uv_centered.x, ellipse_y)) * 2.0 * aspect;
 
-            // Adjust Y by aspect ratio for rectangular falloff
-            let adjusted_y = local_y * aspect;
-            let outer_dist = length(vec2<f32>(local_x, adjusted_y));
-            let max_dist = tan(outer) * length(to_frag);
+            // Mix based on radius: 0 = rectangular, 1 = circular
+            var normalized_dist = mix(rect_factor, radial_dist, radius);
 
-            // Normalized distance in the cone (0 = center, 1 = edge)
-            var radial_factor = 0.0;
-            if (max_dist > 0.0) {
-                radial_factor = outer_dist / max_dist;
-            }
-
-            // Apply radius: 0 = square/rectangular, 1 = circular
-            // For rectangular (radius = 0), use adjusted distance
-            // For circular (radius = 1), use actual distance
-            var adjusted_spot_factor = spot_factor;
-            if (radius < 1.0) {
-                // Interpolate between rectangular and circular falloff
-                let rect_factor = smoothstep(1.0, 1.0 - prenumbra_percent, radial_factor);
-                let circ_factor = spot_factor;
-                adjusted_spot_factor = mix(rect_factor, circ_factor, radius);
-            }
+            // Apply prenumbra with smooth falloff
+            let spot_factor = smoothstep(1.0, 1.0 - prenumbra_percent, normalized_dist);
 
             // Diffuse lighting
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
             // Accumulate light contribution
-            color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * shadow * adjusted_spot_factor;
+            color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * shadow * spot_factor;
+            // Dbug
+            color = vec3<f32>(shadow, spot_factor, 0.0);
         }
     }
 
