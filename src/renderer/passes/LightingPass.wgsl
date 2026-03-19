@@ -253,20 +253,19 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let shadow_uv = shadow_coords.xy * vec2<f32>(0.5, -0.5) * proj_correction + vec2<f32>(0.5, 0.5);
             let uv_centered = shadow_uv - vec2<f32>(0.5, 0.5);
 
-            // Get aspect ratio and radius for rectangular to circular falloff
-            let aspect = light_spot.aspect_radius.x;
+            // Get radius for rectangular to circular falloff
             let radius = light_spot.aspect_radius.y;
 
-            // Rectangular falloff: max of |x| and |y| normalized to frustum bounds
-            // uv_centered * 2 gives 0 at center, 1 at frustum edge
-            let rect_factor = max(abs(uv_centered.x) * 2.0, abs(uv_centered.y) * 2.0);
+            let p = uv_centered * 2.0; // [-1,1]
 
-            // Circular falloff: ellipse that matches frustum bounds
-            // Divide y by aspect to compensate for UV stretch, scale to match frustum
-            let ellipse_y = uv_centered.y / aspect;
-            let radial_dist = length(vec2<f32>(uv_centered.x, ellipse_y)) * 2.0 * aspect;
+            // Rectangular
+            let rect_factor = max(abs(p.x), abs(p.y));
+            let radial_dist = length(vec2<f32>(
+                p.x,
+                p.y
+            ));
 
-            // Mix based on radius: 0 = rectangular, 1 = circular
+            // Blend
             var normalized_dist = mix(rect_factor, radial_dist, radius);
 
             // Apply prenumbra with smooth falloff
@@ -277,8 +276,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
             // Accumulate light contribution
             color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * shadow * spot_factor;
-            // Dbug
-            color = vec3<f32>(shadow, spot_factor, 0.0);
+            color = vec3<f32>(spot_factor, shadow, 0.0);
         }
     }
 
