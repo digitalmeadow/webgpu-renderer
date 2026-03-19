@@ -276,7 +276,6 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
             // Accumulate light contribution
             color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * shadow * spot_factor;
-            color = vec3<f32>(spot_factor, shadow, 0.0);
         }
     }
 
