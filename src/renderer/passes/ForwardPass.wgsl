@@ -13,6 +13,7 @@ struct CameraUniforms {
     view_matrix: mat4x4<f32>,
     projection_matrix: mat4x4<f32>,
     view_projection_matrix: mat4x4<f32>,
+    view_matrix_inverse: mat4x4<f32>,
     projection_matrix_inverse: mat4x4<f32>,
     position: vec4<f32>,
     near: f32,
@@ -107,24 +108,6 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 
-// Helper: 4x4 matrix inverse (for view matrices)
-fn inverse_mat4(m: mat4x4<f32>) -> mat4x4<f32> {
-    let inv_rot = transpose(mat3x3<f32>(
-        m[0].xyz,
-        m[1].xyz,
-        m[2].xyz
-    ));
-
-    let inv_trans = -(inv_rot * m[3].xyz);
-
-    return mat4x4<f32>(
-        vec4(inv_rot[0], 0.0),
-        vec4(inv_rot[1], 0.0),
-        vec4(inv_rot[2], 0.0),
-        vec4(inv_trans, 1.0)
-    );
-}
-
 // Helper: Select cascade based on view-space depth
 fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
     if view_space_z < splits.y {
@@ -204,7 +187,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
             // Get view-space Z for cascade selection
-            let inv_view = inverse_mat4(camera_uniforms.view_matrix);
+            let inv_view = camera_uniforms.view_matrix_inverse;
             let view_pos = camera_uniforms.view_matrix * vec4<f32>(in.world_position, 1.0);
             let view_space_z = -view_pos.z;
             let cascade = select_cascade(view_space_z, light_uniforms.cascade_splits);
