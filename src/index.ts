@@ -11,3 +11,4 @@ export * from "./mesh";
 export * from "./particles";
 export * from "./animations";
 export * from "./scene";
+export * from "./skinning";

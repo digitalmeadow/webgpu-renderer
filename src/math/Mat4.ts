@@ -699,7 +699,7 @@ export class Mat4 {
     const f = 1 / Math.tan(fovY / 2);
     const nf = 1 / (near - far); // note near - far
 
-    out.data[0] = f * aspect;
+    out.data[0] = f / aspect;
     out.data[1] = 0;
     out.data[2] = 0;
     out.data[3] = 0;

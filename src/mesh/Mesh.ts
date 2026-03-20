@@ -2,12 +2,16 @@ import { MaterialBase } from "../materials";
 import { MeshUniforms } from "./MeshUniforms";
 import { Entity, EntityType } from "../scene/Entity";
 import { Geometry } from "../geometries";
+import { Mat4 } from "../math";
+import { SkinData } from "../skinning";
 
 export class Mesh extends Entity {
   public type = EntityType.Mesh;
   public geometry: Geometry;
   public uniforms: MeshUniforms;
   public material: MaterialBase | null = null;
+  public skinData: SkinData | null = null;
+  private device: GPUDevice;
 
   constructor(
     device: GPUDevice,
@@ -16,6 +20,7 @@ export class Mesh extends Entity {
     material: MaterialBase,
   ) {
     super(name);
+    this.device = device;
     this.uniforms = new MeshUniforms(device);
     this.geometry = geometry;
     this.material = material;
@@ -24,5 +29,44 @@ export class Mesh extends Entity {
   public updateWorldAABB(): void {
     const worldMatrix = this.transform.getWorldMatrix();
     this.geometry.aabb.updateWorldSpace(worldMatrix);
+  }
+
+  public updateJointMatrices(): void {
+    if (!this.skinData || !this.uniforms) {
+      console.log(
+        `[Mesh.updateJointMatrices] ${this.name}: No skinData or uniforms`,
+      );
+      return;
+    }
+
+    console.log(
+      `[Mesh.updateJointMatrices] ${this.name}: Processing ${this.skinData.joints.length} joints`,
+    );
+
+    const matrices: Mat4[] = [];
+    for (let i = 0; i < this.skinData.joints.length; i++) {
+      const jointEntity = this.skinData.joints[i];
+      const ibm = this.skinData.inverseBindMatrices[i];
+
+      const worldMatrix = jointEntity.transform.getWorldMatrix();
+      const jointMatrix = Mat4.multiply(worldMatrix, ibm);
+      matrices.push(jointMatrix);
+
+      if (i < 3) {
+        console.log(
+          `[Mesh.updateJointMatrices] Joint ${i} (${jointEntity.name}): pos=(${jointEntity.transform.translation.x.toFixed(3)}, ${jointEntity.transform.translation.y.toFixed(3)}, ${jointEntity.transform.translation.z.toFixed(3)}) rot=(${jointEntity.transform.rotation.x.toFixed(3)}, ${jointEntity.transform.rotation.y.toFixed(3)}, ${jointEntity.transform.rotation.z.toFixed(3)}, ${jointEntity.transform.rotation.w.toFixed(3)})`,
+        );
+      }
+    }
+
+    this.uniforms.updateJointMatrices(this.device, matrices);
+    this.uniforms.setApplySkinning(this.device, true);
+    console.log(
+      `[Mesh.updateJointMatrices] ${this.name}: applySkinning set to true, joints updated`,
+    );
+  }
+
+  public getDevice(): GPUDevice {
+    return this.device;
   }
 }

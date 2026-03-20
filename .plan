@@ -14,6 +14,7 @@
 /// intermediate step: move pass from init in resize() function, to a seperate function called on resize()
 
 5. Transparency + Forward Pass
+
 5.a Pass inverse matrices in camera uniforms instead of computing in shader
     Should be able to remove inverse_mat4 function completely
 

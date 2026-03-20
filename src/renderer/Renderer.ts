@@ -32,6 +32,7 @@ export class Renderer {
   private format: GPUTextureFormat;
   private maxDirectionalLights: number;
   private maxSpotLights: number;
+  private cameras: Set<Camera> = new Set();
 
   public frustumCulling: boolean = false;
 
@@ -199,6 +200,27 @@ export class Renderer {
       this.canvas.width,
       this.canvas.height,
     );
+
+    for (const camera of this.cameras) {
+      camera.resize(this.canvas.width, this.canvas.height);
+      camera.update(this.device);
+    }
+  }
+
+  public registerCamera(camera: Camera): void {
+    this.cameras.add(camera);
+    if (this.device) {
+      camera.resize(this.canvas.width, this.canvas.height);
+      camera.update(this.device);
+    }
+  }
+
+  public unregisterCamera(camera: Camera): void {
+    this.cameras.delete(camera);
+  }
+
+  public clearCameras(): void {
+    this.cameras.clear();
   }
 
   render(world: World, camera: Camera, time: Time): void {
@@ -213,10 +235,26 @@ export class Renderer {
       return;
     }
 
+    this.cameras.add(camera);
+
     world.update(time.delta);
     camera.update(this.device);
 
     const meshes = this.collectVisibleMeshes(world, camera);
+
+    for (const mesh of meshes) {
+      if (mesh.skinData) {
+        console.log(
+          `[Renderer] Skinned mesh found: "${mesh.name}", joints: ${mesh.skinData.joints.length}`,
+        );
+        mesh.updateJointMatrices();
+      }
+    }
+
+    const skinnedMeshCount = meshes.filter((m) => m.skinData).length;
+    if (skinnedMeshCount > 0) {
+      console.log(`[Renderer] Total skinned meshes: ${skinnedMeshCount}`);
+    }
     const opaqueMeshes = meshes.filter(
       (m) => m.material?.renderPass === "geometry",
     );

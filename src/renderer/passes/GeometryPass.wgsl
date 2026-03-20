@@ -1,3 +1,5 @@
+const MAX_JOINTS: u32 = 64u;
+
 struct MaterialUniforms {
   color: vec4<f32>,
   opacity: f32,
@@ -5,12 +7,11 @@ struct MaterialUniforms {
 
 //--HOOK_PLACEHOLDER_UNIFORMS--//
 
-// Default (weak) functions that will be overridden if a hook is provided.
 fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
     return textureSample(albedoTexture, defaultSampler, uv);
 }
 
-//--HOOK_PLACEHOLDER_ALBEDO--// // This is where the user's albedo_logic will go
+//--HOOK_PLACEHOLDER_ALBEDO--//
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -31,10 +32,12 @@ struct CameraUniforms {
 
 struct MeshUniforms {
     model_transform_matrix: mat4x4<f32>,
+    joint_matrices: array<mat4x4<f32>, MAX_JOINTS>,
+    apply_skinning: u32,
 }
 
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
-@group(1) @binding(0) var<uniform> model: mat4x4<f32>;
+@group(1) @binding(0) var<uniform> model: MeshUniforms;
 
 @group(2) @binding(0) var defaultSampler: sampler;
 @group(2) @binding(1) var albedoTexture: texture_2d<f32>;
@@ -46,15 +49,31 @@ struct MeshUniforms {
 fn vs_main(
     @location(0) position: vec4<f32>,
     @location(1) normal: vec3<f32>,
-     @location(2) uv: vec2<f32>
- ) -> VertexOutput {
-     var output: VertexOutput;
-     output.position = camera.view_projection_matrix * model * position;
-     output.world_normal = (model * vec4<f32>(normal, 0.0)).xyz;
-     output.uv_coords = uv;
+    @location(2) uv: vec2<f32>,
+    @location(3) joint_indices: vec4<f32>,
+    @location(4) joint_weights: vec4<f32>,
+) -> VertexOutput {
+    var output: VertexOutput;
 
-     return output;
- }
+    var skin_matrix = mat4x4<f32>(
+        joint_weights.x * model.joint_matrices[i32(joint_indices.x)] +
+        joint_weights.y * model.joint_matrices[i32(joint_indices.y)] +
+        joint_weights.z * model.joint_matrices[i32(joint_indices.z)] +
+        joint_weights.w * model.joint_matrices[i32(joint_indices.w)]
+    );
+
+    let skinned_position = skin_matrix * position;
+    let final_position = select(position, skinned_position, bool(model.apply_skinning));
+
+    let world_position = model.model_transform_matrix * final_position;
+    output.world_normal = (model.model_transform_matrix * vec4<f32>(normal, 0.0)).xyz;
+    output.uv_coords = uv;
+
+    let view_position = camera.view_matrix * world_position;
+    output.position = camera.view_projection_matrix * world_position;
+
+    return output;
+}
 
 struct GBufferOutput {
     @location(0) albedo: vec4<f32>,
@@ -71,7 +90,7 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     output.normal = vec4<f32>(normalize(in.world_normal), 1.0);
     
     let metal_rough = textureSample(metalnessRoughnessTexture, defaultSampler, in.uv_coords);
-    output.metal_rough = vec4<f32>(metal_rough.b, metal_rough.g, 0.0, 1.0); // B = metallic, G = roughness
+    output.metal_rough = vec4<f32>(metal_rough.b, metal_rough.g, 0.0, 1.0);
 
     return output;
 }
