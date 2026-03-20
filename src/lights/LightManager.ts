@@ -259,7 +259,7 @@ export class LightManager {
         light.updateShadowMatrix();
 
         const lightData = this.createSpotLightData(light, i);
-        
+
         this.device.queue.writeBuffer(
           this.spotLightBuffer,
           i * SPOT_LIGHT_SIZE,
@@ -294,7 +294,7 @@ export class LightManager {
     lightData.set(light.projectionMatrix.data, 16);
     lightData.set(light.viewProjectionMatrix.data, 32);
 
-    const position = light.transform.translation;
+    const position = light.transform.getWorldPosition();
     lightData.set(position.data, 48);
 
     const nearFar = new Float32Array([light.near, light.far, 0, 0]);
@@ -306,7 +306,7 @@ export class LightManager {
     ]);
     lightData.set(colorIntensity, 56);
 
-    const forward = light.transform.getForward();
+    const forward = light.transform.getWorldForward();
     lightData.set(forward.data, 60);
 
     // FOV in radians (outer angle), prenumbra as percentage (0-1), unused, unused
@@ -316,7 +316,12 @@ export class LightManager {
     lightData.set(fovPrenumbra, 64);
 
     // Aspect ratio, radius, unused, unused
-    const aspectRadius = new Float32Array([light.aspectRatio, light.radius, 0, 0]);
+    const aspectRadius = new Float32Array([
+      light.aspectRatio,
+      light.radius,
+      0,
+      0,
+    ]);
     lightData.set(aspectRadius, 68);
 
     return lightData;

@@ -131,7 +131,7 @@ export class SpotLight extends Light {
     data.set(this.projectionMatrix.data, 16);
     data.set(this.viewProjectionMatrix.data, 32);
 
-    const position = this.transform.translation;
+    const position = this.transform.getWorldPosition();
     data.set(position.data, 48);
 
     const nearFar = new Float32Array([this.near, this.far, 0, 0]);
