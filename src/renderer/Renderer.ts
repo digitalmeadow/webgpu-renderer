@@ -244,17 +244,10 @@ export class Renderer {
 
     for (const mesh of meshes) {
       if (mesh.skinData) {
-        console.log(
-          `[Renderer] Skinned mesh found: "${mesh.name}", joints: ${mesh.skinData.joints.length}`,
-        );
         mesh.updateJointMatrices();
       }
     }
 
-    const skinnedMeshCount = meshes.filter((m) => m.skinData).length;
-    if (skinnedMeshCount > 0) {
-      console.log(`[Renderer] Total skinned meshes: ${skinnedMeshCount}`);
-    }
     const opaqueMeshes = meshes.filter(
       (m) => m.material?.renderPass === "geometry",
     );
