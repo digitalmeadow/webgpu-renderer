@@ -285,6 +285,9 @@ export class Renderer {
       this.lightManager.updateSpotLights(spotLights);
     }
 
+    // Update all world matrices before shadow pass (handles parented lights)
+    world.updateWorldMatrices();
+
     // Shadow Pass - Directional Lights
     if (directionalLights.length > 0) {
       this.shadowPassDirectionalLight.render(

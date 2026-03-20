@@ -89,8 +89,8 @@ export class SpotLight extends Light {
       return;
     }
 
-    const position = this.transform.translation;
-    const forward = this.transform.getForward();
+    const position = this.transform.getWorldPosition();
+    const forward = this.transform.getWorldForward();
 
     let up: Vec3;
     if (Math.abs(forward.y) > 0.99) {
@@ -143,15 +143,10 @@ export class SpotLight extends Light {
     ]);
     data.set(colorIntensity, 56);
 
-    const forward = this.transform.getForward();
+    const forward = this.transform.getWorldForward();
     data.set(forward.data, 60);
 
-    const fovPrenumbra = new Float32Array([
-      this.fov,
-      this.prenumbra,
-      0,
-      0,
-    ]);
+    const fovPrenumbra = new Float32Array([this.fov, this.prenumbra, 0, 0]);
     data.set(fovPrenumbra, 64);
 
     const aspectRadius = new Float32Array([

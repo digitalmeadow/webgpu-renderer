@@ -146,4 +146,19 @@ export class Transform {
   getWorldMatrix(): Mat4 {
     return this.worldMatrix;
   }
+
+  public getWorldPosition(): Vec3 {
+    return Mat4.getTranslation(this.worldMatrix);
+  }
+
+  public getWorldRotation(): Quat {
+    return Mat4.getRotation(this.worldMatrix);
+  }
+
+  public getWorldForward(): Vec3 {
+    const worldRot = this.getWorldRotation();
+    const forward = new Vec3(0, 0, 1);
+    Vec3.transformQuat(forward, worldRot, forward);
+    return forward;
+  }
 }

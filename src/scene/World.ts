@@ -24,6 +24,12 @@ export class World {
     }
   }
 
+  updateWorldMatrices(): void {
+    for (const scene of this.scenes) {
+      scene.root.updateWorldMatrix();
+    }
+  }
+
   destroy(): void {
     for (const scene of this.scenes) {
       this.removeScene(scene);
