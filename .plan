@@ -1,27 +1,17 @@
----- Core --------
-0. Frustums
-1. Shadows
-2. Particles
--- We can do GLTF step here for loading scenes
-
--- We are up to here:
-
-4.a Support multiple DirectionalLights
-
-
-4. Spot lightes
-4.c Support multiple Spot Lights
-/// intermediate step: move pass from init in resize() function, to a seperate function called on resize()
-
-5. Transparency + Forward Pass
-
-5.a Pass inverse matrices in camera uniforms instead of computing in shader
-    Should be able to remove inverse_mat4 function completely
-
-6. Skinning
 
 --- Visuals ---
+
+Environment maps
+Basic env map reflections
+
+Not in order:
 1. Ambient occlusion
 2. Soft shadows (PCF and then softer-when-further-away)
 3. Bloom/Emission
 https://youtu.be/7oLgEV9ih1M?si=6A8cXluaIsObvbRt
+
+Bloom:
+Ideally: Bloom as a post processing effect based on luminance
+Bloom also as a seperate voluntary pass so that some meshes can appear to be transmissive/glowing even if they aren't above the luminance threshold
+
+Requires, a seperate pass which uses buffer swapping to progressively blur the image, number of swaps, as well as other bloom params should be configurable.

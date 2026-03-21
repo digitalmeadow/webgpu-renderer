@@ -254,11 +254,19 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             // Apply prenumbra with smooth falloff
             let spot_factor = smoothstep(1.0, 1.0 - prenumbra_percent, normalized_dist);
 
+            // Distance-based falloff using spotlight's frustum
+            // shadow_coords.w contains perspective-correct depth where w ≈ -view_z
+            // This gives us the linear distance from the spotlight
+            let light_distance = shadow_coords.w;
+            let spot_far = light_spot.near_far.y;
+            let normalized_dist_from_light = clamp(light_distance / spot_far, 0.0, 1.0);
+            let dist_falloff = (1.0 - normalized_dist_from_light) / (1.0 + normalized_dist_from_light * normalized_dist_from_light);
+
             // Diffuse lighting
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
             // Accumulate light contribution
-            color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * shadow * spot_factor;
+            color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * shadow * spot_factor * dist_falloff;
         }
     }
 
