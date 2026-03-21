@@ -15,6 +15,7 @@ struct CameraUniforms {
     view_matrix: mat4x4<f32>,
     projection_matrix: mat4x4<f32>,
     view_projection_matrix: mat4x4<f32>,
+    view_matrix_inverse: mat4x4<f32>,
     projection_matrix_inverse: mat4x4<f32>,
     position: vec4<f32>,
     near_far: vec2<f32>,
