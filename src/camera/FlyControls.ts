@@ -11,6 +11,11 @@ export class FlyControls {
   private minSpeed: number = 0.5;
   private maxSpeed: number = 50;
 
+  private isDragging = false;
+  private lastMouseX = 0;
+  private lastMouseY = 0;
+  private readonly sensitivity = 0.005;
+
   constructor(canvas: HTMLCanvasElement, camera: any) {
     this.canvas = canvas;
     this.camera = camera;
@@ -29,7 +34,14 @@ export class FlyControls {
   }
 
   private initKeyboard(): void {
-    // Mouse wheel for speed adjustment
+    window.addEventListener("keydown", (e) => {
+      this.keys.add(e.key.toLowerCase());
+    });
+
+    window.addEventListener("keyup", (e) => {
+      this.keys.delete(e.key.toLowerCase());
+    });
+
     window.addEventListener(
       "wheel",
       (e) => {
@@ -45,16 +57,35 @@ export class FlyControls {
   }
 
   private initMouse(): void {
-    document.addEventListener("mousemove", (e) => {
-      const sensitivity = 0.002;
-      this.yaw -= e.movementX * sensitivity;
-      this.pitch -= e.movementY * sensitivity;
+    this.canvas.addEventListener("mousedown", (e) => {
+      this.isDragging = true;
+      this.lastMouseX = e.clientX;
+      this.lastMouseY = e.clientY;
+    });
 
-      // Clamp pitch to prevent flipping
+    document.addEventListener("mousemove", (e) => {
+      if (!this.isDragging) return;
+
+      const deltaX = e.clientX - this.lastMouseX;
+      const deltaY = e.clientY - this.lastMouseY;
+
+      this.yaw -= deltaX * this.sensitivity;
+      this.pitch -= deltaY * this.sensitivity;
       this.pitch = Math.max(
         -Math.PI / 2 + 0.01,
         Math.min(Math.PI / 2 - 0.01, this.pitch),
       );
+
+      this.lastMouseX = e.clientX;
+      this.lastMouseY = e.clientY;
+    });
+
+    document.addEventListener("mouseup", () => {
+      this.isDragging = false;
+    });
+
+    document.addEventListener("mouseleave", () => {
+      this.isDragging = false;
     });
   }
 
