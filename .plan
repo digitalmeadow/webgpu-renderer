@@ -1,10 +1,10 @@
 
 --- Visuals ---
 
-Frame independant lerping and physics
 
 Environment maps
 Basic env map reflections
+  - Mipmaps, 4 levels, blend based on material roughness channel.
 
 Not in order:
 1. Ambient occlusion

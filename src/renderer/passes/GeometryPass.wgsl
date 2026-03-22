@@ -99,7 +99,6 @@ fn sample_environment_reflection(world_pos: vec3<f32>, world_normal: vec3<f32>, 
     
     let reflected_albedo = mix(env_color, env_color * vec3<f32>(1.0), metalness);
     
-    return reflected_albedo;
     return reflected_albedo * reflection_strength * metalness;
 }
 
