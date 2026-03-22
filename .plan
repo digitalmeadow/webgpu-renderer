@@ -5,6 +5,7 @@
 Environment maps
 Basic env map reflections
   - Mipmaps, 4 levels, blend based on material roughness channel.
+  - Research whether a Skybox should be a primitive in the renderer, or just a cube?
 
 Not in order:
 1. Ambient occlusion

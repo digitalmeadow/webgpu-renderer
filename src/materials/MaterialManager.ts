@@ -55,8 +55,8 @@ export class MaterialManager {
 
     this.placeholderEnvTexture = device.createTexture({
       label: "Placeholder Cube Texture",
-      size: { width: 1, height: 1, depthOrArrayLayers: 6 },
-      mipLevelCount: 1,
+      size: { width: 8, height: 8, depthOrArrayLayers: 6 },
+      mipLevelCount: 4,
       sampleCount: 1,
       dimension: "2d",
       format: "rgba8unorm",

@@ -85,21 +85,35 @@ struct GBufferOutput {
     @location(2) metal_rough: vec4<f32>,
 };
 
-fn sample_environment_reflection(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness: f32, metalness: f32) -> vec3<f32> {
+const MAX_ENV_MIP_LEVELS: f32 = 3.0;
+
+fn sample_environment_reflection(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness: f32, metalness: f32, base_albedo: vec3<f32>) -> vec3<f32> {
     let V = normalize(camera.position.xyz - world_pos);
     let N = normalize(world_normal);
     let R = reflect(-V, N);
     
-    let env_color = textureSample(environmentTexture, envSampler, R).rgb;
+    let NdotV = max(dot(N, V), 0.0);
     
-    let F0 = 0.04;
-    let fresnel = F0 + (1.0 - F0) * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+    let raw_mip = roughness * MAX_ENV_MIP_LEVELS;
+    let mip_low = floor(raw_mip);
+    let mip_high = min(mip_low + 1.0, MAX_ENV_MIP_LEVELS);
+    let mip_frac = fract(raw_mip);
     
-    let reflection_strength = fresnel * (1.0 - roughness * roughness);
+    let color_low = textureSampleLevel(environmentTexture, envSampler, R, mip_low).rgb;
+    let color_high = textureSampleLevel(environmentTexture, envSampler, R, mip_high).rgb;
     
-    let reflected_albedo = mix(env_color, env_color * vec3<f32>(1.0), metalness);
+    let env_color = mix(color_low, color_high, mip_frac);
     
-    return reflected_albedo * reflection_strength * metalness;
+    let F0_dielectric = 0.04;
+    let F0 = mix(vec3(F0_dielectric), base_albedo, metalness);
+    
+    let fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
+    
+    let reflection_color = mix(env_color, env_color * base_albedo, metalness);
+    
+    let roughness_factor = 1.0 - roughness * roughness;
+    
+    return reflection_color * fresnel * roughness_factor;
 }
 
 @fragment
@@ -116,9 +130,19 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     let metalness = metal_rough.b;
     output.metal_rough = vec4<f32>(metalness, roughness, 0.0, 1.0);
     
-    let reflections = sample_environment_reflection(in.world_position, in.world_normal, roughness, metalness);
+    let V = normalize(camera.position.xyz - in.world_position);
+    let N = normalize(in.world_normal);
+    let NdotV = max(dot(N, V), 0.0);
+    let F0_dielectric = 0.04;
+    let F0 = mix(vec3(F0_dielectric), base_albedo, metalness);
+    let fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
     
-    output.albedo = vec4<f32>(base_albedo + reflections, albedo_tex.a * material.opacity);
+    let reflections = sample_environment_reflection(in.world_position, in.world_normal, roughness, metalness, base_albedo);
+    
+    let fresnel_strength = fresnel * (1.0 - roughness * roughness);
+    let final_color = base_albedo * (1.0 - fresnel_strength) + reflections;
+    
+    output.albedo = vec4<f32>(final_color, albedo_tex.a * material.opacity);
     // output.albedo = vec4(reflections, 1.0); // For debugging reflections only
 
     return output;

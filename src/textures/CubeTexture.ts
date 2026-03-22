@@ -1,14 +1,22 @@
 const FACE_ORDER = ["px", "nx", "py", "ny", "pz", "nz"];
+const MIP_LEVELS = 4;
+
+interface LoadedMipLevel {
+  face: number;
+  mipLevel: number;
+  bitmap: ImageBitmap;
+}
 
 export class CubeTexture {
   private device: GPUDevice;
   folderPath: string;
   extension: string;
-  images: ImageBitmap[] = [];
   loaded: boolean = false;
   gpuTexture: GPUTexture | null = null;
   gpuTextureView: GPUTextureView | null = null;
   gpuSampler: GPUSampler | null = null;
+
+  static readonly mipLevelCount = MIP_LEVELS;
 
   constructor(
     device: GPUDevice,
@@ -21,34 +29,49 @@ export class CubeTexture {
   }
 
   async load(): Promise<void> {
-    const loadPromises = FACE_ORDER.map(async (face) => {
-      const url = `${this.folderPath}/${face}${this.extension}`;
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to load cubemap face: ${url}`);
-      }
-      const blob = await response.blob();
-      const bitmap = await createImageBitmap(blob);
-      return bitmap;
-    });
+    const loadPromises: Promise<LoadedMipLevel>[] = [];
 
-    this.images = await Promise.all(loadPromises);
-    this.createGpuResources();
+    for (let mipLevel = 0; mipLevel < MIP_LEVELS; mipLevel++) {
+      for (let faceIndex = 0; faceIndex < FACE_ORDER.length; faceIndex++) {
+        const face = FACE_ORDER[faceIndex];
+        const filename = `${face}${mipLevel}${this.extension}`;
+        const url = `${this.folderPath}/${filename}`;
+
+        loadPromises.push(
+          (async () => {
+            const response = await fetch(url);
+            if (!response.ok) {
+              throw new Error(`Failed to load cubemap face: ${url}`);
+            }
+            const blob = await response.blob();
+            const bitmap = await createImageBitmap(blob);
+            return { face: faceIndex, mipLevel, bitmap };
+          })(),
+        );
+      }
+    }
+
+    const loadedMips = await Promise.all(loadPromises);
+    this.createGpuResources(loadedMips);
     this.loaded = true;
   }
 
-  private createGpuResources(): void {
-    if (this.images.length !== 6 || !this.images[0]) {
-      throw new Error("CubeTexture requires 6 loaded images");
+  private createGpuResources(loadedMips: LoadedMipLevel[]): void {
+    if (loadedMips.length !== 24) {
+      throw new Error(
+        `CubeTexture requires ${24} images (6 faces × ${MIP_LEVELS} mip levels), got ${loadedMips.length}`,
+      );
     }
 
-    const width = this.images[0].width;
-    const height = this.images[0].height;
+    const baseWidth = loadedMips.find((m) => m.mipLevel === 0 && m.face === 0)!
+      .bitmap.width;
+    const baseHeight = loadedMips.find((m) => m.mipLevel === 0 && m.face === 0)!
+      .bitmap.height;
 
     this.gpuTexture = this.device.createTexture({
       label: `CubeTexture: ${this.folderPath}`,
-      size: { width, height, depthOrArrayLayers: 6 },
-      mipLevelCount: 1,
+      size: { width: baseWidth, height: baseHeight, depthOrArrayLayers: 6 },
+      mipLevelCount: MIP_LEVELS,
       sampleCount: 1,
       dimension: "2d",
       format: "rgba8unorm",
@@ -59,15 +82,22 @@ export class CubeTexture {
       viewFormats: [],
     });
 
-    for (let i = 0; i < this.images.length; i++) {
-      this.device.queue.copyExternalImageToTexture(
-        { source: this.images[i] },
-        {
-          texture: this.gpuTexture,
-          origin: { x: 0, y: 0, z: i },
-        },
-        { width, height },
-      );
+    for (let mipLevel = 0; mipLevel < MIP_LEVELS; mipLevel++) {
+      for (let faceIndex = 0; faceIndex < FACE_ORDER.length; faceIndex++) {
+        const loadedMip = loadedMips.find(
+          (m) => m.mipLevel === mipLevel && m.face === faceIndex,
+        )!;
+
+        this.device.queue.copyExternalImageToTexture(
+          { source: loadedMip.bitmap },
+          {
+            texture: this.gpuTexture,
+            origin: { x: 0, y: 0, z: faceIndex },
+            mipLevel,
+          },
+          { width: loadedMip.bitmap.width, height: loadedMip.bitmap.height },
+        );
+      }
     }
 
     this.gpuTextureView = this.gpuTexture.createView({
