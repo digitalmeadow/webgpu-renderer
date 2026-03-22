@@ -4,7 +4,12 @@ import { Vertex } from "../../geometries";
 import { Camera } from "../../camera";
 import { GeometryBuffer } from "../GeometryBuffer";
 import { MaterialManager } from "../../materials";
-import { MaterialPBR, MaterialBasic, MaterialCustom } from "../../materials";
+import {
+  MaterialPBR,
+  MaterialBasic,
+  MaterialCustom,
+  MaterialType,
+} from "../../materials";
 
 export class GeometryPass {
   private pipeline: GPURenderPipeline;
@@ -125,19 +130,19 @@ export class GeometryPass {
       // Determine which pipeline to use
       let pipelineToUse: GPURenderPipeline | null = null;
 
-      if (mesh.material.materialType === "custom") {
+      if (mesh.material.type === MaterialType.Custom) {
         pipelineToUse = materialManager.getCustomPipeline(
           mesh.material as import("../../materials/MaterialCustom").MaterialCustom,
           camera,
           this.meshBindGroupLayout,
         );
       } else if (
-        mesh.material.materialType === "basic" ||
-        (mesh.material.materialType === "pbr" &&
+        mesh.material.type === MaterialType.Basic ||
+        (mesh.material.type === MaterialType.PBR &&
           (mesh.material as any).hooks.albedo)
       ) {
         const basicOrPbr =
-          mesh.material.materialType === "basic"
+          mesh.material.type === MaterialType.Basic
             ? (mesh.material as import("../../materials/MaterialBasic").MaterialBasic)
             : (mesh.material as import("../../materials/MaterialPBR").MaterialPBR);
         pipelineToUse = materialManager.getHookPipeline(

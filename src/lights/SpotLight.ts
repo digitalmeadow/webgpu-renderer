@@ -1,9 +1,11 @@
 import { Vec3, Mat4 } from "../math";
-import { Light, LightType } from ".";
+import { Light } from ".";
+import { EntityType } from "../scene/Entity";
 
 export const SPOT_SHADOW_MAP_SIZE = 1024;
 
 export class SpotLight extends Light {
+  readonly type = EntityType.LightSpot;
   public direction: Vec3 = new Vec3(0, -1, 0);
   public fov: number = 45;
   public prenumbra: number = 0.0;
@@ -26,7 +28,7 @@ export class SpotLight extends Light {
   private static defaultShadowBindGroupLayout: GPUBindGroupLayout | null = null;
 
   constructor(name: string) {
-    super(name, LightType.Spot);
+    super(name);
   }
 
   public initShadowResources(device: GPUDevice): void {

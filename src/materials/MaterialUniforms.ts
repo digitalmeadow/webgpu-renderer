@@ -1,5 +1,4 @@
-import { MaterialBase } from "./MaterialBase";
-import { MaterialPBR } from "./MaterialPBR";
+import { MaterialBase, MaterialType } from "./MaterialBase";
 
 export class MaterialUniforms {
   public readonly buffer: GPUBuffer;
@@ -20,8 +19,8 @@ export class MaterialUniforms {
   update(material: MaterialBase) {
     let color: [number, number, number, number] = [1, 1, 1, 1];
 
-    if (material instanceof MaterialPBR) {
-      color = material.baseColorFactor;
+    if (material.type === MaterialType.PBR) {
+      color = (material as any).baseColorFactor;
     } else if ("color" in material) {
       color = (material as any).color;
     }

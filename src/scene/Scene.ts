@@ -1,6 +1,6 @@
 import { Transform } from "./Transform";
-import { Entity } from "./Entity";
-import { type Light, isLight } from "../lights";
+import { Entity, EntityType } from "./Entity";
+import { Light } from "../lights";
 import { AnimationManager } from "../animations";
 
 export class Scene {
@@ -16,6 +16,14 @@ export class Scene {
     this.animationManager = new AnimationManager();
   }
 
+  private isLight(entity: Entity): boolean {
+    return (
+      entity.type === EntityType.LightDirectional ||
+      entity.type === EntityType.LightSpot ||
+      entity.type === EntityType.LightPoint
+    );
+  }
+
   add(entity: Entity): void {
     if (!this.entities.includes(entity)) {
       this.entities.push(entity);
@@ -23,7 +31,7 @@ export class Scene {
     if (!entity.transform.parent) {
       this.root.addChild(entity.transform);
     }
-    if (isLight(entity) && !this.lights.includes(entity as Light)) {
+    if (this.isLight(entity) && !this.lights.includes(entity as Light)) {
       this.lights.push(entity as Light);
     }
   }
@@ -34,9 +42,8 @@ export class Scene {
       this.entities.splice(index, 1);
       entity.transform.remove();
     }
-
-    if (isLight(entity)) {
-      const lightIndex = this.lights.indexOf(entity as unknown as Light);
+    if (this.isLight(entity)) {
+      const lightIndex = this.lights.indexOf(entity as Light);
       if (lightIndex !== -1) {
         this.lights.splice(lightIndex, 1);
       }

@@ -1,5 +1,5 @@
 import { ParticlesPass } from "./passes/ParticlesPass";
-import { World } from "../scene";
+import { World, EntityType } from "../scene";
 import { Camera } from "../camera";
 import { Time } from "../time";
 import { GeometryBuffer } from "./GeometryBuffer";
@@ -14,7 +14,7 @@ import { ParticleEmitter } from "../particles";
 import { Mesh } from "../mesh";
 import { LightManager } from "../lights/LightManager";
 import { SceneUniforms } from "../uniforms";
-import { Light, DirectionalLight, SpotLight, LightType } from "../lights";
+import { Light, DirectionalLight, SpotLight } from "../lights";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../math";
 
 export interface RendererOptions {
@@ -271,15 +271,13 @@ export class Renderer {
       this.materialManager,
     );
 
-    // Collect directional lights using lightType property check instead of instanceof
     const directionalLights = lights.filter(
-      (light) => light.type === LightType.Directional,
+      (light) => light.type === EntityType.LightDirectional,
     ) as DirectionalLight[];
     this.lightManager.update(directionalLights, camera);
 
-    // Collect spot lights
     const spotLights = lights.filter(
-      (light) => light.type === LightType.Spot,
+      (light) => light.type === EntityType.LightSpot,
     ) as SpotLight[];
     if (spotLights.length > 0) {
       this.lightManager.updateSpotLights(spotLights);
@@ -380,7 +378,7 @@ export class Renderer {
     const meshes: Mesh[] = [];
     for (const scene of world.scenes) {
       for (const entity of scene.entities) {
-        if (entity.type === "mesh") {
+        if (entity.type === EntityType.Mesh) {
           meshes.push(entity as Mesh);
         }
       }
@@ -427,7 +425,7 @@ export class Renderer {
     const emitters: ParticleEmitter[] = [];
     for (const scene of world.scenes) {
       for (const entity of scene.entities) {
-        if (entity.type === "particleEmitter") {
+        if (entity.type === EntityType.ParticleEmitter) {
           emitters.push(entity as ParticleEmitter);
         }
       }

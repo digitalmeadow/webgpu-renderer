@@ -1,4 +1,4 @@
-import { MaterialBase, RenderPass } from "./MaterialBase";
+import { MaterialBase, MaterialType, RenderPass } from "./MaterialBase";
 import { MaterialUniforms } from "./MaterialUniforms";
 
 export interface ShaderHooks {
@@ -16,6 +16,7 @@ interface MaterialBasicOptions {
 }
 
 export class MaterialBasic extends MaterialBase {
+  readonly type = MaterialType.Basic;
   color: [number, number, number, number] = [1, 1, 1, 1];
   hooks: ShaderHooks = {};
   public uniforms: MaterialUniforms;
@@ -26,7 +27,6 @@ export class MaterialBasic extends MaterialBase {
     options: MaterialBasicOptions = {},
   ) {
     super(name, options);
-    this.materialType = "basic";
     this.color = options.color ?? [1, 1, 1, 1];
     this.hooks = options.hooks ?? {};
 

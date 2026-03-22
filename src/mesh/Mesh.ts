@@ -6,7 +6,7 @@ import { Mat4 } from "../math";
 import { SkinData } from "../skinning";
 
 export class Mesh extends Entity {
-  public type = EntityType.Mesh;
+  readonly type = EntityType.Mesh;
   public geometry: Geometry;
   public uniforms: MeshUniforms;
   public material: MaterialBase | null = null;

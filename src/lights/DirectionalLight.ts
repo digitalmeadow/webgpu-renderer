@@ -1,5 +1,6 @@
 import { Vec3, Mat4 } from "../math";
-import { Light, LightType } from ".";
+import { Light } from ".";
+import { EntityType } from "../scene/Entity";
 
 export const SHADOW_MAP_CASCADES_COUNT = 3;
 export const SHADOW_CASCADE_SPLITS = [0.0, 0.33, 0.66, 1.0];
@@ -7,6 +8,7 @@ export const OFFSET = 10;
 export const SHADOW_XY_PADDING = 0;
 
 export class DirectionalLight extends Light {
+  readonly type = EntityType.LightDirectional;
   public direction: Vec3 = new Vec3(0, -1, -0.5);
   public lightIndex: number = 0;
 
@@ -23,7 +25,7 @@ export class DirectionalLight extends Light {
   private static defaultShadowBindGroupLayout: GPUBindGroupLayout | null = null;
 
   constructor(name: string) {
-    super(name, LightType.Directional);
+    super(name);
 
     for (let i = 0; i < SHADOW_MAP_CASCADES_COUNT; i++) {
       this.viewProjectionMatrices.push(Mat4.create());

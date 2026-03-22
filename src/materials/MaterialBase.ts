@@ -1,12 +1,21 @@
 export type AlphaMode = "opaque" | "blend" | "mask";
 export type RenderPass = "geometry" | "forward";
-export type MaterialType = "base" | "basic" | "pbr" | "custom";
+
+export const MaterialType = {
+  Base: "materialBase",
+  Basic: "materialBasic",
+  PBR: "materialPBR",
+  Custom: "materialCustom",
+  Particle: "materialParticle",
+} as const;
+export type MaterialType = (typeof MaterialType)[keyof typeof MaterialType];
 
 export interface MaterialSpecialization {
   isCustom?: boolean;
 }
 
 export abstract class MaterialBase {
+  abstract readonly type: MaterialType;
   name: string;
   renderPass: RenderPass = "geometry";
   alphaMode: AlphaMode = "opaque";
@@ -14,7 +23,6 @@ export abstract class MaterialBase {
   doubleSided: boolean = false;
   opacity: number = 1.0;
   specialization: MaterialSpecialization = {};
-  materialType: MaterialType = "base";
 
   constructor(
     name: string,

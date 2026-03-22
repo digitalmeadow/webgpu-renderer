@@ -1,5 +1,10 @@
-import { MaterialBase, AlphaMode, RenderPass } from "./MaterialBase";
-import { Texture } from "../textures";
+import {
+  MaterialBase,
+  MaterialType,
+  AlphaMode,
+  RenderPass,
+} from "./MaterialBase";
+import { Texture, CubeTexture } from "../textures";
 import { MaterialUniforms } from "./MaterialUniforms";
 
 export interface ShaderHooks {
@@ -14,6 +19,7 @@ interface MaterialPBROptions {
   albedoTexture?: Texture | null;
   normalTexture?: Texture | null;
   metalnessRoughnessTexture?: Texture | null;
+  environmentTexture?: CubeTexture | null;
   renderPass?: RenderPass;
   alphaMode?: AlphaMode;
   alphaCutoff?: number;
@@ -23,9 +29,11 @@ interface MaterialPBROptions {
 }
 
 export class MaterialPBR extends MaterialBase {
+  readonly type = MaterialType.PBR;
   albedoTexture: Texture | null = null;
   normalTexture: Texture | null = null;
   metalnessRoughnessTexture: Texture | null = null;
+  environmentTexture: CubeTexture | null = null;
   hooks: ShaderHooks = {};
   public uniforms: MaterialUniforms;
   baseColorFactor: [number, number, number, number] = [1, 1, 1, 1];
@@ -36,10 +44,10 @@ export class MaterialPBR extends MaterialBase {
     options: MaterialPBROptions = {},
   ) {
     super(name, options);
-    this.materialType = "pbr";
     this.albedoTexture = options.albedoTexture ?? null;
     this.normalTexture = options.normalTexture ?? null;
     this.metalnessRoughnessTexture = options.metalnessRoughnessTexture ?? null;
+    this.environmentTexture = options.environmentTexture ?? null;
     this.hooks = options.hooks ?? {};
     this.uniforms = new MaterialUniforms(device, this);
   }

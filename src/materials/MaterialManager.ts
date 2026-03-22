@@ -1,22 +1,26 @@
-import { MaterialBase } from "./MaterialBase";
+import { MaterialBase, MaterialType } from "./MaterialBase";
 import { MaterialPBR } from "./MaterialPBR";
 import { MaterialBasic } from "./MaterialBasic";
 import { MaterialCustom } from "./MaterialCustom";
 import { Camera } from "../camera";
 import { Vertex } from "../geometries";
-import { Texture } from "../textures";
+import { Texture, CubeTexture } from "../textures";
 import geometryPassShader from "../renderer/passes/GeometryPass.wgsl?raw";
 import forwardPassShader from "../renderer/passes/ForwardPass.wgsl?raw";
 
 export class MaterialManager {
   private device: GPUDevice;
   private textureCache: Map<Texture, GPUTexture> = new Map();
+  private cubeTextureCache: Map<string, CubeTexture> = new Map();
   private defaultSampler: GPUSampler;
   private bindGroupCache: Map<MaterialBase, GPUBindGroup> = new Map();
   public readonly materialBindGroupLayout: GPUBindGroupLayout;
   private placeholderNormalTexture: GPUTexture;
   private placeholderMetalRoughnessTexture: GPUTexture;
   private placeholderAlbedoTexture: GPUTexture;
+  private placeholderEnvTexture: GPUTexture;
+  private placeholderEnvView: GPUTextureView;
+  private placeholderEnvSampler: GPUSampler;
 
   private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> =
     new Map();
@@ -49,6 +53,28 @@ export class MaterialManager {
       255, 255, 255, 255,
     ]);
 
+    this.placeholderEnvTexture = device.createTexture({
+      label: "Placeholder Cube Texture",
+      size: { width: 1, height: 1, depthOrArrayLayers: 6 },
+      mipLevelCount: 1,
+      sampleCount: 1,
+      dimension: "2d",
+      format: "rgba8unorm",
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    this.placeholderEnvView = this.placeholderEnvTexture.createView({
+      label: "Placeholder Cube Texture View",
+      dimension: "cube",
+    });
+    this.placeholderEnvSampler = device.createSampler({
+      magFilter: "linear",
+      minFilter: "linear",
+      mipmapFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+      addressModeW: "clamp-to-edge",
+    });
+
     this.baseGeometryShader = geometryPassShader;
     this.baseForwardShader = forwardPassShader;
 
@@ -79,6 +105,19 @@ export class MaterialManager {
           binding: 4,
           visibility: GPUShaderStage.FRAGMENT,
           buffer: { type: "uniform" },
+        },
+        {
+          binding: 5,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: {
+            viewDimension: "cube",
+            sampleType: "float",
+          },
+        },
+        {
+          binding: 6,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "filtering" },
         },
       ],
     });
@@ -287,7 +326,7 @@ export class MaterialManager {
   }
 
   async loadMaterial(material: MaterialBase): Promise<void> {
-    if (material.materialType === "pbr") {
+    if (material.type === MaterialType.PBR) {
       const pbrMaterial = material as MaterialPBR;
       const textures = [
         pbrMaterial.albedoTexture,
@@ -299,6 +338,12 @@ export class MaterialManager {
           await texture.load();
           this.createTextureResources(texture);
         }
+      }
+      if (
+        pbrMaterial.environmentTexture &&
+        !pbrMaterial.environmentTexture.loaded
+      ) {
+        await pbrMaterial.environmentTexture.load();
       }
       this.bindGroupCache.delete(material);
     }
@@ -325,30 +370,36 @@ export class MaterialManager {
     this.textureCache.set(texture, gpuTexture);
   }
 
+  getOrCreateCubeTexture(
+    folderPath: string,
+    extension: string = ".png",
+  ): CubeTexture {
+    const cacheKey = `${folderPath}:${extension}`;
+    if (this.cubeTextureCache.has(cacheKey)) {
+      return this.cubeTextureCache.get(cacheKey)!;
+    }
+    const cubeTexture = new CubeTexture(this.device, folderPath, extension);
+    this.cubeTextureCache.set(cacheKey, cubeTexture);
+    return cubeTexture;
+  }
+
   getBindGroup(material: MaterialBase): GPUBindGroup | null {
     if (this.bindGroupCache.has(material)) {
       return this.bindGroupCache.get(material)!;
     }
 
-    // Handle materials without materialType (backwards compatibility / cross-boundary issue)
-    // Detect material type based on properties
-    let resolvedMaterialType = material.materialType;
-    if (!resolvedMaterialType || resolvedMaterialType === "base") {
-      // Check for PBR properties
+    let resolvedMaterialType = material.type;
+    if (resolvedMaterialType === MaterialType.Base) {
       if ("albedoTexture" in material || "normalTexture" in material) {
-        resolvedMaterialType = "pbr";
-      }
-      // Check for Basic properties
-      else if ("color" in material) {
-        resolvedMaterialType = "basic";
-      }
-      // Check for Custom properties
-      else if ("passes" in material) {
-        resolvedMaterialType = "custom";
+        resolvedMaterialType = MaterialType.PBR;
+      } else if ("color" in material) {
+        resolvedMaterialType = MaterialType.Basic;
+      } else if ("passes" in material) {
+        resolvedMaterialType = MaterialType.Custom;
       }
     }
 
-    if (resolvedMaterialType === "pbr") {
+    if (resolvedMaterialType === MaterialType.PBR) {
       const pbrMaterial = material as MaterialPBR;
       if (!pbrMaterial.albedoTexture) return null;
       const albedoView = this.textureCache
@@ -372,6 +423,13 @@ export class MaterialManager {
 
       pbrMaterial.uniforms.update(pbrMaterial);
 
+      const envView =
+        pbrMaterial.environmentTexture?.gpuTextureView ??
+        this.placeholderEnvView;
+      const envSampler =
+        pbrMaterial.environmentTexture?.gpuSampler ??
+        this.placeholderEnvSampler;
+
       const bindGroup = this.device.createBindGroup({
         layout: this.materialBindGroupLayout,
         entries: [
@@ -380,12 +438,14 @@ export class MaterialManager {
           { binding: 2, resource: normalView },
           { binding: 3, resource: metalRoughnessView },
           { binding: 4, resource: { buffer: pbrMaterial.uniforms.buffer } },
+          { binding: 5, resource: envView },
+          { binding: 6, resource: envSampler },
         ],
       });
 
       this.bindGroupCache.set(material, bindGroup);
       return bindGroup;
-    } else if (resolvedMaterialType === "basic") {
+    } else if (resolvedMaterialType === MaterialType.Basic) {
       const basicMaterial = material as MaterialBasic;
       basicMaterial.uniforms.update(basicMaterial);
 
@@ -400,12 +460,14 @@ export class MaterialManager {
             resource: this.placeholderMetalRoughnessTexture.createView(),
           },
           { binding: 4, resource: { buffer: basicMaterial.uniforms.buffer } },
+          { binding: 5, resource: this.placeholderEnvView },
+          { binding: 6, resource: this.placeholderEnvSampler },
         ],
       });
 
       this.bindGroupCache.set(material, bindGroup);
       return bindGroup;
-    } else if (resolvedMaterialType === "custom") {
+    } else if (resolvedMaterialType === MaterialType.Custom) {
       const customMaterial = material as MaterialCustom;
       customMaterial.uniforms.update(customMaterial);
 
@@ -420,6 +482,8 @@ export class MaterialManager {
             resource: this.placeholderMetalRoughnessTexture.createView(),
           },
           { binding: 4, resource: { buffer: customMaterial.uniforms.buffer } },
+          { binding: 5, resource: this.placeholderEnvView },
+          { binding: 6, resource: this.placeholderEnvSampler },
         ],
       });
 

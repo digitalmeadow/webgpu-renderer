@@ -1,4 +1,5 @@
 import { Entity, EntityType } from "../scene/Entity";
+import { Transform } from "../scene/Transform";
 import { VertexParticle, ParticleInstance, ParticleInstanceGPU } from ".";
 import { Vec3 } from "../math";
 import { MaterialParticle } from "../materials";
@@ -16,8 +17,7 @@ export interface ParticleEmitterDesc {
 }
 
 export class ParticleEmitter extends Entity {
-  type = EntityType.ParticleEmitter;
-
+  readonly type = EntityType.ParticleEmitter;
   private device: GPUDevice;
   public maxInstances: number;
   public instances: ParticleInstance[];

@@ -17,6 +17,7 @@ struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv_coords: vec2<f32>,
     @location(1) world_normal: vec3<f32>,
+    @location(2) world_position: vec3<f32>,
 };
 
 struct CameraUniforms {
@@ -44,6 +45,8 @@ struct MeshUniforms {
 @group(2) @binding(2) var normalTexture: texture_2d<f32>;
 @group(2) @binding(3) var metalnessRoughnessTexture: texture_2d<f32>;
 @group(2) @binding(4) var<uniform> material: MaterialUniforms;
+@group(2) @binding(5) var environmentTexture: texture_cube<f32>;
+@group(2) @binding(6) var envSampler: sampler;
 
 @vertex
 fn vs_main(
@@ -66,6 +69,7 @@ fn vs_main(
     let final_position = select(position, skinned_position, bool(model.apply_skinning));
 
     let world_position = model.model_transform_matrix * final_position;
+    output.world_position = world_position.xyz;
     output.world_normal = (model.model_transform_matrix * vec4<f32>(normal, 0.0)).xyz;
     output.uv_coords = uv;
 
@@ -81,16 +85,42 @@ struct GBufferOutput {
     @location(2) metal_rough: vec4<f32>,
 };
 
+fn sample_environment_reflection(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness: f32, metalness: f32) -> vec3<f32> {
+    let V = normalize(camera.position.xyz - world_pos);
+    let N = normalize(world_normal);
+    let R = reflect(-V, N);
+    
+    let env_color = textureSample(environmentTexture, envSampler, R).rgb;
+    
+    let F0 = 0.04;
+    let fresnel = F0 + (1.0 - F0) * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+    
+    let reflection_strength = fresnel * (1.0 - roughness * roughness);
+    
+    let reflected_albedo = mix(env_color, env_color * vec3<f32>(1.0), metalness);
+    
+    return reflected_albedo;
+    return reflected_albedo * reflection_strength * metalness;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> GBufferOutput {
     var output: GBufferOutput;
 
     let albedo_tex = get_albedo_color(in.uv_coords);
-    output.albedo = vec4<f32>(albedo_tex.rgb * material.color.rgb, albedo_tex.a * material.opacity);
+    let base_albedo = albedo_tex.rgb * material.color.rgb;
+    output.albedo = vec4<f32>(base_albedo, albedo_tex.a * material.opacity);
     output.normal = vec4<f32>(normalize(in.world_normal), 1.0);
     
     let metal_rough = textureSample(metalnessRoughnessTexture, defaultSampler, in.uv_coords);
-    output.metal_rough = vec4<f32>(metal_rough.b, metal_rough.g, 0.0, 1.0);
+    let roughness = metal_rough.g;
+    let metalness = metal_rough.b;
+    output.metal_rough = vec4<f32>(metalness, roughness, 0.0, 1.0);
+    
+    let reflections = sample_environment_reflection(in.world_position, in.world_normal, roughness, metalness);
+    
+    output.albedo = vec4<f32>(base_albedo + reflections, albedo_tex.a * material.opacity);
+    // output.albedo = vec4(reflections, 1.0); // For debugging reflections only
 
     return output;
 }

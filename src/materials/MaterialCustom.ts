@@ -1,4 +1,4 @@
-import { MaterialBase, RenderPass } from "./MaterialBase";
+import { MaterialBase, MaterialType, RenderPass } from "./MaterialBase";
 import { MaterialUniforms } from "./MaterialUniforms";
 
 interface MaterialCustomUniforms {
@@ -19,13 +19,13 @@ interface MaterialCustomOptions {
 }
 
 export class MaterialCustom extends MaterialBase {
+  readonly type = MaterialType.Custom;
   passes: { geometry?: string; forward?: string } = {};
   customUniforms: MaterialCustomUniforms = {};
   public uniforms: MaterialUniforms;
 
   constructor(device: GPUDevice, name: string, options: MaterialCustomOptions) {
     super(name, options);
-    this.materialType = "custom";
     this.passes = options.passes ?? {};
     this.customUniforms = options.uniforms ?? {};
     this.specialization.isCustom = true;
