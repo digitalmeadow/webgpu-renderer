@@ -1,0 +1,137 @@
+import shader from "./Skybox.wgsl?raw";
+import { CubeTexture } from "../../textures/CubeTexture";
+import { GeometryBuffer } from "../GeometryBuffer";
+
+export class SkyboxPass {
+  private device: GPUDevice;
+  private pipeline: GPURenderPipeline;
+  private cameraBindGroupLayout: GPUBindGroupLayout;
+  private skyboxBindGroupLayout: GPUBindGroupLayout;
+  private sampler: GPUSampler;
+  private skyboxTexture: CubeTexture | null = null;
+  private skyboxBindGroup: GPUBindGroup | null = null;
+  private geometryBuffer: GeometryBuffer;
+
+  constructor(
+    device: GPUDevice,
+    cameraBindGroupLayout: GPUBindGroupLayout,
+    geometryBuffer: GeometryBuffer,
+  ) {
+    this.device = device;
+    this.cameraBindGroupLayout = cameraBindGroupLayout;
+    this.geometryBuffer = geometryBuffer;
+
+    this.sampler = device.createSampler({
+      magFilter: "linear",
+      minFilter: "linear",
+      mipmapFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+      addressModeW: "clamp-to-edge",
+    });
+
+    this.skyboxBindGroupLayout = device.createBindGroupLayout({
+      label: "Skybox Bind Group Layout",
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { viewDimension: "cube", sampleType: "float" },
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "filtering" },
+        },
+      ],
+    });
+
+    const shaderModule = device.createShaderModule({
+      code: shader,
+    });
+
+    this.pipeline = device.createRenderPipeline({
+      label: "Skybox Pipeline",
+      layout: device.createPipelineLayout({
+        bindGroupLayouts: [
+          this.cameraBindGroupLayout,
+          this.skyboxBindGroupLayout,
+        ],
+      }),
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vs_main",
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fs_main",
+        targets: [
+          {
+            format: navigator.gpu.getPreferredCanvasFormat(),
+          },
+        ],
+      },
+      primitive: {
+        topology: "triangle-list",
+      },
+      depthStencil: {
+        format: "depth32float",
+        depthWriteEnabled: false,
+        depthCompare: "less-equal",
+      },
+    });
+  }
+
+  setSkyboxTexture(texture: CubeTexture | null): void {
+    this.skyboxTexture = texture;
+    this.skyboxBindGroup = null;
+  }
+
+  render(
+    encoder: GPUCommandEncoder,
+    cameraBindGroup: GPUBindGroup,
+    outputView: GPUTextureView,
+  ): void {
+    if (!this.skyboxTexture || !this.skyboxTexture.gpuTexture) {
+      return;
+    }
+
+    if (!this.skyboxBindGroup) {
+      this.skyboxBindGroup = this.device.createBindGroup({
+        layout: this.skyboxBindGroupLayout,
+        entries: [
+          {
+            binding: 0,
+            resource: this.skyboxTexture.gpuTextureView!,
+          },
+          {
+            binding: 1,
+            resource: this.sampler,
+          },
+        ],
+      });
+    }
+
+    const passEncoder = encoder.beginRenderPass({
+      label: "Skybox Pass",
+      colorAttachments: [
+        {
+          view: outputView,
+          loadOp: "load",
+          storeOp: "store",
+        },
+      ],
+      depthStencilAttachment: {
+        view: this.geometryBuffer.depthView,
+        depthLoadOp: "load",
+        depthStoreOp: "store",
+      },
+    });
+
+    passEncoder.setPipeline(this.pipeline);
+    passEncoder.setBindGroup(0, cameraBindGroup);
+    passEncoder.setBindGroup(1, this.skyboxBindGroup);
+    passEncoder.draw(3);
+    passEncoder.end();
+  }
+}

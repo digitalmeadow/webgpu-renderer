@@ -9,6 +9,7 @@ import { OutputPass } from "./passes/OutputPass";
 import { ForwardPass } from "./passes/ForwardPass";
 import { ShadowPassDirectionalLight } from "./passes/ShadowPassDirectionalLight";
 import { ShadowPassSpotLight } from "./passes/ShadowPassSpotLight";
+import { SkyboxPass } from "./passes/SkyboxPass";
 import { MaterialManager } from "../materials";
 import { ParticleEmitter } from "../particles";
 import { Mesh } from "../mesh";
@@ -16,6 +17,7 @@ import { LightManager } from "../lights/LightManager";
 import { SceneUniforms } from "../uniforms";
 import { Light, DirectionalLight, SpotLight } from "../lights";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../math";
+import { CubeTexture } from "../textures/CubeTexture";
 
 export interface RendererOptions {
   maxDirectionalLights?: number;
@@ -35,6 +37,7 @@ export class Renderer {
   private cameras: Set<Camera> = new Set();
 
   public frustumCulling: boolean = false;
+  public skyboxTexture: CubeTexture | null = null;
 
   private geometryBuffer: GeometryBuffer;
   private geometryPass: GeometryPass;
@@ -44,9 +47,11 @@ export class Renderer {
   private shadowPassSpotLight: ShadowPassSpotLight;
   private particlesPass: ParticlesPass;
   private forwardPass: ForwardPass;
+  private skyboxPass: SkyboxPass;
   private materialManager: MaterialManager;
   private lightManager: LightManager;
   private sceneUniforms: SceneUniforms;
+  private cameraBindGroupLayout: GPUBindGroupLayout;
 
   constructor(canvas: HTMLCanvasElement, options: RendererOptions = {}) {
     this.canvas = canvas;
@@ -65,9 +70,11 @@ export class Renderer {
     this.shadowPassSpotLight = null as unknown as ShadowPassSpotLight;
     this.particlesPass = null as unknown as ParticlesPass;
     this.forwardPass = null as unknown as ForwardPass;
+    this.skyboxPass = null as unknown as SkyboxPass;
     this.materialManager = null as unknown as MaterialManager;
     this.lightManager = null as unknown as LightManager;
     this.sceneUniforms = null as unknown as SceneUniforms;
+    this.cameraBindGroupLayout = null as unknown as GPUBindGroupLayout;
   }
 
   async init(): Promise<void> {
@@ -115,7 +122,7 @@ export class Renderer {
       this.canvas.height,
     );
 
-    const cameraBindGroupLayout = this.device.createBindGroupLayout({
+    this.cameraBindGroupLayout = this.device.createBindGroupLayout({
       label: "Camera Bind Group Layout",
       entries: [
         {
@@ -135,7 +142,7 @@ export class Renderer {
     this.lightingPass = new LightingPass(
       this.device,
       this.geometryBuffer,
-      cameraBindGroupLayout,
+      this.cameraBindGroupLayout,
       this.lightManager.lightingBindGroupLayout,
       this.sceneUniforms.bindGroupLayout,
       this.canvas.width,
@@ -154,7 +161,10 @@ export class Renderer {
       this.maxSpotLights,
     );
 
-    this.particlesPass = new ParticlesPass(this.device, cameraBindGroupLayout);
+    this.particlesPass = new ParticlesPass(
+      this.device,
+      this.cameraBindGroupLayout,
+    );
 
     this.forwardPass = new ForwardPass(
       this.device,
@@ -162,6 +172,12 @@ export class Renderer {
       this.geometryPass.meshBindGroupLayout,
       this.lightManager,
       this.sceneUniforms,
+    );
+
+    this.skyboxPass = new SkyboxPass(
+      this.device,
+      this.cameraBindGroupLayout,
+      this.geometryBuffer,
     );
   }
 
@@ -344,7 +360,7 @@ export class Renderer {
       );
     }
 
-    // Forward Pass (transparency) - must run BEFORE Output Pass
+    // Forward Pass (transparency) - must run BEFORE Skybox Pass
     if (this.forwardPass && transparentMeshes.length > 0) {
       this.forwardPass.render(
         commandEncoder,
@@ -352,6 +368,16 @@ export class Renderer {
         camera,
         this.lightingPass.outputView,
         this.geometryBuffer.depthView,
+      );
+    }
+
+    // Skybox Pass - renders background where depth = 1
+    if (this.skyboxTexture) {
+      this.skyboxPass.setSkyboxTexture(this.skyboxTexture);
+      this.skyboxPass.render(
+        commandEncoder,
+        camera.uniforms.bindGroup,
+        this.lightingPass.outputView,
       );
     }
 
@@ -372,6 +398,10 @@ export class Renderer {
 
   public getMaterialManager(): MaterialManager {
     return this.materialManager;
+  }
+
+  public setSkyboxTexture(texture: CubeTexture | null): void {
+    this.skyboxTexture = texture;
   }
 
   private collectMeshes(world: World): Mesh[] {
