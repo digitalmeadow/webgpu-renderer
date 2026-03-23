@@ -4,29 +4,43 @@ import { DirectionalLight, SHADOW_MAP_CASCADES_COUNT } from "../../lights";
 import { Vertex } from "../../geometries";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
 
-const SHADOW_MAP_SIZE = 2048;
-
 export class ShadowPassDirectionalLight {
   private device: GPUDevice;
   private maxDirectionalLights: number;
-  private pipeline: GPURenderPipeline;
-  private transparentPipeline: GPURenderPipeline;
-  private meshBindGroupLayout: GPUBindGroupLayout;
-  private shadowTexture: GPUTexture;
-  private shadowTextureView: GPUTextureView;
+  private shadowMapSize: number;
+  private pipeline!: GPURenderPipeline;
+  private transparentPipeline!: GPURenderPipeline;
+  private meshBindGroupLayout!: GPUBindGroupLayout;
+  private shadowTexture!: GPUTexture;
+  private shadowTextureView!: GPUTextureView;
   private shadowTextureViews: GPUTextureView[] = [];
 
-  constructor(device: GPUDevice, maxDirectionalLights: number = 1) {
+  constructor(
+    device: GPUDevice,
+    maxDirectionalLights: number = 1,
+    shadowMapSize: number = 2048,
+  ) {
     this.device = device;
     this.maxDirectionalLights = maxDirectionalLights;
+    this.shadowMapSize = shadowMapSize;
 
-    const totalLayers = SHADOW_MAP_CASCADES_COUNT * maxDirectionalLights;
+    this.createShadowResources();
+    this.createPipelines();
+  }
+
+  private createShadowResources(): void {
+    const totalLayers = SHADOW_MAP_CASCADES_COUNT * this.maxDirectionalLights;
+
+    if (this.shadowTexture) {
+      this.shadowTexture.destroy();
+    }
+    this.shadowTextureViews = [];
 
     this.shadowTexture = this.device.createTexture({
       label: "Shadow Pass Directional Texture",
       size: {
-        width: SHADOW_MAP_SIZE,
-        height: SHADOW_MAP_SIZE,
+        width: this.shadowMapSize,
+        height: this.shadowMapSize,
         depthOrArrayLayers: totalLayers,
       },
       format: "depth32float",
@@ -59,7 +73,9 @@ export class ShadowPassDirectionalLight {
         this.shadowTextureViews.push(view);
       }
     }
+  }
 
+  private createPipelines(): void {
     this.meshBindGroupLayout = this.device.createBindGroupLayout({
       label: "Shadow Pass Mesh Bind Group Layout",
       entries: [
@@ -126,6 +142,11 @@ export class ShadowPassDirectionalLight {
         depthBiasClamp: 0,
       },
     });
+  }
+
+  public resize(shadowMapSize: number): void {
+    this.shadowMapSize = shadowMapSize;
+    this.createShadowResources();
   }
 
   public render(

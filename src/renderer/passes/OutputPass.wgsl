@@ -1,5 +1,9 @@
-// Output Pass Shader
-// Simply renders the lit texture to the screen
+struct OutputUniforms {
+    renderWidth: f32,
+    renderHeight: f32,
+    viewportWidth: f32,
+    viewportHeight: f32,
+};
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -8,6 +12,7 @@ struct VertexOutput {
 
 @group(0) @binding(0) var sampler_linear: sampler;
 @group(0) @binding(1) var input_texture: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> uniforms: OutputUniforms;
 
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
@@ -21,7 +26,7 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     output.position = vec4<f32>(positions[vertex_index], 0.0, 1.0);
     output.uv_coords = positions[vertex_index] * 0.5 + 0.5;
     output.uv_coords.y = 1.0 - output.uv_coords.y;
-    
+
     return output;
 }
 

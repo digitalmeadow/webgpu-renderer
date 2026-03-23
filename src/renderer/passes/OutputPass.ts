@@ -1,10 +1,23 @@
 import shader from "./OutputPass.wgsl?raw";
 
+interface OutputUniforms {
+  renderWidth: number;
+  renderHeight: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
 export class OutputPass {
   private device: GPUDevice;
   private pipeline: GPURenderPipeline;
   private bindGroupLayout: GPUBindGroupLayout;
   private sampler: GPUSampler;
+  private uniformsBuffer: GPUBuffer;
+  private uniformsBindGroup: GPUBindGroup | null = null;
+  private lastRenderWidth: number = 0;
+  private lastRenderHeight: number = 0;
+  private lastViewportWidth: number = 0;
+  private lastViewportHeight: number = 0;
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -13,8 +26,8 @@ export class OutputPass {
     });
 
     this.sampler = device.createSampler({
-      magFilter: "linear",
-      minFilter: "linear",
+      magFilter: "nearest",
+      minFilter: "nearest",
     });
 
     this.bindGroupLayout = device.createBindGroupLayout({
@@ -30,7 +43,18 @@ export class OutputPass {
           visibility: GPUShaderStage.FRAGMENT,
           texture: { sampleType: "float", viewDimension: "2d" },
         },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
       ],
+    });
+
+    this.uniformsBuffer = device.createBuffer({
+      label: "Output Pass Uniforms",
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
     this.pipeline = device.createRenderPipeline({
@@ -61,20 +85,59 @@ export class OutputPass {
     encoder: GPUCommandEncoder,
     inputView: GPUTextureView,
     outputView: GPUTextureView,
+    renderWidth: number,
+    renderHeight: number,
+    viewportWidth: number,
+    viewportHeight: number,
   ): void {
-    const bindGroup = this.device.createBindGroup({
-      layout: this.bindGroupLayout,
-      entries: [
-        {
-          binding: 0,
-          resource: this.sampler,
-        },
-        {
-          binding: 1,
-          resource: inputView,
-        },
-      ],
-    });
+    if (
+      this.uniformsBindGroup === null ||
+      this.lastRenderWidth !== renderWidth ||
+      this.lastRenderHeight !== renderHeight ||
+      this.lastViewportWidth !== viewportWidth ||
+      this.lastViewportHeight !== viewportHeight
+    ) {
+      const uniforms: OutputUniforms = {
+        renderWidth,
+        renderHeight,
+        viewportWidth,
+        viewportHeight,
+      };
+      this.device.queue.writeBuffer(
+        this.uniformsBuffer,
+        0,
+        new Float32Array([
+          uniforms.renderWidth,
+          uniforms.renderHeight,
+          uniforms.viewportWidth,
+          uniforms.viewportHeight,
+        ]),
+      );
+
+      this.uniformsBindGroup = this.device.createBindGroup({
+        label: "Output Pass Bind Group",
+        layout: this.bindGroupLayout,
+        entries: [
+          {
+            binding: 0,
+            resource: this.sampler,
+          },
+          {
+            binding: 1,
+            resource: inputView,
+          },
+          {
+            binding: 2,
+            resource: { buffer: this.uniformsBuffer },
+          },
+        ],
+      });
+
+      this.lastRenderWidth = renderWidth;
+      this.lastRenderHeight = renderHeight;
+      this.lastViewportWidth = viewportWidth;
+      this.lastViewportHeight = viewportHeight;
+    }
 
     const passEncoder = encoder.beginRenderPass({
       label: "Output Pass",
@@ -89,8 +152,8 @@ export class OutputPass {
     });
 
     passEncoder.setPipeline(this.pipeline);
-    passEncoder.setBindGroup(0, bindGroup);
-    passEncoder.draw(3);
+    passEncoder.setBindGroup(0, this.uniformsBindGroup);
+    passEncoder.draw(6);
     passEncoder.end();
   }
 }

@@ -1,28 +1,44 @@
 import shader from "./ShadowPassSpotLight.wgsl?raw";
 import { Mesh } from "../../mesh";
-import { SpotLight, SPOT_SHADOW_MAP_SIZE } from "../../lights";
+import { SpotLight } from "../../lights";
 import { Vertex } from "../../geometries";
 
 export class ShadowPassSpotLight {
   private device: GPUDevice;
   private maxSpotLights: number;
-  private pipeline: GPURenderPipeline;
-  private transparentPipeline: GPURenderPipeline;
-  private meshBindGroupLayout: GPUBindGroupLayout;
-  private shadowTexture: GPUTexture;
-  private shadowTextureView: GPUTextureView;
+  private shadowMapSize: number;
+  private pipeline!: GPURenderPipeline;
+  private transparentPipeline!: GPURenderPipeline;
+  private meshBindGroupLayout!: GPUBindGroupLayout;
+  private shadowTexture!: GPUTexture;
+  private shadowTextureView!: GPUTextureView;
   private shadowTextureViews: GPUTextureView[] = [];
 
-  constructor(device: GPUDevice, maxSpotLights: number = 1) {
+  constructor(
+    device: GPUDevice,
+    maxSpotLights: number = 1,
+    shadowMapSize: number = 1024,
+  ) {
     this.device = device;
     this.maxSpotLights = maxSpotLights;
+    this.shadowMapSize = shadowMapSize;
+
+    this.createShadowResources();
+    this.createPipelines();
+  }
+
+  private createShadowResources(): void {
+    if (this.shadowTexture) {
+      this.shadowTexture.destroy();
+    }
+    this.shadowTextureViews = [];
 
     this.shadowTexture = this.device.createTexture({
       label: "Shadow Pass SpotLight Texture",
       size: {
-        width: SPOT_SHADOW_MAP_SIZE,
-        height: SPOT_SHADOW_MAP_SIZE,
-        depthOrArrayLayers: maxSpotLights,
+        width: this.shadowMapSize,
+        height: this.shadowMapSize,
+        depthOrArrayLayers: this.maxSpotLights,
       },
       format: "depth32float",
       usage:
@@ -42,7 +58,9 @@ export class ShadowPassSpotLight {
       });
       this.shadowTextureViews.push(view);
     }
+  }
 
+  private createPipelines(): void {
     this.meshBindGroupLayout = this.device.createBindGroupLayout({
       label: "Shadow Pass SpotLight Mesh Bind Group Layout",
       entries: [
@@ -109,6 +127,11 @@ export class ShadowPassSpotLight {
         depthBiasClamp: 0,
       },
     });
+  }
+
+  public resize(shadowMapSize: number): void {
+    this.shadowMapSize = shadowMapSize;
+    this.createShadowResources();
   }
 
   public render(

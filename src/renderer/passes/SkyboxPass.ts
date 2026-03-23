@@ -1,4 +1,4 @@
-import shader from "./Skybox.wgsl?raw";
+import shader from "./SkyboxPass.wgsl?raw";
 import { CubeTexture } from "../../textures/CubeTexture";
 import { GeometryBuffer } from "../GeometryBuffer";
 

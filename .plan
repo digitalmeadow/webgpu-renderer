@@ -1,12 +1,6 @@
 
 --- Visuals ---
 
-
-Environment maps
-Basic env map reflections
-  - Mipmaps, 4 levels, blend based on material roughness channel.
-  - Research whether a Skybox should be a primitive in the renderer, or just a cube?
-
 Not in order:
 1. Ambient occlusion
 2. Soft shadows (PCF and then softer-when-further-away)
@@ -18,3 +12,8 @@ Ideally: Bloom as a post processing effect based on luminance
 Bloom also as a seperate voluntary pass so that some meshes can appear to be transmissive/glowing even if they aren't above the luminance threshold
 
 Requires, a seperate pass which uses buffer swapping to progressively blur the image, number of swaps, as well as other bloom params should be configurable.
+
+
+--- Features ----
+
+- Projection mapping, e.g. casting complex shadows (via video as a projection onto the scene)

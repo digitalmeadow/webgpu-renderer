@@ -22,10 +22,15 @@ import { CubeTexture } from "../textures/CubeTexture";
 export interface RendererOptions {
   maxDirectionalLights?: number;
   maxSpotLights?: number;
+  renderWidth?: number;
+  renderHeight?: number;
+  devicePixelRatio?: number;
 }
 
 const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
 const DEFAULT_MAX_SPOT_LIGHTS = 1;
+const MAX_SHADOW_MAP_SIZE = 2048;
+const SHADOW_MAP_SIZE_RATIO = 2;
 
 export class Renderer {
   private canvas: HTMLCanvasElement;
@@ -34,10 +39,16 @@ export class Renderer {
   private format: GPUTextureFormat;
   private maxDirectionalLights: number;
   private maxSpotLights: number;
+  private targetRenderWidth: number;
+  private targetRenderHeight: number;
+  private devicePixelRatioOption: number;
   private cameras: Set<Camera> = new Set();
 
   public frustumCulling: boolean = false;
   public skyboxTexture: CubeTexture | null = null;
+
+  public renderWidth: number = 0;
+  public renderHeight: number = 0;
 
   private geometryBuffer: GeometryBuffer;
   private geometryPass: GeometryPass;
@@ -58,6 +69,9 @@ export class Renderer {
     this.maxDirectionalLights =
       options.maxDirectionalLights ?? DEFAULT_MAX_DIRECTIONAL_LIGHTS;
     this.maxSpotLights = options.maxSpotLights ?? DEFAULT_MAX_SPOT_LIGHTS;
+    this.targetRenderWidth = options.renderWidth ?? 640;
+    this.targetRenderHeight = options.renderHeight ?? 480;
+    this.devicePixelRatioOption = options.devicePixelRatio ?? 1;
     this.device = null as unknown as GPUDevice;
     this.format = navigator.gpu.getPreferredCanvasFormat();
 
@@ -109,6 +123,9 @@ export class Renderer {
     );
     this.sceneUniforms = new SceneUniforms(this.device);
 
+    this.renderWidth = this.targetRenderWidth;
+    this.renderHeight = this.targetRenderHeight;
+
     this.setup();
 
     const rect = this.canvas.getBoundingClientRect();
@@ -118,8 +135,8 @@ export class Renderer {
   setup(): void {
     this.geometryBuffer = new GeometryBuffer(
       this.device,
-      this.canvas.width,
-      this.canvas.height,
+      this.renderWidth,
+      this.renderHeight,
     );
 
     this.cameraBindGroupLayout = this.device.createBindGroupLayout({
@@ -145,20 +162,23 @@ export class Renderer {
       this.cameraBindGroupLayout,
       this.lightManager.lightingBindGroupLayout,
       this.sceneUniforms.bindGroupLayout,
-      this.canvas.width,
-      this.canvas.height,
+      this.renderWidth,
+      this.renderHeight,
     );
 
     this.outputPass = new OutputPass(this.device);
 
+    const shadowMapSize = this.calculateShadowMapSize();
     this.shadowPassDirectionalLight = new ShadowPassDirectionalLight(
       this.device,
       this.maxDirectionalLights,
+      shadowMapSize,
     );
 
     this.shadowPassSpotLight = new ShadowPassSpotLight(
       this.device,
       this.maxSpotLights,
+      shadowMapSize,
     );
 
     this.particlesPass = new ParticlesPass(
@@ -184,7 +204,7 @@ export class Renderer {
   resize(width: number, height: number): void {
     if (!this.device || !this.context) return;
 
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = this.devicePixelRatioOption;
     const w = Math.round(width * dpr);
     const h = Math.round(height * dpr);
 
@@ -204,18 +224,6 @@ export class Renderer {
       format: this.format,
       alphaMode: "premultiplied",
     });
-
-    this.geometryBuffer.resize(
-      this.device,
-      this.canvas.width,
-      this.canvas.height,
-    );
-
-    this.lightingPass.resize(
-      this.device,
-      this.canvas.width,
-      this.canvas.height,
-    );
 
     for (const camera of this.cameras) {
       camera.resize(this.canvas.width, this.canvas.height);
@@ -387,6 +395,10 @@ export class Renderer {
       commandEncoder,
       this.lightingPass.outputView,
       swapChainView,
+      this.renderWidth,
+      this.renderHeight,
+      this.canvas.width,
+      this.canvas.height,
     );
 
     this.device.queue.submit([commandEncoder.finish()]);
@@ -402,6 +414,38 @@ export class Renderer {
 
   public setSkyboxTexture(texture: CubeTexture | null): void {
     this.skyboxTexture = texture;
+  }
+
+  public setRenderResolution(width: number, height: number): void {
+    this.renderWidth = width;
+    this.renderHeight = height;
+    this.recreateRenderTargets();
+  }
+
+  public getRenderResolution(): { width: number; height: number } {
+    return { width: this.renderWidth, height: this.renderHeight };
+  }
+
+  public getViewportSize(): { width: number; height: number } {
+    return { width: this.canvas.width, height: this.canvas.height };
+  }
+
+  private calculateShadowMapSize(): number {
+    const minDimension = Math.min(this.renderWidth, this.renderHeight);
+    return Math.min(minDimension * SHADOW_MAP_SIZE_RATIO, MAX_SHADOW_MAP_SIZE);
+  }
+
+  private recreateRenderTargets(): void {
+    this.geometryBuffer.resize(
+      this.device,
+      this.renderWidth,
+      this.renderHeight,
+    );
+    this.lightingPass.resize(this.device, this.renderWidth, this.renderHeight);
+
+    const shadowMapSize = this.calculateShadowMapSize();
+    this.shadowPassDirectionalLight.resize(shadowMapSize);
+    this.shadowPassSpotLight.resize(shadowMapSize);
   }
 
   private collectMeshes(world: World): Mesh[] {
