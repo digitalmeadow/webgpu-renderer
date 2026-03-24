@@ -1,4 +1,5 @@
 import { MaterialBase, MaterialType } from "./MaterialBase";
+import { Texture } from "../textures";
 
 export class MaterialUniforms {
   public readonly buffer: GPUBuffer;
@@ -8,19 +9,23 @@ export class MaterialUniforms {
   constructor(device: GPUDevice, material: MaterialBase) {
     this.device = device;
     this.buffer = device.createBuffer({
-      size: 32, // 8 floats: color (r,g,b,a) + opacity + padding
+      size: 48, // 12 floats: color (r,g,b,a) + opacity + emissive (r,g,b) + intensity + padding
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       label: `MaterialUniformsBuffer: ${material.name}`,
     });
-    this.data = new Float32Array(8);
+    this.data = new Float32Array(12);
     this.update(material);
   }
 
   update(material: MaterialBase) {
     let color: [number, number, number, number] = [1, 1, 1, 1];
+    let emissive: [number, number, number] = [0, 0, 0];
+    let emissiveIntensity = 0;
 
     if (material.type === MaterialType.PBR) {
       color = (material as any).baseColorFactor;
+      emissive = (material as any).emissiveFactor ?? [0, 0, 0];
+      emissiveIntensity = 1;
     } else if ("color" in material) {
       color = (material as any).color;
     }
@@ -30,6 +35,13 @@ export class MaterialUniforms {
     this.data[2] = color[2];
     this.data[3] = color[3];
     this.data[4] = material.opacity;
+    this.data[5] = 0; // padding
+    this.data[6] = emissive[0];
+    this.data[7] = emissive[1];
+    this.data[8] = emissive[2];
+    this.data[9] = emissiveIntensity;
+    this.data[10] = 0; // padding
+    this.data[11] = 0; // padding
     this.device.queue.writeBuffer(this.buffer, 0, this.data.buffer);
   }
 }

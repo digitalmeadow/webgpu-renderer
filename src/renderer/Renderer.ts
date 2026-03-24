@@ -10,6 +10,7 @@ import { ForwardPass } from "./passes/ForwardPass";
 import { ShadowPassDirectionalLight } from "./passes/ShadowPassDirectionalLight";
 import { ShadowPassSpotLight } from "./passes/ShadowPassSpotLight";
 import { SkyboxPass } from "./passes/SkyboxPass";
+import { PostPass, PostPassContext } from "./passes/PostPass";
 import { MaterialManager } from "../materials";
 import { ParticleEmitter } from "../particles";
 import { Mesh } from "../mesh";
@@ -63,6 +64,9 @@ export class Renderer {
   private lightManager: LightManager;
   private sceneUniforms: SceneUniforms;
   private cameraBindGroupLayout: GPUBindGroupLayout;
+  private postPasses: PostPass[] = [];
+  private postPassRenderTarget: GPUTexture | null = null;
+  private postPassRenderTargetView: GPUTextureView | null = null;
 
   constructor(canvas: HTMLCanvasElement, options: RendererOptions = {}) {
     this.canvas = canvas;
@@ -389,11 +393,43 @@ export class Renderer {
       );
     }
 
+    // Post Passes
+    let lastOutputView = this.lightingPass.outputView;
+    if (this.postPasses.length > 0) {
+      this.createPostPassRenderTarget();
+
+      const postContext: PostPassContext = {
+        geometryBuffer: this.geometryBuffer,
+        cameraBindGroup: camera.uniforms.bindGroup,
+        lightingBindGroup: this.lightManager.lightingBindGroup,
+        sceneBindGroup: this.sceneUniforms.bindGroup,
+        width: this.renderWidth,
+        height: this.renderHeight,
+      };
+
+      for (let i = 0; i < this.postPasses.length; i++) {
+        const pass = this.postPasses[i];
+        const isLastPass = i === this.postPasses.length - 1;
+        const outputView = isLastPass
+          ? this.postPassRenderTargetView!
+          : this.postPassRenderTargetView!;
+
+        pass.render(lastOutputView, outputView, postContext);
+
+        if (!isLastPass) {
+          const tempView = this.postPassRenderTarget!.createView();
+          lastOutputView = tempView;
+        }
+      }
+
+      lastOutputView = this.postPassRenderTargetView!;
+    }
+
     // Output Pass
     const swapChainView = this.context.getCurrentTexture().createView();
     this.outputPass.render(
       commandEncoder,
-      this.lightingPass.outputView,
+      lastOutputView,
       swapChainView,
       this.renderWidth,
       this.renderHeight,
@@ -414,6 +450,39 @@ export class Renderer {
 
   public setSkyboxTexture(texture: CubeTexture | null): void {
     this.skyboxTexture = texture;
+  }
+
+  public addPostPass(pass: PostPass): void {
+    this.postPasses.push(pass);
+  }
+
+  public clearPostPasses(): void {
+    this.postPasses = [];
+  }
+
+  private createPostPassRenderTarget(): void {
+    if (this.postPassRenderTarget) {
+      // Don't destroy - may still be in use by previous frame's command buffer
+      // Just recreate if size changed handled in resize
+      if (
+        this.postPassRenderTarget.width === this.renderWidth &&
+        this.postPassRenderTarget.height === this.renderHeight
+      ) {
+        return;
+      }
+      this.postPassRenderTarget.destroy();
+    }
+    this.postPassRenderTarget = this.device.createTexture({
+      label: "Post Pass Render Target",
+      size: [this.renderWidth, this.renderHeight],
+      format: navigator.gpu.getPreferredCanvasFormat(),
+      usage:
+        GPUTextureUsage.TEXTURE_BINDING |
+        GPUTextureUsage.RENDER_ATTACHMENT |
+        GPUTextureUsage.COPY_SRC |
+        GPUTextureUsage.COPY_DST,
+    });
+    this.postPassRenderTargetView = this.postPassRenderTarget.createView();
   }
 
   public setRenderResolution(width: number, height: number): void {
@@ -442,6 +511,25 @@ export class Renderer {
       this.renderHeight,
     );
     this.lightingPass.resize(this.device, this.renderWidth, this.renderHeight);
+
+    if (this.postPassRenderTarget) {
+      this.postPassRenderTarget.destroy();
+      this.postPassRenderTarget = this.device.createTexture({
+        label: "Post Pass Render Target",
+        size: [this.renderWidth, this.renderHeight],
+        format: navigator.gpu.getPreferredCanvasFormat(),
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.RENDER_ATTACHMENT |
+          GPUTextureUsage.COPY_SRC |
+          GPUTextureUsage.COPY_DST,
+      });
+      this.postPassRenderTargetView = this.postPassRenderTarget.createView();
+    }
+
+    for (const pass of this.postPasses) {
+      pass.resize(this.renderWidth, this.renderHeight);
+    }
 
     const shadowMapSize = this.calculateShadowMapSize();
     this.shadowPassDirectionalLight.resize(shadowMapSize);

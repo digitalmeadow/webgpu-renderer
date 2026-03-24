@@ -18,6 +18,7 @@ export class MaterialManager {
   private placeholderNormalTexture: GPUTexture;
   private placeholderMetalRoughnessTexture: GPUTexture;
   private placeholderAlbedoTexture: GPUTexture;
+  private placeholderEmissiveTexture: GPUTexture;
   private placeholderEnvTexture: GPUTexture;
   private placeholderEnvView: GPUTextureView;
   private placeholderEnvSampler: GPUSampler;
@@ -51,6 +52,9 @@ export class MaterialManager {
     ]);
     this.placeholderAlbedoTexture = this.createPlaceholderTexture([
       255, 255, 255, 255,
+    ]);
+    this.placeholderEmissiveTexture = this.createPlaceholderTexture([
+      0, 0, 0, 0,
     ]);
 
     this.placeholderEnvTexture = device.createTexture({
@@ -118,6 +122,11 @@ export class MaterialManager {
           binding: 6,
           visibility: GPUShaderStage.FRAGMENT,
           sampler: { type: "filtering" },
+        },
+        {
+          binding: 7,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: "float" },
         },
       ],
     });
@@ -332,6 +341,7 @@ export class MaterialManager {
         pbrMaterial.albedoTexture,
         pbrMaterial.normalTexture,
         pbrMaterial.metalnessRoughnessTexture,
+        pbrMaterial.emissiveTexture,
       ];
       for (const texture of textures) {
         if (texture && !this.textureCache.has(texture)) {
@@ -430,6 +440,13 @@ export class MaterialManager {
         pbrMaterial.environmentTexture?.gpuSampler ??
         this.placeholderEnvSampler;
 
+      const emissiveTexture =
+        pbrMaterial.emissiveTexture &&
+        this.textureCache.get(pbrMaterial.emissiveTexture);
+      const emissiveView = emissiveTexture
+        ? emissiveTexture.createView()
+        : this.placeholderEmissiveTexture.createView();
+
       const bindGroup = this.device.createBindGroup({
         layout: this.materialBindGroupLayout,
         entries: [
@@ -440,6 +457,7 @@ export class MaterialManager {
           { binding: 4, resource: { buffer: pbrMaterial.uniforms.buffer } },
           { binding: 5, resource: envView },
           { binding: 6, resource: envSampler },
+          { binding: 7, resource: emissiveView },
         ],
       });
 
@@ -462,6 +480,10 @@ export class MaterialManager {
           { binding: 4, resource: { buffer: basicMaterial.uniforms.buffer } },
           { binding: 5, resource: this.placeholderEnvView },
           { binding: 6, resource: this.placeholderEnvSampler },
+          {
+            binding: 7,
+            resource: this.placeholderEmissiveTexture.createView(),
+          },
         ],
       });
 
@@ -484,6 +506,10 @@ export class MaterialManager {
           { binding: 4, resource: { buffer: customMaterial.uniforms.buffer } },
           { binding: 5, resource: this.placeholderEnvView },
           { binding: 6, resource: this.placeholderEnvSampler },
+          {
+            binding: 7,
+            resource: this.placeholderEmissiveTexture.createView(),
+          },
         ],
       });
 

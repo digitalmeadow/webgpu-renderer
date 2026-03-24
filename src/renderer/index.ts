@@ -4,3 +4,5 @@ export * from "./passes/ForwardPass";
 export * from "./passes/GeometryPass";
 export * from "./passes/LightingPass";
 export * from "./passes/OutputPass";
+export * from "./passes/PostPass";
+export * from "./passes/BloomPass";

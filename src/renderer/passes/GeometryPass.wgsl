@@ -3,12 +3,18 @@ const MAX_JOINTS: u32 = 64u;
 struct MaterialUniforms {
   color: vec4<f32>,
   opacity: f32,
+  emissive: vec4<f32>, // rgb = color, a = intensity
 };
 
 //--HOOK_PLACEHOLDER_UNIFORMS--//
 
 fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
     return textureSample(albedoTexture, defaultSampler, uv);
+}
+
+fn get_emissive(uv: vec2<f32>) -> vec4<f32> {
+    let emissive_tex = textureSample(emissiveTexture, defaultSampler, uv);
+    return vec4<f32>(emissive_tex.rgb * material.emissive.rgb * material.emissive.a, material.emissive.a);
 }
 
 //--HOOK_PLACEHOLDER_ALBEDO--//
@@ -47,6 +53,7 @@ struct MeshUniforms {
 @group(2) @binding(4) var<uniform> material: MaterialUniforms;
 @group(2) @binding(5) var environmentTexture: texture_cube<f32>;
 @group(2) @binding(6) var envSampler: sampler;
+@group(2) @binding(7) var emissiveTexture: texture_2d<f32>;
 
 @vertex
 fn vs_main(
@@ -128,7 +135,8 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     let metal_rough = textureSample(metalnessRoughnessTexture, defaultSampler, in.uv_coords);
     let roughness = metal_rough.g;
     let metalness = metal_rough.b;
-    output.metal_rough = vec4<f32>(metalness, roughness, 0.0, 1.0);
+    let emissive = get_emissive(in.uv_coords);
+    output.metal_rough = vec4<f32>(metalness, roughness, 0.0, emissive.a);
     
     let V = normalize(camera.position.xyz - in.world_position);
     let N = normalize(in.world_normal);
