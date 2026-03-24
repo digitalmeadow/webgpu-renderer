@@ -2,9 +2,11 @@ import shader from "./ShadowPassSpotLight.wgsl?raw";
 import { Mesh } from "../../mesh";
 import { SpotLight } from "../../lights";
 import { Vertex } from "../../geometries";
+import { MaterialManager } from "../../materials";
 
 export class ShadowPassSpotLight {
   private device: GPUDevice;
+  private materialManager: MaterialManager;
   private maxSpotLights: number;
   private shadowMapSize: number;
   private pipeline!: GPURenderPipeline;
@@ -16,10 +18,12 @@ export class ShadowPassSpotLight {
 
   constructor(
     device: GPUDevice,
+    materialManager: MaterialManager,
     maxSpotLights: number = 1,
     shadowMapSize: number = 1024,
   ) {
     this.device = device;
+    this.materialManager = materialManager;
     this.maxSpotLights = maxSpotLights;
     this.shadowMapSize = shadowMapSize;
 
@@ -107,12 +111,18 @@ export class ShadowPassSpotLight {
         bindGroupLayouts: [
           SpotLight.getShadowBindGroupLayout(this.device),
           this.meshBindGroupLayout,
+          this.materialManager.materialBindGroupLayout,
         ],
       }),
       vertex: {
         module: shaderModule,
         entryPoint: "vs_main",
         buffers: [Vertex.getBufferLayout()],
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fs_main",
+        targets: [],
       },
       primitive: {
         topology: "triangle-list",
@@ -203,8 +213,15 @@ export class ShadowPassSpotLight {
             ],
           });
 
+          const materialBindGroup = mesh.material
+            ? this.materialManager.getBindGroup(mesh.material)
+            : null;
+
           passEncoder.setBindGroup(0, light.shadowBindGroup);
           passEncoder.setBindGroup(1, meshBindGroup);
+          if (materialBindGroup) {
+            passEncoder.setBindGroup(2, materialBindGroup);
+          }
           passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
           passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
           passEncoder.drawIndexed(mesh.geometry.indexCount);

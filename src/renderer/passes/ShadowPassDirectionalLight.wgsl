@@ -10,6 +10,7 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
 };
 
 struct LightDirectionalUniforms {
@@ -30,6 +31,9 @@ struct MeshUniforms {
 
 @group(1) @binding(0) var<uniform> mesh_uniforms: MeshUniforms;
 
+@group(2) @binding(0) var defaultSampler: sampler;
+@group(2) @binding(1) var albedoTexture: texture_2d<f32>;
+
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var output: VertexOutput;
@@ -47,6 +51,16 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     let model_position = mesh_uniforms.model_transform_matrix * final_position;
     let clip_position = light_directional_uniforms.view_projection_matrices[light_directional_uniforms.active_view_projection_index] * model_position;
     output.position = clip_position;
+    output.uv = in.uv;
     
     return output;
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @builtin(frag_depth) f32 {
+    let albedo = textureSample(albedoTexture, defaultSampler, in.uv);
+    if (albedo.a == 0.0) {
+        discard;
+    }
+    return in.position.z / in.position.w;
 }

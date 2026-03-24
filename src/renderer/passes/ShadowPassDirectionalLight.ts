@@ -3,9 +3,11 @@ import { Mesh } from "../../mesh";
 import { DirectionalLight, SHADOW_MAP_CASCADES_COUNT } from "../../lights";
 import { Vertex } from "../../geometries";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
+import { MaterialManager } from "../../materials";
 
 export class ShadowPassDirectionalLight {
   private device: GPUDevice;
+  private materialManager: MaterialManager;
   private maxDirectionalLights: number;
   private shadowMapSize: number;
   private pipeline!: GPURenderPipeline;
@@ -17,10 +19,12 @@ export class ShadowPassDirectionalLight {
 
   constructor(
     device: GPUDevice,
+    materialManager: MaterialManager,
     maxDirectionalLights: number = 1,
     shadowMapSize: number = 2048,
   ) {
     this.device = device;
+    this.materialManager = materialManager;
     this.maxDirectionalLights = maxDirectionalLights;
     this.shadowMapSize = shadowMapSize;
 
@@ -122,12 +126,18 @@ export class ShadowPassDirectionalLight {
         bindGroupLayouts: [
           DirectionalLight.getShadowBindGroupLayout(this.device),
           this.meshBindGroupLayout,
+          this.materialManager.materialBindGroupLayout,
         ],
       }),
       vertex: {
         module: shaderModule,
         entryPoint: "vs_main",
         buffers: [Vertex.getBufferLayout()],
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fs_main",
+        targets: [],
       },
       primitive: {
         topology: "triangle-list",
@@ -240,8 +250,15 @@ export class ShadowPassDirectionalLight {
               ],
             });
 
+            const materialBindGroup = mesh.material
+              ? this.materialManager.getBindGroup(mesh.material)
+              : null;
+
             passEncoder.setBindGroup(0, light.shadowBindGroup);
             passEncoder.setBindGroup(1, meshBindGroup);
+            if (materialBindGroup) {
+              passEncoder.setBindGroup(2, materialBindGroup);
+            }
             passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
             passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
             passEncoder.drawIndexed(mesh.geometry.indexCount);

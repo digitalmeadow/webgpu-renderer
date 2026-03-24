@@ -175,12 +175,14 @@ export class Renderer {
     const shadowMapSize = this.calculateShadowMapSize();
     this.shadowPassDirectionalLight = new ShadowPassDirectionalLight(
       this.device,
+      this.materialManager,
       this.maxDirectionalLights,
       shadowMapSize,
     );
 
     this.shadowPassSpotLight = new ShadowPassSpotLight(
       this.device,
+      this.materialManager,
       this.maxSpotLights,
       shadowMapSize,
     );
@@ -372,7 +374,7 @@ export class Renderer {
       );
     }
 
-    // Forward Pass (transparency) - must run BEFORE Skybox Pass
+    // Forward Pass (transparency)
     if (this.forwardPass && transparentMeshes.length > 0) {
       this.forwardPass.render(
         commandEncoder,
@@ -384,14 +386,14 @@ export class Renderer {
     }
 
     // Skybox Pass - renders background where depth = 1
-    if (this.skyboxTexture) {
-      this.skyboxPass.setSkyboxTexture(this.skyboxTexture);
-      this.skyboxPass.render(
-        commandEncoder,
-        camera.uniforms.bindGroup,
-        this.lightingPass.outputView,
-      );
-    }
+    // if (this.skyboxTexture) {
+    //   this.skyboxPass.setSkyboxTexture(this.skyboxTexture);
+    //   this.skyboxPass.render(
+    //     commandEncoder,
+    //     camera.uniforms.bindGroup,
+    //     this.lightingPass.outputView,
+    //   );
+    // }
 
     // Post Passes
     let lastOutputView = this.lightingPass.outputView;
