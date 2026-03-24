@@ -1,5 +1,4 @@
 export type AlphaMode = "opaque" | "blend" | "mask";
-export type RenderPass = "geometry" | "forward";
 
 export const MaterialType = {
   Base: "materialBase",
@@ -17,9 +16,8 @@ export interface MaterialSpecialization {
 export abstract class MaterialBase {
   abstract readonly type: MaterialType;
   name: string;
-  renderPass: RenderPass = "geometry";
   alphaMode: AlphaMode = "opaque";
-  alphaCutoff: number = 0.5;
+  alphaCutoff: number = 0.0;
   doubleSided: boolean = false;
   opacity: number = 1.0;
   specialization: MaterialSpecialization = {};
@@ -27,7 +25,6 @@ export abstract class MaterialBase {
   constructor(
     name: string,
     options?: {
-      renderPass?: RenderPass;
       alphaMode?: AlphaMode;
       alphaCutoff?: number;
       doubleSided?: boolean;
@@ -36,7 +33,6 @@ export abstract class MaterialBase {
   ) {
     this.name = name;
     if (options) {
-      this.renderPass = options.renderPass ?? this.renderPass;
       this.alphaMode = options.alphaMode ?? this.alphaMode;
       this.alphaCutoff = options.alphaCutoff ?? this.alphaCutoff;
       this.doubleSided = options.doubleSided ?? this.doubleSided;

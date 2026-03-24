@@ -1,9 +1,4 @@
-import {
-  MaterialBase,
-  MaterialType,
-  AlphaMode,
-  RenderPass,
-} from "./MaterialBase";
+import { MaterialBase, MaterialType, AlphaMode } from "./MaterialBase";
 import { Texture, CubeTexture } from "../textures";
 import { MaterialUniforms } from "./MaterialUniforms";
 
@@ -20,7 +15,6 @@ interface MaterialPBROptions {
   normalTexture?: Texture | null;
   metalnessRoughnessTexture?: Texture | null;
   environmentTexture?: CubeTexture | null;
-  renderPass?: RenderPass;
   alphaMode?: AlphaMode;
   alphaCutoff?: number;
   doubleSided?: boolean;

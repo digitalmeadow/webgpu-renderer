@@ -1,4 +1,4 @@
-import { MaterialBase, MaterialType, RenderPass } from "./MaterialBase";
+import { MaterialBase, MaterialType, AlphaMode } from "./MaterialBase";
 import { MaterialUniforms } from "./MaterialUniforms";
 
 interface MaterialCustomUniforms {
@@ -7,13 +7,13 @@ interface MaterialCustomUniforms {
 
 interface MaterialCustomOptions {
   name: string;
-  renderPass: RenderPass;
   passes?: {
     geometry?: string;
     forward?: string;
   };
   uniforms?: MaterialCustomUniforms;
-  alphaMode?: "opaque" | "blend" | "mask";
+  alphaMode?: AlphaMode;
+  alphaCutoff?: number;
   opacity?: number;
   doubleSided?: boolean;
 }

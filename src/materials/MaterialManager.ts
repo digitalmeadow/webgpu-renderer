@@ -251,12 +251,12 @@ export class MaterialManager {
     material: MaterialCustom,
     camera: Camera,
     meshBindGroupLayout: GPUBindGroupLayout,
+    pass: "geometry" | "forward",
   ): GPURenderPipeline | null {
     if (this.customPipelineCache.has(material)) {
       return this.customPipelineCache.get(material)!;
     }
 
-    const pass = material.renderPass;
     const customShader = material.passes[pass];
 
     if (!customShader) {

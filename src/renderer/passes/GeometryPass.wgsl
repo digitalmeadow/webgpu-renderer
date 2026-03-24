@@ -3,7 +3,8 @@ const MAX_JOINTS: u32 = 64u;
 struct MaterialUniforms {
   color: vec4<f32>,
   opacity: f32,
-  emissive: vec4<f32>, // rgb = color, a = intensity
+  emissive: vec4<f32>,
+  alpha_cutoff: f32,
 };
 
 //--HOOK_PLACEHOLDER_UNIFORMS--//
@@ -131,7 +132,17 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
 
     let albedo_tex = get_albedo_color(in.uv_coords);
     let base_albedo = albedo_tex.rgb * material.color.rgb;
-    output.albedo = vec4<f32>(base_albedo, albedo_tex.a * material.opacity);
+    let final_alpha = albedo_tex.a * material.opacity;
+
+    // Alpha discard for alpha-tested materials (mask mode)
+    if (material.alpha_cutoff > 0.0 && final_alpha < material.alpha_cutoff) {
+      discard;
+    } 
+
+    if (albedo_tex.a < 0.01) {
+      discard;
+    }
+
     output.normal = vec4<f32>(normalize(in.world_normal), 1.0);
     
     let metal_rough = textureSample(metalnessRoughnessTexture, defaultSampler, in.uv_coords);

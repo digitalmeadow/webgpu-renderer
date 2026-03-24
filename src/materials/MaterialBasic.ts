@@ -1,4 +1,4 @@
-import { MaterialBase, MaterialType, RenderPass } from "./MaterialBase";
+import { MaterialBase, MaterialType, AlphaMode } from "./MaterialBase";
 import { MaterialUniforms } from "./MaterialUniforms";
 
 export interface ShaderHooks {
@@ -8,8 +8,8 @@ export interface ShaderHooks {
 
 interface MaterialBasicOptions {
   color?: [number, number, number, number];
-  renderPass?: RenderPass;
-  alphaMode?: "opaque" | "blend" | "mask";
+  alphaMode?: AlphaMode;
+  alphaCutoff?: number;
   opacity?: number;
   doubleSided?: boolean;
   hooks?: ShaderHooks;

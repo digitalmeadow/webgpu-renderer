@@ -46,7 +46,6 @@ async function main() {
   const floorGeometry = createPlaneGeometry(device, 20, 20);
   const floorMaterial = new MaterialBasic(device, "floor-material", {
     color: [0.4, 0.4, 0.4, 1.0],
-    renderPass: "geometry",
   });
   await materialManager.loadMaterial(floorMaterial);
   // Assuming CreatePlaneGeometry generates a horizontal XZ plane
@@ -61,7 +60,6 @@ async function main() {
   // Shadow caster cube (elevated)
   const casterMaterial = new MaterialBasic(device, "caster-material", {
     color: [0.8, 0.2, 0.2, 1.0],
-    renderPass: "geometry",
   });
   await materialManager.loadMaterial(casterMaterial);
   const casterCube = new Mesh(

@@ -86,7 +86,8 @@ export class GeometryPass {
     device: GPUDevice,
     encoder: GPUCommandEncoder,
     geometryBuffer: GeometryBuffer,
-    meshes: Mesh[],
+    opaqueMeshes: Mesh[],
+    alphaTestMeshes: Mesh[],
     camera: Camera,
     materialManager: MaterialManager,
   ): void {
@@ -124,10 +125,9 @@ export class GeometryPass {
 
     let currentPipeline: GPURenderPipeline | null = null;
 
-    for (const mesh of meshes) {
-      if (!mesh.uniforms || !mesh.material) continue;
+    const renderMesh = (mesh: Mesh) => {
+      if (!mesh.uniforms || !mesh.material) return;
 
-      // Determine which pipeline to use
       let pipelineToUse: GPURenderPipeline | null = null;
 
       if (mesh.material.type === MaterialType.Custom) {
@@ -135,6 +135,7 @@ export class GeometryPass {
           mesh.material as import("../../materials/MaterialCustom").MaterialCustom,
           camera,
           this.meshBindGroupLayout,
+          "geometry",
         );
       } else if (
         mesh.material.type === MaterialType.Basic ||
@@ -143,8 +144,8 @@ export class GeometryPass {
       ) {
         const basicOrPbr =
           mesh.material.type === MaterialType.Basic
-            ? (mesh.material as import("../../materials/MaterialBasic").MaterialBasic)
-            : (mesh.material as import("../../materials/MaterialPBR").MaterialPBR);
+            ? (mesh.material as MaterialBasic)
+            : (mesh.material as MaterialPBR);
         pipelineToUse = materialManager.getHookPipeline(
           basicOrPbr,
           camera,
@@ -155,9 +156,8 @@ export class GeometryPass {
         pipelineToUse = this.pipeline;
       }
 
-      if (!pipelineToUse) continue;
+      if (!pipelineToUse) return;
 
-      // Set pipeline if it has changed
       if (pipelineToUse !== currentPipeline) {
         passEncoder.setPipeline(pipelineToUse);
         currentPipeline = pipelineToUse;
@@ -168,13 +168,21 @@ export class GeometryPass {
 
       const materialBindGroup = materialManager.getBindGroup(mesh.material);
       if (!materialBindGroup) {
-        continue;
+        return;
       }
       passEncoder.setBindGroup(2, materialBindGroup);
 
       passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
       passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
       passEncoder.drawIndexed(mesh.geometry.indexCount);
+    };
+
+    for (const mesh of opaqueMeshes) {
+      renderMesh(mesh);
+    }
+
+    for (const mesh of alphaTestMeshes) {
+      renderMesh(mesh);
     }
 
     passEncoder.end();

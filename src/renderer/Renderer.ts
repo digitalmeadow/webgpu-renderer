@@ -279,11 +279,12 @@ export class Renderer {
     }
 
     const opaqueMeshes = meshes.filter(
-      (m) => m.material?.renderPass === "geometry",
+      (m) => m.material?.alphaMode === "opaque",
     );
-    const transparentMeshes = meshes.filter(
-      (m) => m.material?.renderPass === "forward",
+    const alphaTestMeshes = meshes.filter(
+      (m) => m.material?.alphaMode === "mask",
     );
+    const blendMeshes = meshes.filter((m) => m.material?.alphaMode === "blend");
 
     const lights = this.collectLights(world);
     this.sceneUniforms.ambientLightColor = world.ambientLightColor;
@@ -297,6 +298,7 @@ export class Renderer {
       commandEncoder,
       this.geometryBuffer,
       opaqueMeshes,
+      alphaTestMeshes,
       camera,
       this.materialManager,
     );
@@ -322,7 +324,7 @@ export class Renderer {
         commandEncoder,
         directionalLights,
         opaqueMeshes,
-        transparentMeshes,
+        blendMeshes,
       );
 
       // Set shadow texture and update lighting bind group
@@ -340,7 +342,7 @@ export class Renderer {
         commandEncoder,
         spotLights,
         opaqueMeshes,
-        transparentMeshes,
+        blendMeshes,
       );
 
       this.lightManager.setSpotShadowTexture(
@@ -375,10 +377,10 @@ export class Renderer {
     }
 
     // Forward Pass (transparency)
-    if (this.forwardPass && transparentMeshes.length > 0) {
+    if (this.forwardPass && blendMeshes.length > 0) {
       this.forwardPass.render(
         commandEncoder,
-        transparentMeshes,
+        blendMeshes,
         camera,
         this.lightingPass.outputView,
         this.geometryBuffer.depthView,
