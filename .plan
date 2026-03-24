@@ -1,6 +1,8 @@
 
 --- Visuals ---
 
+Discard alpha === 0.0 pixels in the shadow pass so that we can get nice shadows from billboard fences etc.
+
 Not in order:
 1. Ambient occlusion
 2. Soft shadows (PCF and then softer-when-further-away)

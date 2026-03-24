@@ -24,8 +24,14 @@ export class MaterialUniforms {
 
     if (material.type === MaterialType.PBR) {
       color = (material as any).baseColorFactor;
-      emissive = (material as any).emissiveFactor ?? [0, 0, 0];
-      emissiveIntensity = 1;
+      const pbrEmissive = (material as any).emissiveFactor ?? [0, 0, 0];
+      emissive = pbrEmissive;
+      // Calculate intensity: max of RGB channels, or 0 if all zero
+      emissiveIntensity = Math.max(
+        pbrEmissive[0],
+        pbrEmissive[1],
+        pbrEmissive[2],
+      );
     } else if ("color" in material) {
       color = (material as any).color;
     }

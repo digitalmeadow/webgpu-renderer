@@ -50,9 +50,9 @@ fn fs_threshold(in: VertexOutput) -> @location(0) vec4<f32> {
     let lum = luminance(scene_color.rgb);
     let threshold = bloom_uniforms.threshold;
 
-    if (emissive_intensity > 0.0 && lum > threshold) {
-        let excess = (lum - threshold) / (lum + 0.0001);
-        return vec4<f32>(scene_color.rgb * emissive_intensity * excess, 1.0);
+    if (emissive_intensity > 0.0 || lum > threshold) {
+        let intensity = max(emissive_intensity, lum - threshold);
+        return vec4<f32>(scene_color.rgb * intensity, 1.0);
     }
 
     return vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -60,7 +60,7 @@ fn fs_threshold(in: VertexOutput) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_blur(in: VertexOutput) -> @location(0) vec4<f32> {
-    let texture_size = vec2<f32>(textureDimensions(scene_texture));
+    let texture_size = vec2<f32>(textureDimensions(blurred_texture));
     let radius = bloom_uniforms.radius;
 
     var result = vec3<f32>(0.0);
@@ -72,7 +72,7 @@ fn fs_blur(in: VertexOutput) -> @location(0) vec4<f32> {
     for (var y: i32 = start.y; y < end.y; y++) {
         for (var x: i32 = start.x; x < end.x; x++) {
             let offset = vec2<f32>(f32(x), f32(y)) / texture_size;
-            let sample_color = textureSample(scene_texture, inputSampler, in.uv_coords + offset);
+            let sample_color = textureSample(blurred_texture, inputSampler, in.uv_coords + offset);
 
             let dist = length(vec2<f32>(f32(x), f32(y)));
             let weight = 1.0 - smoothstep(0.0, radius, dist);

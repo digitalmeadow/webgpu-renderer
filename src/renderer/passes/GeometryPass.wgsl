@@ -14,7 +14,9 @@ fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
 
 fn get_emissive(uv: vec2<f32>) -> vec4<f32> {
     let emissive_tex = textureSample(emissiveTexture, defaultSampler, uv);
-    return vec4<f32>(emissive_tex.rgb * material.emissive.rgb * material.emissive.a, material.emissive.a);
+    let emissive_rgb = max(emissive_tex.rgb, material.emissive.rgb);
+    let intensity = max(emissive_tex.a, material.emissive.a);
+    return vec4<f32>(emissive_rgb * intensity, intensity);
 }
 
 //--HOOK_PLACEHOLDER_ALBEDO--//
@@ -151,7 +153,6 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     let final_color = base_albedo * (1.0 - fresnel_strength) + reflections;
     
     output.albedo = vec4<f32>(final_color, albedo_tex.a * material.opacity);
-    // output.albedo = vec4(reflections, 1.0); // For debugging reflections only
 
     return output;
 }
