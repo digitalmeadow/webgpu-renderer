@@ -3,7 +3,7 @@ import { Light } from ".";
 import { EntityType } from "../scene/Entity";
 
 export const SHADOW_MAP_CASCADES_COUNT = 3;
-export const SHADOW_CASCADE_SPLITS = [0.0, 0.33, 0.66, 1.0];
+export const DEFAULT_SHADOW_CASCADE_SPLITS = [0.0, 0.33, 0.66, 1.0];
 export const OFFSET = 10;
 export const SHADOW_XY_PADDING = 0;
 
@@ -13,7 +13,7 @@ export class DirectionalLight extends Light {
   public lightIndex: number = 0;
 
   public viewProjectionMatrices: Mat4[] = [];
-  public cascadeSplits: number[] = [...SHADOW_CASCADE_SPLITS];
+  public cascadeSplits: number[] = [...DEFAULT_SHADOW_CASCADE_SPLITS];
   public cascadeActualDepths: number[] = [];
 
   public shadowBuffer: GPUBuffer | null = null;
@@ -130,12 +130,12 @@ export class DirectionalLight extends Light {
       const splitNear = this.lerp(
         cameraNear,
         cameraFar,
-        SHADOW_CASCADE_SPLITS[cascadeIndex],
+        this.cascadeSplits[cascadeIndex],
       );
       const splitFar = this.lerp(
         cameraNear,
         cameraFar,
-        SHADOW_CASCADE_SPLITS[cascadeIndex + 1],
+        this.cascadeSplits[cascadeIndex + 1],
       );
       actualSplits.push(splitFar);
 

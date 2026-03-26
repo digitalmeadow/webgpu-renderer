@@ -50,8 +50,14 @@ fn fs_threshold(in: VertexOutput) -> @location(0) vec4<f32> {
     let lum = luminance(scene_color.rgb);
     let threshold = bloom_uniforms.threshold;
 
-    if (emissive_intensity > 0.0 || lum > threshold) {
-        let intensity = max(emissive_intensity, lum - threshold);
+    var intensity = 0.0;
+    if (emissive_intensity > 0.0) {
+        intensity = emissive_intensity;
+    } else if (lum > threshold) {
+        intensity = lum - threshold;
+    }
+
+    if (intensity > 0.0) {
         return vec4<f32>(scene_color.rgb * intensity, 1.0);
     }
 

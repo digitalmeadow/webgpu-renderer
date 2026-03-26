@@ -22,8 +22,8 @@ export class SkyboxPass {
     this.geometryBuffer = geometryBuffer;
 
     this.sampler = device.createSampler({
-      magFilter: "linear",
-      minFilter: "linear",
+      magFilter: "nearest",
+      minFilter: "nearest",
       mipmapFilter: "linear",
       addressModeU: "clamp-to-edge",
       addressModeV: "clamp-to-edge",

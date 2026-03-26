@@ -388,14 +388,14 @@ export class Renderer {
     }
 
     // Skybox Pass - renders background where depth = 1
-    // if (this.skyboxTexture) {
-    //   this.skyboxPass.setSkyboxTexture(this.skyboxTexture);
-    //   this.skyboxPass.render(
-    //     commandEncoder,
-    //     camera.uniforms.bindGroup,
-    //     this.lightingPass.outputView,
-    //   );
-    // }
+    if (this.skyboxTexture) {
+      this.skyboxPass.setSkyboxTexture(this.skyboxTexture);
+      this.skyboxPass.render(
+        commandEncoder,
+        camera.uniforms.bindGroup,
+        this.lightingPass.outputView,
+      );
+    }
 
     // Post Passes
     let lastOutputView = this.lightingPass.outputView;
