@@ -8,9 +8,12 @@ Car emissive for brakes
 
 
 Not in order:
-1. Ambient occlusion
-2. Soft shadows (PCF and then softer-when-further-away)
-3. Bloom/Emission
+- Soft shadows (PCF and then softer-when-further-away)
+  webgpu-renderer-post-processing package that depends on webgpu-renderer and exports BloomPass, FilmGrain pass etc
+  webgpu-renderer would still define and export g-buffer, and the base PostPass and PostPassContext that the post-processing package would use
+
+- Ambient occlusion
+- Bloom/Emission
 https://youtu.be/7oLgEV9ih1M?si=6A8cXluaIsObvbRt
 
 
