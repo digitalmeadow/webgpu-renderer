@@ -13,11 +13,11 @@ fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
     return textureSample(albedoTexture, defaultSampler, uv);
 }
 
-fn get_emissive(uv: vec2<f32>, albedo_color: vec3<f32>) -> vec4<f32> {
+fn get_emissive(uv: vec2<f32>) -> vec4<f32> {
     let emissive_tex = textureSample(emissiveTexture, defaultSampler, uv);
-    let intensity = emissive_tex.r;
-    let emissive_color = albedo_color;
-    return vec4<f32>(emissive_color * intensity, intensity);
+    let emissive_color = emissive_tex.rgb * material.emissive.rgb;
+    let intensity = max(max(emissive_color.r, emissive_color.g), emissive_color.b);
+    return vec4<f32>(emissive_color, intensity);
 }
 
 //--HOOK_PLACEHOLDER_ALBEDO--//
@@ -148,7 +148,7 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     let metal_rough = textureSample(metalnessRoughnessTexture, defaultSampler, in.uv_coords);
     let roughness = metal_rough.g;
     let metalness = metal_rough.b;
-    let emissive = get_emissive(in.uv_coords, base_albedo);
+    let emissive = get_emissive(in.uv_coords);
     output.metal_rough = vec4<f32>(metalness, roughness, 0.0, emissive.a);
     
     let V = normalize(camera.position.xyz - in.world_position);
