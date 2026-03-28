@@ -2,6 +2,7 @@
 --- Visuals ---
 
 Debug why front headlights with a white emissive texture value, are rendering yellow when emissive is turned up to 1, 1, 1
+Get windscreen slight alpha and reflections working properly
 
 Not in order:
 - Soft shadows (PCF and then softer-when-further-away)
@@ -9,9 +10,6 @@ Not in order:
   webgpu-renderer would still define and export g-buffer, and the base PostPass and PostPassContext that the post-processing package would use
 
 - Ambient occlusion
-- Bloom/Emission
-https://youtu.be/7oLgEV9ih1M?si=6A8cXluaIsObvbRt
-
 
 --- Features ----
 

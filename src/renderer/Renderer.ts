@@ -372,6 +372,16 @@ export class Renderer {
       this.sceneUniforms.bindGroup,
     );
 
+    // Skybox Pass - renders background where depth = 1
+    if (this.skyboxTexture) {
+      this.skyboxPass.setSkyboxTexture(this.skyboxTexture);
+      this.skyboxPass.render(
+        commandEncoder,
+        camera.uniforms.bindGroup,
+        this.lightingPass.outputView,
+      );
+    }
+
     // Particles Pass
     const emitters = this.collectParticleEmitters(world);
     for (const emitter of emitters) {
@@ -395,16 +405,6 @@ export class Renderer {
         camera,
         this.lightingPass.outputView,
         this.geometryBuffer.depthView,
-      );
-    }
-
-    // Skybox Pass - renders background where depth = 1
-    if (this.skyboxTexture) {
-      this.skyboxPass.setSkyboxTexture(this.skyboxTexture);
-      this.skyboxPass.render(
-        commandEncoder,
-        camera.uniforms.bindGroup,
-        this.lightingPass.outputView,
       );
     }
 
