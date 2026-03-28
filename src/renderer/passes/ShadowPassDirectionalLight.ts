@@ -160,7 +160,7 @@ export class ShadowPassDirectionalLight {
   }
 
   public render(
-    encoder: GPUCommandEncoder,
+    device: GPUDevice,
     directionalLights: DirectionalLight[],
     meshes: Mesh[],
     transparentMeshes: Mesh[] = [],
@@ -193,13 +193,14 @@ export class ShadowPassDirectionalLight {
           return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
         });
 
-        const cascadeEncoder = this.device.createCommandEncoder({
+        const textureLayerIndex =
+          lightIndex * SHADOW_MAP_CASCADES_COUNT + cascadeIndex;
+
+        const encoder = device.createCommandEncoder({
           label: `Shadow Pass Encoder Light ${lightIndex} Cascade ${cascadeIndex}`,
         });
 
-        const textureLayerIndex =
-          lightIndex * SHADOW_MAP_CASCADES_COUNT + cascadeIndex;
-        const passEncoder = cascadeEncoder.beginRenderPass({
+        const passEncoder = encoder.beginRenderPass({
           label: `Shadow Pass Light ${lightIndex} Cascade ${cascadeIndex}`,
           colorAttachments: [],
           depthStencilAttachment: {
@@ -267,7 +268,7 @@ export class ShadowPassDirectionalLight {
 
         passEncoder.end();
 
-        this.device.queue.submit([cascadeEncoder.finish()]);
+        device.queue.submit([encoder.finish()]);
       }
     }
   }

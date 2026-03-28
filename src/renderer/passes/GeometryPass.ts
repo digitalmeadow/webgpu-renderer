@@ -68,6 +68,7 @@ export class GeometryPass {
           { format: "rgba8unorm" }, // Albedo
           { format: "rgba16float" }, // Normal
           { format: "rgba8unorm" }, // Metal/Roughness
+          { format: "rgba16float" }, // Emissive (HDR)
         ],
       },
       primitive: {
@@ -108,6 +109,12 @@ export class GeometryPass {
         },
         {
           view: geometryBuffer.metalRoughnessView,
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          loadOp: "clear",
+          storeOp: "store",
+        },
+        {
+          view: geometryBuffer.emissiveView,
           clearValue: { r: 0, g: 0, b: 0, a: 0 },
           loadOp: "clear",
           storeOp: "store",

@@ -1,11 +1,7 @@
 
 --- Visuals ---
 
-Environment basic
-UV unwrap vehicle again to get it cleaner
-Use stencil texturer to try the car textures again
-Car emissive for brakes
-
+Debug why front headlights with a white emissive texture value, are rendering yellow when emissive is turned up to 1, 1, 1
 
 Not in order:
 - Soft shadows (PCF and then softer-when-further-away)

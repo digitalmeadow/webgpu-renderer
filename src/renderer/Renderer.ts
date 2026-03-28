@@ -65,16 +65,18 @@ export class Renderer {
   private sceneUniforms: SceneUniforms;
   private cameraBindGroupLayout: GPUBindGroupLayout;
   private postPasses: PostPass[] = [];
-  private postPassRenderTarget: GPUTexture | null = null;
-  private postPassRenderTargetView: GPUTextureView | null = null;
+  private postPassTextureA: GPUTexture | null = null;
+  private postPassTextureB: GPUTexture | null = null;
+  private postPassViewA: GPUTextureView | null = null;
+  private postPassViewB: GPUTextureView | null = null;
 
   constructor(canvas: HTMLCanvasElement, options: RendererOptions = {}) {
     this.canvas = canvas;
     this.maxDirectionalLights =
       options.maxDirectionalLights ?? DEFAULT_MAX_DIRECTIONAL_LIGHTS;
     this.maxSpotLights = options.maxSpotLights ?? DEFAULT_MAX_SPOT_LIGHTS;
-    this.targetRenderWidth = options.renderWidth ?? 640;
-    this.targetRenderHeight = options.renderHeight ?? 480;
+    this.targetRenderWidth = options.renderWidth ?? 0;
+    this.targetRenderHeight = options.renderHeight ?? 0;
     this.devicePixelRatioOption = options.devicePixelRatio ?? 1;
     this.device = null as unknown as GPUDevice;
     this.format = navigator.gpu.getPreferredCanvasFormat();
@@ -127,12 +129,21 @@ export class Renderer {
     );
     this.sceneUniforms = new SceneUniforms(this.device);
 
-    this.renderWidth = this.targetRenderWidth;
-    this.renderHeight = this.targetRenderHeight;
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = this.devicePixelRatioOption;
+    const canvasWidth = Math.round(rect.width * dpr);
+    const canvasHeight = Math.round(rect.height * dpr);
+
+    if (this.targetRenderWidth === 0 || this.targetRenderHeight === 0) {
+      this.renderWidth = canvasWidth;
+      this.renderHeight = canvasHeight;
+    } else {
+      this.renderWidth = this.targetRenderWidth;
+      this.renderHeight = this.targetRenderHeight;
+    }
 
     this.setup();
 
-    const rect = this.canvas.getBoundingClientRect();
     this.resize(rect.width, rect.height);
   }
 
@@ -321,7 +332,7 @@ export class Renderer {
     // Shadow Pass - Directional Lights
     if (directionalLights.length > 0) {
       this.shadowPassDirectionalLight.render(
-        commandEncoder,
+        this.device,
         directionalLights,
         opaqueMeshes,
         blendMeshes,
@@ -339,7 +350,7 @@ export class Renderer {
     // Shadow Pass - Spot Lights
     if (spotLights.length > 0) {
       this.shadowPassSpotLight.render(
-        commandEncoder,
+        this.device,
         spotLights,
         opaqueMeshes,
         blendMeshes,
@@ -400,7 +411,7 @@ export class Renderer {
     // Post Passes
     let lastOutputView = this.lightingPass.outputView;
     if (this.postPasses.length > 0) {
-      this.createPostPassRenderTarget();
+      this.createPostPassTextures();
 
       const postContext: PostPassContext = {
         geometryBuffer: this.geometryBuffer,
@@ -411,22 +422,26 @@ export class Renderer {
         height: this.renderHeight,
       };
 
+      let readView: GPUTextureView = this.lightingPass.outputView;
+      let writeView: GPUTextureView = this.postPassViewB!;
+
       for (let i = 0; i < this.postPasses.length; i++) {
         const pass = this.postPasses[i];
         const isLastPass = i === this.postPasses.length - 1;
         const outputView = isLastPass
-          ? this.postPassRenderTargetView!
-          : this.postPassRenderTargetView!;
+          ? this.postPassViewA!
+          : this.postPassViewB!;
 
-        pass.render(lastOutputView, outputView, postContext);
+        pass.render(readView, outputView, postContext);
 
         if (!isLastPass) {
-          const tempView = this.postPassRenderTarget!.createView();
-          lastOutputView = tempView;
+          const temp = readView;
+          readView = writeView;
+          writeView = temp;
         }
       }
 
-      lastOutputView = this.postPassRenderTargetView!;
+      lastOutputView = this.postPassViewA!;
     }
 
     // Output Pass
@@ -464,29 +479,38 @@ export class Renderer {
     this.postPasses = [];
   }
 
-  private createPostPassRenderTarget(): void {
-    if (this.postPassRenderTarget) {
-      // Don't destroy - may still be in use by previous frame's command buffer
-      // Just recreate if size changed handled in resize
-      if (
-        this.postPassRenderTarget.width === this.renderWidth &&
-        this.postPassRenderTarget.height === this.renderHeight
-      ) {
-        return;
-      }
-      this.postPassRenderTarget.destroy();
+  private createPostPassTextures(): void {
+    if (
+      this.postPassTextureA &&
+      this.postPassTextureA.width === this.renderWidth &&
+      this.postPassTextureA.height === this.renderHeight
+    ) {
+      return;
     }
-    this.postPassRenderTarget = this.device.createTexture({
-      label: "Post Pass Render Target",
-      size: [this.renderWidth, this.renderHeight],
-      format: navigator.gpu.getPreferredCanvasFormat(),
-      usage:
-        GPUTextureUsage.TEXTURE_BINDING |
-        GPUTextureUsage.RENDER_ATTACHMENT |
-        GPUTextureUsage.COPY_SRC |
-        GPUTextureUsage.COPY_DST,
-    });
-    this.postPassRenderTargetView = this.postPassRenderTarget.createView();
+
+    if (this.postPassTextureA) {
+      this.postPassTextureA.destroy();
+    }
+    if (this.postPassTextureB) {
+      this.postPassTextureB.destroy();
+    }
+
+    const createTexture = (label: string) =>
+      this.device.createTexture({
+        label,
+        size: [this.renderWidth, this.renderHeight],
+        format: navigator.gpu.getPreferredCanvasFormat(),
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.RENDER_ATTACHMENT |
+          GPUTextureUsage.COPY_SRC |
+          GPUTextureUsage.COPY_DST,
+      });
+
+    this.postPassTextureA = createTexture("Post Pass Texture A");
+    this.postPassTextureB = createTexture("Post Pass Texture B");
+    this.postPassViewA = this.postPassTextureA.createView();
+    this.postPassViewB = this.postPassTextureB.createView();
   }
 
   public setRenderResolution(width: number, height: number): void {
@@ -516,19 +540,26 @@ export class Renderer {
     );
     this.lightingPass.resize(this.device, this.renderWidth, this.renderHeight);
 
-    if (this.postPassRenderTarget) {
-      this.postPassRenderTarget.destroy();
-      this.postPassRenderTarget = this.device.createTexture({
-        label: "Post Pass Render Target",
-        size: [this.renderWidth, this.renderHeight],
-        format: navigator.gpu.getPreferredCanvasFormat(),
-        usage:
-          GPUTextureUsage.TEXTURE_BINDING |
-          GPUTextureUsage.RENDER_ATTACHMENT |
-          GPUTextureUsage.COPY_SRC |
-          GPUTextureUsage.COPY_DST,
-      });
-      this.postPassRenderTargetView = this.postPassRenderTarget.createView();
+    if (this.postPassTextureA) {
+      this.postPassTextureA.destroy();
+      this.postPassTextureB?.destroy();
+
+      const createTexture = (label: string) =>
+        this.device.createTexture({
+          label,
+          size: [this.renderWidth, this.renderHeight],
+          format: navigator.gpu.getPreferredCanvasFormat(),
+          usage:
+            GPUTextureUsage.TEXTURE_BINDING |
+            GPUTextureUsage.RENDER_ATTACHMENT |
+            GPUTextureUsage.COPY_SRC |
+            GPUTextureUsage.COPY_DST,
+        });
+
+      this.postPassTextureA = createTexture("Post Pass Texture A");
+      this.postPassTextureB = createTexture("Post Pass Texture B");
+      this.postPassViewA = this.postPassTextureA.createView();
+      this.postPassViewB = this.postPassTextureB.createView();
     }
 
     for (const pass of this.postPasses) {

@@ -93,6 +93,7 @@ struct GBufferOutput {
     @location(0) albedo: vec4<f32>,
     @location(1) normal: vec4<f32>,
     @location(2) metal_rough: vec4<f32>,
+    @location(3) emissive: vec4<f32>,
 };
 
 const MAX_ENV_MIP_LEVELS: f32 = 3.0;
@@ -150,6 +151,7 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     let metalness = metal_rough.b;
     let emissive = get_emissive(in.uv_coords);
     output.metal_rough = vec4<f32>(metalness, roughness, 0.0, emissive.a);
+    output.emissive = emissive;
     
     let V = normalize(camera.position.xyz - in.world_position);
     let N = normalize(in.world_normal);

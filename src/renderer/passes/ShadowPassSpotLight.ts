@@ -145,7 +145,7 @@ export class ShadowPassSpotLight {
   }
 
   public render(
-    encoder: GPUCommandEncoder,
+    device: GPUDevice,
     spotLights: SpotLight[],
     meshes: Mesh[],
     transparentMeshes: Mesh[] = [],
@@ -158,11 +158,11 @@ export class ShadowPassSpotLight {
       const visibleMeshes = meshes;
       const visibleTransparentMeshes = transparentMeshes;
 
-      const shadowEncoder = this.device.createCommandEncoder({
+      const encoder = device.createCommandEncoder({
         label: `Shadow Pass SpotLight Encoder Light ${lightIndex}`,
       });
 
-      const passEncoder = shadowEncoder.beginRenderPass({
+      const passEncoder = encoder.beginRenderPass({
         label: `Shadow Pass SpotLight Light ${lightIndex}`,
         colorAttachments: [],
         depthStencilAttachment: {
@@ -230,7 +230,7 @@ export class ShadowPassSpotLight {
 
       passEncoder.end();
 
-      this.device.queue.submit([shadowEncoder.finish()]);
+      device.queue.submit([encoder.finish()]);
     }
   }
 

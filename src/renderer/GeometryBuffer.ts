@@ -5,6 +5,8 @@ export class GeometryBuffer {
   normalView: GPUTextureView;
   metalRoughnessTexture: GPUTexture;
   metalRoughnessView: GPUTextureView;
+  emissiveTexture: GPUTexture;
+  emissiveView: GPUTextureView;
   depthTexture: GPUTexture;
   depthView: GPUTextureView;
   sampler: GPUSampler;
@@ -38,6 +40,15 @@ export class GeometryBuffer {
         GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.metalRoughnessView = this.metalRoughnessTexture.createView();
+
+    this.emissiveTexture = device.createTexture({
+      label: "G-Buffer Emissive Texture",
+      size: [width, height],
+      format: "rgba16float",
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    this.emissiveView = this.emissiveTexture.createView();
 
     this.depthTexture = device.createTexture({
       label: "G-Buffer Depth Texture",
@@ -85,6 +96,11 @@ export class GeometryBuffer {
           visibility: GPUShaderStage.FRAGMENT,
           texture: { sampleType: "depth", viewDimension: "2d" },
         },
+        {
+          binding: 5,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: "float", viewDimension: "2d" },
+        },
       ],
     });
 
@@ -112,6 +128,10 @@ export class GeometryBuffer {
           binding: 4,
           resource: this.depthView,
         },
+        {
+          binding: 5,
+          resource: this.emissiveView,
+        },
       ],
     });
   }
@@ -120,6 +140,7 @@ export class GeometryBuffer {
     this.albedoTexture.destroy();
     this.normalTexture.destroy();
     this.metalRoughnessTexture.destroy();
+    this.emissiveTexture.destroy();
     this.depthTexture.destroy();
 
     this.albedoTexture = device.createTexture({
@@ -148,6 +169,15 @@ export class GeometryBuffer {
         GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.metalRoughnessView = this.metalRoughnessTexture.createView();
+
+    this.emissiveTexture = device.createTexture({
+      label: "G-Buffer Emissive Texture",
+      size: [width, height],
+      format: "rgba16float",
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    this.emissiveView = this.emissiveTexture.createView();
 
     this.depthTexture = device.createTexture({
       label: "G-Buffer Depth Texture",
@@ -181,6 +211,10 @@ export class GeometryBuffer {
         {
           binding: 4,
           resource: this.depthView,
+        },
+        {
+          binding: 5,
+          resource: this.emissiveView,
         },
       ],
     });
