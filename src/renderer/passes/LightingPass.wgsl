@@ -194,8 +194,9 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let world_pos = (inverse_view * vec4(view_pos, 1.0)).xyz;
     var world_normal = normalize(normal_roughness.rgb);
 
-    // Fallback to up vector if normal is invalid (all zeros)
-    if dot(world_normal, world_normal) < 0.001 {
+    // Fallback to up vector if normal is invalid (all zeros or NaN)
+    let normal_mag = dot(world_normal, world_normal);
+    if (normal_mag < 0.001 || normal_mag != normal_mag) {
         world_normal = vec3<f32>(0.0, 1.0, 0.0);
     }
 

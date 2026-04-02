@@ -6,6 +6,7 @@ struct VertexInput {
     @location(2) uv: vec2<f32>,
     @location(3) joint_indices: vec4<f32>,
     @location(4) joint_weights: vec4<f32>,
+    @location(5) tangent: vec4<f32>,
 };
 
 struct VertexOutput {

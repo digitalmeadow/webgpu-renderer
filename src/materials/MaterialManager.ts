@@ -45,7 +45,7 @@ export class MaterialManager {
     });
 
     this.placeholderNormalTexture = this.createPlaceholderTexture([
-      0, 0, 255, 255,
+      128, 128, 255, 255, // (0.5, 0.5, 1.0) = neutral normal in tangent space, points +Z
     ]);
     this.placeholderMetalRoughnessTexture = this.createPlaceholderTexture([
       0, 255, 0, 255,

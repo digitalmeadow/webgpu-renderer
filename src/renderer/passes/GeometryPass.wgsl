@@ -159,7 +159,7 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     
     let world_N = normalize(TBN * N_tangent);
     output.normal = vec4<f32>(world_N, 1.0);
-    
+
     let metal_rough = textureSample(metalnessRoughnessTexture, defaultSampler, in.uv_coords);
     let roughness = metal_rough.g;
     let metalness = metal_rough.b;

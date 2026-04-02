@@ -127,30 +127,39 @@ export class SpotLight extends Light {
   private updateShadowBuffer(): void {
     if (!this.shadowBuffer || !this._device) return;
 
-    const data = new Float32Array(72);
+    const data = new Float32Array(72); // 288 bytes = 72 floats
 
+    // mat4 view_matrix (64 bytes = 16 floats) at index 0
     data.set(this.viewMatrix.data, 0);
+    // mat4 projection_matrix (64 bytes = 16 floats) at index 16
     data.set(this.projectionMatrix.data, 16);
+    // mat4 view_projection_matrix (64 bytes = 16 floats) at index 32
     data.set(this.viewProjectionMatrix.data, 32);
 
+    // vec4 position (4 floats) at index 48
     const position = this.transform.getWorldPosition();
     data.set(position.data, 48);
 
+    // vec4 near_far (4 floats) at index 52
     const nearFar = new Float32Array([this.near, this.far, 0, 0]);
     data.set(nearFar, 52);
 
+    // vec4 color_intensity (4 floats) at index 56
     const colorIntensity = new Float32Array([
       ...this.color.data,
       this.intensity,
     ]);
     data.set(colorIntensity, 56);
 
+    // vec4 forward (4 floats) at index 60
     const forward = this.transform.getWorldForward();
     data.set(forward.data, 60);
 
+    // vec4 fov_prenumbra (4 floats) at index 64
     const fovPrenumbra = new Float32Array([this.fov, this.prenumbra, 0, 0]);
     data.set(fovPrenumbra, 64);
 
+    // vec4 aspect_radius (4 floats) at index 68
     const aspectRadius = new Float32Array([
       this.aspectRatio,
       this.radius,
