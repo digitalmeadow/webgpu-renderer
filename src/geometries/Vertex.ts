@@ -1,6 +1,7 @@
 export class Vertex {
   public position: [number, number, number, number];
   public normal: [number, number, number, number];
+  public tangent: [number, number, number, number];
   public uv: [number, number];
   public jointIndices: [number, number, number, number];
   public jointWeights: [number, number, number, number];
@@ -8,25 +9,28 @@ export class Vertex {
   constructor(
     position: [number, number, number, number] = [0, 0, 0, 1],
     normal: [number, number, number, number] = [0, 0, 0, 0],
+    tangent: [number, number, number, number] = [1, 0, 0, 1],
     uv: [number, number] = [0, 0],
     jointIndices: [number, number, number, number] = [0, 0, 0, 0],
     jointWeights: [number, number, number, number] = [0, 0, 0, 0],
   ) {
     this.position = position;
     this.normal = normal;
+    this.tangent = tangent;
     this.uv = uv;
     this.jointIndices = jointIndices;
     this.jointWeights = jointWeights;
   }
 
   static get vertexSize(): number {
-    return (4 + 4 + 2 + 4 + 4) * 4;
+    return (4 + 4 + 4 + 2 + 4 + 4) * 4;
   }
 
   toArray(): number[] {
     return [
       ...this.position,
       ...this.normal,
+      ...this.tangent,
       ...this.uv,
       ...this.jointIndices,
       ...this.jointWeights,
@@ -50,17 +54,22 @@ export class Vertex {
         },
         {
           shaderLocation: 2,
-          offset: 32,
+          offset: 48,
           format: "float32x2",
         },
         {
           shaderLocation: 3,
-          offset: 40,
+          offset: 56,
           format: "float32x4",
         },
         {
           shaderLocation: 4,
-          offset: 56,
+          offset: 72,
+          format: "float32x4",
+        },
+        {
+          shaderLocation: 5,
+          offset: 32,
           format: "float32x4",
         },
       ],
@@ -75,6 +84,7 @@ struct VertexInput {
     @location(2) uv_coords: vec2<f32>,
     @location(3) joint_indices: vec4<f32>,
     @location(4) joint_weights: vec4<f32>,
+    @location(5) tangent: vec4<f32>,
 };
 
 struct VertexOutput {
@@ -82,6 +92,7 @@ struct VertexOutput {
     @location(0) vertex_position: vec4<f32>,
     @location(1) vertex_normal: vec4<f32>,
     @location(2) uv_coords: vec2<f32>,
+    @location(3) vertex_tangent: vec4<f32>,
 };
 `;
   }

@@ -27,6 +27,7 @@ struct VertexOutput {
     @location(0) uv_coords: vec2<f32>,
     @location(1) world_normal: vec3<f32>,
     @location(2) world_position: vec3<f32>,
+    @location(3) world_tangent: vec4<f32>,
 };
 
 struct CameraUniforms {
@@ -65,6 +66,7 @@ fn vs_main(
     @location(2) uv: vec2<f32>,
     @location(3) joint_indices: vec4<f32>,
     @location(4) joint_weights: vec4<f32>,
+    @location(5) tangent: vec4<f32>,
 ) -> VertexOutput {
     var output: VertexOutput;
 
@@ -81,6 +83,7 @@ fn vs_main(
     let world_position = model.model_transform_matrix * final_position;
     output.world_position = world_position.xyz;
     output.world_normal = (model.model_transform_matrix * vec4<f32>(normal, 0.0)).xyz;
+    output.world_tangent = (model.model_transform_matrix * vec4<f32>(tangent.xyz, 0.0));
     output.uv_coords = uv;
 
     let view_position = camera.view_matrix * world_position;
@@ -144,7 +147,18 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
       discard;
     }
 
-    output.normal = vec4<f32>(normalize(in.world_normal), 1.0);
+    output.albedo = vec4<f32>(base_albedo, albedo_tex.a * material.opacity);
+    
+    let N_map = textureSample(normalTexture, defaultSampler, in.uv_coords).rgb;
+    let N_tangent = N_map * 2.0 - 1.0;
+    
+    let N = normalize(in.world_normal);
+    let T = normalize(in.world_tangent.xyz - dot(in.world_tangent.xyz, N) * N);
+    let B = cross(N, T) * in.world_tangent.w;
+    let TBN = mat3x3(T, B, N);
+    
+    let world_N = normalize(TBN * N_tangent);
+    output.normal = vec4<f32>(world_N, 1.0);
     
     let metal_rough = textureSample(metalnessRoughnessTexture, defaultSampler, in.uv_coords);
     let roughness = metal_rough.g;
@@ -154,13 +168,12 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     output.emissive = emissive;
     
     let V = normalize(camera.position.xyz - in.world_position);
-    let N = normalize(in.world_normal);
-    let NdotV = max(dot(N, V), 0.0);
+    let NdotV = max(dot(world_N, V), 0.0);
     let F0_dielectric = 0.04;
     let F0 = mix(vec3(F0_dielectric), base_albedo, metalness);
     let fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
     
-    let reflections = sample_environment_reflection(in.world_position, in.world_normal, roughness, metalness, base_albedo);
+    let reflections = sample_environment_reflection(in.world_position, world_N, roughness, metalness, base_albedo);
     
     let fresnel_strength = fresnel * (1.0 - roughness * roughness);
     let final_color = base_albedo * (1.0 - fresnel_strength) + reflections;
