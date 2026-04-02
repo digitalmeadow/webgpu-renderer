@@ -72,9 +72,12 @@ struct LightSpotUniformsArray {
 // Scene (group 3)
 struct SceneUniforms {
     ambient_light_color: vec4<f32>,
+    ibl_intensity: f32,
 }
 
 @group(3) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
+@group(3) @binding(1) var skyboxTexture: texture_cube<f32>;
+@group(3) @binding(2) var skyboxSampler: sampler;
 
 struct FragmentOutput {
     @location(0) color: vec4<f32>,
@@ -168,6 +171,11 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
     );
 }
 
+// IBL (Image-Based Lighting) - sample skybox based on normal direction
+fn sample_ibl(normal: vec3<f32>) -> vec3<f32> {
+    return textureSample(skyboxTexture, skyboxSampler, normal).rgb;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> FragmentOutput {
     var output: FragmentOutput;
@@ -191,7 +199,11 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         world_normal = vec3<f32>(0.0, 1.0, 0.0);
     }
 
-    var color = albedo * scene_uniforms.ambient_light_color.rgb;
+    // IBL - sample skybox based on normal direction
+    let ibl_color = sample_ibl(world_normal) * scene_uniforms.ibl_intensity;
+//    let ambient = scene_uniforms.ambient_light_color.rgb + ibl_color;
+    let ambient = scene_uniforms.ambient_light_color.rgb;
+    var color = albedo * ambient;
 
     for (var i: u32 = 0u; i < light_directional_uniforms.light_count; i++) {
         let light_uniforms = light_directional_uniforms.lights[i];

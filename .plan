@@ -6,9 +6,12 @@ Get windscreen slight alpha and reflections working properly
 
 Not in order:
 - Soft shadows (PCF and then softer-when-further-away)
-  webgpu-renderer-post-processing package that depends on webgpu-renderer and exports BloomPass, FilmGrain pass etc
-  webgpu-renderer would still define and export g-buffer, and the base PostPass and PostPassContext that the post-processing package would use
-- Normal maps
+  Snap shadows to pixels to avoid jittering?
+
+- IBL: Image based lighting, sample the environment map to derive ambient lighting
+- Fog with gradient map option
+  - Add fog params to scene uniforms, should have params for falloff curve, and an array of color stops
+
 - Try rendering a tree pack to billboarded with normals for foliage
 - Ambient occlusion
 

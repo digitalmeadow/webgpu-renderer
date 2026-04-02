@@ -469,6 +469,7 @@ export class Renderer {
 
   public setSkyboxTexture(texture: CubeTexture | null): void {
     this.skyboxTexture = texture;
+    this.sceneUniforms.skyboxTexture = texture;
   }
 
   public addPostPass(pass: PostPass): void {
