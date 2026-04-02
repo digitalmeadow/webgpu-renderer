@@ -202,8 +202,8 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
     // IBL - sample skybox based on normal direction
     let ibl_color = sample_ibl(world_normal) * scene_uniforms.ibl_intensity;
-//    let ambient = scene_uniforms.ambient_light_color.rgb + ibl_color;
-    let ambient = scene_uniforms.ambient_light_color.rgb;
+    let ambient = scene_uniforms.ambient_light_color.rgb + ibl_color;
+    // let ambient = scene_uniforms.ambient_light_color.rgb;
     var color = albedo * ambient;
 
     for (var i: u32 = 0u; i < light_directional_uniforms.light_count; i++) {
