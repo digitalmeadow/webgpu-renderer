@@ -99,36 +99,6 @@ struct GBufferOutput {
     @location(3) emissive: vec4<f32>,
 };
 
-const MAX_ENV_MIP_LEVELS: f32 = 3.0;
-
-fn sample_environment_reflection(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness: f32, metalness: f32, base_albedo: vec3<f32>) -> vec3<f32> {
-    let V = normalize(camera.position.xyz - world_pos);
-    let N = normalize(world_normal);
-    let R = reflect(-V, N);
-    
-    let NdotV = max(dot(N, V), 0.0);
-    
-    let raw_mip = roughness * MAX_ENV_MIP_LEVELS;
-    let mip_low = floor(raw_mip);
-    let mip_high = min(mip_low + 1.0, MAX_ENV_MIP_LEVELS);
-    let mip_frac = fract(raw_mip);
-    
-    let color_low = textureSampleLevel(environmentTexture, envSampler, R, mip_low).rgb;
-    let color_high = textureSampleLevel(environmentTexture, envSampler, R, mip_high).rgb;
-    
-    let env_color = mix(color_low, color_high, mip_frac);
-    
-    let F0_dielectric = 0.04;
-    let F0 = mix(vec3(F0_dielectric), base_albedo, metalness);
-    
-    let fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
-    
-    let reflection_color = mix(env_color, env_color * base_albedo, metalness);
-    
-    let roughness_factor = 1.0 - roughness * roughness;
-    
-    return reflection_color * fresnel * roughness_factor;
-}
 
 @fragment
 fn fs_main(in: VertexOutput) -> GBufferOutput {
@@ -147,8 +117,6 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
       discard;
     }
 
-    output.albedo = vec4<f32>(base_albedo, albedo_tex.a * material.opacity);
-    
     let N_map = textureSample(normalTexture, defaultSampler, in.uv_coords).rgb;
     let N_tangent = N_map * 2.0 - 1.0;
     
@@ -166,19 +134,8 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     let emissive = get_emissive(in.uv_coords);
     output.metal_rough = vec4<f32>(metalness, roughness, 0.0, emissive.a);
     output.emissive = emissive;
-    
-    let V = normalize(camera.position.xyz - in.world_position);
-    let NdotV = max(dot(world_N, V), 0.0);
-    let F0_dielectric = 0.04;
-    let F0 = mix(vec3(F0_dielectric), base_albedo, metalness);
-    let fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
-    
-    let reflections = sample_environment_reflection(in.world_position, world_N, roughness, metalness, base_albedo);
-    
-    let fresnel_strength = fresnel * (1.0 - roughness * roughness);
-    let final_color = base_albedo * (1.0 - fresnel_strength) + reflections;
-    
-    output.albedo = vec4<f32>(final_color, albedo_tex.a * material.opacity);
+
+    output.albedo = vec4<f32>(base_albedo, albedo_tex.a * material.opacity);
 
     return output;
 }

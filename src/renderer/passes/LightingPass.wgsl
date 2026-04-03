@@ -9,9 +9,10 @@ struct VertexOutput {
 // G-Buffer inputs (group 0)
 @group(0) @binding(0) var sampler_linear: sampler;
 @group(0) @binding(1) var gbuffer_albedo: texture_2d<f32>;
-@group(0) @binding(2) var gbuffer_normal_roughness: texture_2d<f32>;
+@group(0) @binding(2) var gbuffer_normal: texture_2d<f32>;
 @group(0) @binding(3) var gbuffer_metallic_roughness: texture_2d<f32>;
 @group(0) @binding(4) var gbuffer_depth: texture_depth_2d;
+@group(0) @binding(5) var gbuffer_emissive: texture_2d<f32>;
 
 // Camera uniforms (group 1)
 struct CameraUniforms {
@@ -196,7 +197,34 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
 
 // IBL (Image-Based Lighting) - sample skybox based on normal direction
 fn sample_ibl(normal: vec3<f32>) -> vec3<f32> {
-    return textureSample(skyboxTexture, skyboxSampler, normal).rgb;
+    let max_mip = 2.0;
+    return textureSampleLevel(skyboxTexture, skyboxSampler, normal, max_mip).rgb;
+}
+
+// Specular IBL - environment reflection with Schlick fresnel
+const MAX_ENV_MIP_LEVELS: f32 = 4.0;
+
+fn sample_specular_ibl(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness: f32, metalness: f32, albedo: vec3<f32>) -> vec3<f32> {
+    let V = normalize(camera_uniforms.position.xyz - world_pos);
+    let N = normalize(world_normal);
+    let R = reflect(-V, N);
+    let NdotV = max(dot(N, V), 0.0);
+
+    // Roughness-based mip selection
+    let mip = roughness * MAX_ENV_MIP_LEVELS;
+    let env_color = textureSampleLevel(skyboxTexture, skyboxSampler, R, mip).rgb;
+
+    // F0: dielectric uses 0.04, metals use albedo color
+    let dielectric_F0 = vec3<f32>(0.15);
+    let F0 = mix(vec3<f32>(dielectric_F0), albedo, metalness);
+    // Schlick fresnel approximation
+    let schlick = 1.5; // Typically 5 for PBR for 1 to boost angles
+    let fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, schlick);
+
+    // Reduce specular contribution at high roughness
+    let roughness_factor = 1.0 - roughness * roughness;
+
+    return env_color * fresnel * roughness_factor;
 }
 
 @fragment
@@ -205,8 +233,11 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
     // Sample G-Buffer
     let albedo = textureSample(gbuffer_albedo, sampler_linear, in.uv_coords).rgb;
-    let normal_roughness = textureSample(gbuffer_normal_roughness, sampler_linear, in.uv_coords);
-    let roughness = normal_roughness.a;
+    let normal_sample = textureSample(gbuffer_normal, sampler_linear, in.uv_coords);
+    let metal_rough = textureSample(gbuffer_metallic_roughness, sampler_linear, in.uv_coords);
+    let metalness = metal_rough.r;
+    let roughness = metal_rough.g;
+    let emissive = textureSample(gbuffer_emissive, sampler_linear, in.uv_coords).rgb;
     let depth = textureLoad(gbuffer_depth, vec2<i32>(in.uv_coords * vec2<f32>(textureDimensions(gbuffer_depth))), 0);
 
     // Reconstruct view-space position
@@ -215,7 +246,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     // Transform to world space
     let inverse_view = camera_uniforms.view_matrix_inverse;
     let world_pos = (inverse_view * vec4(view_pos, 1.0)).xyz;
-    var world_normal = normalize(normal_roughness.rgb);
+    var world_normal = normalize(normal_sample.rgb);
 
     // Fallback to up vector if normal is invalid (all zeros or NaN)
     let normal_mag = dot(world_normal, world_normal);
@@ -223,12 +254,16 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         world_normal = vec3<f32>(0.0, 1.0, 0.0);
     }
 
-    // IBL - sample skybox based on normal direction
-    // let ibl_color = sample_ibl(world_normal) * scene_uniforms.ibl_intensity;
-    let ibl_color = sample_ibl(world_normal) * 1.0;
-
+    // Diffuse IBL (sampled at high mip = blurry/omnidirectional)
+    let ibl_color = sample_ibl(world_normal) * scene_uniforms.ibl_intensity;
     let ambient = scene_uniforms.ambient_light_color.rgb + ibl_color;
-    var color = albedo * ambient;
+
+    // Metals have no diffuse response; dielectrics lose energy to specular via fresnel
+    let diffuse_albedo = albedo * (1.0 - metalness);
+    var color = diffuse_albedo * ambient;
+
+    // Specular IBL (environment reflection)
+    let specular = sample_specular_ibl(world_pos, world_normal, roughness, metalness, albedo) * scene_uniforms.ibl_intensity;
 
     for (var i: u32 = 0u; i < light_directional_uniforms.light_count; i++) {
         let light_uniforms = light_directional_uniforms.lights[i];
@@ -246,7 +281,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
             let shadow = fetch_light_directional_shadow(i, cascade, shadow_coords);
 
-            color += albedo * light_uniforms.color.rgb * light_uniforms.color.a * shadow * diffuse;
+            color += diffuse_albedo * light_uniforms.color.rgb * light_uniforms.color.a * shadow * diffuse;
         }
     }
 
@@ -303,9 +338,13 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
             // Accumulate light contribution
-            color += albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * shadow * spot_factor * dist_falloff;
+            color += diffuse_albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * shadow * spot_factor * dist_falloff;
         }
     }
+
+    // Add specular environment reflections and emissive (unaffected by shadow/lights)
+    color += specular;
+    color += emissive;
 
     // Distance from camera to fragment
     let dist = length(view_pos);
