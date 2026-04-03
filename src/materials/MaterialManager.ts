@@ -37,15 +37,18 @@ export class MaterialManager {
     this.device = device;
 
     this.defaultSampler = device.createSampler({
-      magFilter: "nearest",
-      minFilter: "nearest",
+      magFilter: "linear",
+      minFilter: "linear",
       mipmapFilter: "linear",
       addressModeU: "repeat",
       addressModeV: "repeat",
     });
 
     this.placeholderNormalTexture = this.createPlaceholderTexture([
-      128, 128, 255, 255, // (0.5, 0.5, 1.0) = neutral normal in tangent space, points +Z
+      128,
+      128,
+      255,
+      255, // (0.5, 0.5, 1.0) = neutral normal in tangent space, points +Z
     ]);
     this.placeholderMetalRoughnessTexture = this.createPlaceholderTexture([
       0, 255, 0, 255,

@@ -298,8 +298,6 @@ export class Renderer {
     const blendMeshes = meshes.filter((m) => m.material?.alphaMode === "blend");
 
     const lights = this.collectLights(world);
-    this.sceneUniforms.ambientLightColor = world.ambientLightColor;
-    this.sceneUniforms.update();
 
     const commandEncoder = this.device.createCommandEncoder();
 
@@ -463,13 +461,17 @@ export class Renderer {
     return this.device;
   }
 
+  public getSceneUniforms(): SceneUniforms {
+    return this.sceneUniforms;
+  }
+
   public getMaterialManager(): MaterialManager {
     return this.materialManager;
   }
 
   public setSkyboxTexture(texture: CubeTexture | null): void {
     this.skyboxTexture = texture;
-    this.sceneUniforms.skyboxTexture = texture;
+    this.sceneUniforms.setSkyboxTexture(texture);
   }
 
   public addPostPass(pass: PostPass): void {

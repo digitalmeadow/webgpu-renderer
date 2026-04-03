@@ -99,8 +99,8 @@ export class LightManager {
       addressModeU: "clamp-to-edge",
       addressModeV: "clamp-to-edge",
       addressModeW: "clamp-to-edge",
-      magFilter: "nearest",
-      minFilter: "nearest",
+      magFilter: "linear",
+      minFilter: "linear",
       mipmapFilter: "linear",
       compare: "less-equal",
     });

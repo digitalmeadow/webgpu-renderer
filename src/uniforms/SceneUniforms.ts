@@ -1,47 +1,61 @@
 import { Vec3 } from "../math";
-import { Uniforms } from "./Uniforms";
 import { CubeTexture } from "../textures";
 
-export class SceneUniforms extends Uniforms {
-  private _ambientLightColor: Vec3;
-  private _iblIntensity: number;
+const FOG_COLOR_BASE_DEFAULT = new Vec3(72 / 255, 73 / 255, 75 / 255);
+const FOG_COLOR_SUN_DEFAULT = new Vec3(252 / 255, 199 / 255, 122 / 255);
+const FOG_EXTINCTION_DEFAULT = new Vec3(0.001, 0.001, 0.001);
+const FOG_INSCATTERING_DEFAULT = new Vec3(0.0015, 0.0015, 0.0015);
+
+export class SceneUniforms {
   public buffer: GPUBuffer;
-  private _skyboxTexture: CubeTexture | null = null;
-  private _placeholderTextureView: GPUTextureView;
-  private _placeholderSampler: GPUSampler;
+  public bindGroup: GPUBindGroup;
+  public bindGroupLayout: GPUBindGroupLayout;
 
-  constructor(
-    device: GPUDevice,
-    ambientLightColor: Vec3 = new Vec3(0.25, 0.25, 0.25),
-    iblIntensity: number = 1.0,
-  ) {
-    super(device);
-    this._ambientLightColor = ambientLightColor;
-    this._iblIntensity = iblIntensity;
+  public ambientLightColor: Vec3 = new Vec3(0.25, 0.25, 0.25);
+  public iblIntensity: number = 1.0;
+  public fogColorBase: Vec3 = FOG_COLOR_BASE_DEFAULT;
+  public fogColorSun: Vec3 = FOG_COLOR_SUN_DEFAULT;
+  public fogExtinction: Vec3 = FOG_EXTINCTION_DEFAULT;
+  public fogInscattering: Vec3 = FOG_INSCATTERING_DEFAULT;
+  public fogSunExponent: number = 12.0;
+  public fogEnabled: boolean = true;
 
-    // Create placeholder cube texture for when no skybox is set
+  private device: GPUDevice;
+  private data: Float32Array;
+  private dataU32: Uint32Array;
+  private skyboxTexture: CubeTexture | null = null;
+  private placeholderTextureView: GPUTextureView;
+  private placeholderSampler: GPUSampler;
+
+  constructor(device: GPUDevice) {
+    this.device = device;
+
+    const bufferSize = 112;
+    this.data = new Float32Array(bufferSize / 4);
+    this.dataU32 = new Uint32Array(this.data.buffer);
+
     const placeholderTexture = device.createTexture({
       label: "Placeholder Cube Texture",
       size: { width: 1, height: 1, depthOrArrayLayers: 6 },
       format: "rgba8unorm",
       usage: GPUTextureUsage.TEXTURE_BINDING,
     });
-    this._placeholderTextureView = placeholderTexture.createView({
+    this.placeholderTextureView = placeholderTexture.createView({
       dimension: "cube",
     });
-    this._placeholderSampler = device.createSampler({
+    this.placeholderSampler = device.createSampler({
       label: "Placeholder Sampler",
       minFilter: "linear",
       magFilter: "linear",
     });
 
-    this.buffer = this.device.createBuffer({
+    this.buffer = device.createBuffer({
       label: "Scene Uniforms Buffer",
-      size: 32, // vec3<f32> (12) + float (4) + padding (16) = 32 bytes
+      size: this.data.byteLength,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.bindGroupLayout = this.device.createBindGroupLayout({
+    this.bindGroupLayout = device.createBindGroupLayout({
       label: "Scene Uniforms Bind Group Layout",
       entries: [
         {
@@ -68,47 +82,64 @@ export class SceneUniforms extends Uniforms {
       ],
     });
 
-    this.bindGroup = this.device.createBindGroup({
+    this.bindGroup = device.createBindGroup({
       label: "Scene Uniforms Bind Group",
       layout: this.bindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.buffer } },
-        { binding: 1, resource: this._placeholderTextureView },
-        { binding: 2, resource: this._placeholderSampler },
+        { binding: 1, resource: this.placeholderTextureView },
+        { binding: 2, resource: this.placeholderSampler },
       ],
     });
 
-    // Initially no skybox - updateBindGroup will be called when skybox is set
-    // For now, we need at least placeholder bindings for 1 and 2
-    // Since no skybox, we'll call updateBindGroup with null to create empty entries
     this.updateBindGroup();
-
     this.update();
   }
 
   update(): void {
-    this.device.queue.writeBuffer(
-      this.buffer,
+    // float32 view of the buffer
+    this.data.set(
+      [
+        this.ambientLightColor.x,
+        this.ambientLightColor.y,
+        this.ambientLightColor.z,
+      ],
       0,
-      // Layout: ambient_light_color (vec4<f32> = 16 bytes) + ibl_intensity (f32 = 4 bytes) + padding (12 bytes)
-      new Float32Array([
-        this._ambientLightColor.x,
-        this._ambientLightColor.y,
-        this._ambientLightColor.z,
-        0.0, // padding for vec4 alignment
-        this._iblIntensity,
-        0.0, // padding
-        0.0, // padding
-        0.0, // padding
-      ]),
     );
+    this.data[3] = this.iblIntensity;
+
+    this.data.set(
+      [this.fogColorBase.x, this.fogColorBase.y, this.fogColorBase.z],
+      4,
+    );
+    this.data.set(
+      [this.fogColorSun.x, this.fogColorSun.y, this.fogColorSun.z],
+      8,
+    );
+    this.data.set(
+      [this.fogExtinction.x, this.fogExtinction.y, this.fogExtinction.z],
+      12,
+    );
+    this.data.set(
+      [this.fogInscattering.x, this.fogInscattering.y, this.fogInscattering.z],
+      16,
+    );
+
+    this.data[19] = this.fogSunExponent;
+    this.dataU32[20] = this.fogEnabled ? 1 : 0;
+
+    this.device.queue.writeBuffer(this.buffer, 0, this.data.buffer);
+  }
+
+  setFogEnabled(value: boolean): void {
+    this.fogEnabled = value;
+    this.update();
   }
 
   updateBindGroup(): void {
-    const skyboxView = this._skyboxTexture?.gpuTextureView;
-    const skyboxSampler = this._skyboxTexture?.gpuSampler;
+    const skyboxView = this.skyboxTexture?.gpuTextureView;
+    const skyboxSampler = this.skyboxTexture?.gpuSampler;
 
-    // Always include all 3 bindings - use fallback placeholder if no skybox
     const entries: GPUBindGroupEntry[] = [
       {
         binding: 0,
@@ -118,11 +149,11 @@ export class SceneUniforms extends Uniforms {
       },
       {
         binding: 1,
-        resource: skyboxView ?? this._placeholderTextureView!,
+        resource: skyboxView ?? this.placeholderTextureView!,
       },
       {
         binding: 2,
-        resource: skyboxSampler ?? this._placeholderSampler!,
+        resource: skyboxSampler ?? this.placeholderSampler!,
       },
     ];
 
@@ -133,30 +164,12 @@ export class SceneUniforms extends Uniforms {
     });
   }
 
-  get ambientLightColor(): Vec3 {
-    return this._ambientLightColor;
-  }
-
-  set ambientLightColor(value: Vec3) {
-    this._ambientLightColor = value;
-    this.update();
-  }
-
-  get iblIntensity(): number {
-    return this._iblIntensity;
-  }
-
-  set iblIntensity(value: number) {
-    this._iblIntensity = value;
-    this.update();
-  }
-
-  get skyboxTexture(): CubeTexture | null {
-    return this._skyboxTexture;
-  }
-
-  set skyboxTexture(value: CubeTexture | null) {
-    this._skyboxTexture = value;
+  setSkyboxTexture(texture: CubeTexture | null): void {
+    this.skyboxTexture = texture;
     this.updateBindGroup();
+  }
+
+  getSkyboxTexture(): CubeTexture | null {
+    return this.skyboxTexture;
   }
 }

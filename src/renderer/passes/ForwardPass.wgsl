@@ -33,6 +33,15 @@ struct MeshUniforms {
 // Scene uniforms
 struct SceneUniforms {
     ambient_light_color: vec4<f32>,
+    ibl_intensity: f32,
+    _pad1: vec3<f32>,
+    fog_color_base: vec4<f32>,
+    fog_color_sun: vec4<f32>,
+    fog_extinction: vec4<f32>,
+    fog_inscattering: vec4<f32>,
+    fog_sun_exponent: f32,
+    fog_enabled: u32,
+    _pad2: vec2<f32>,
 }
 
 @group(2) @binding(0) var<uniform> scene_uniforms: SceneUniforms;

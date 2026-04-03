@@ -71,9 +71,27 @@ struct LightSpotUniformsArray {
 
 // Scene (group 3)
 struct SceneUniforms {
-    ambient_light_color: vec4<f32>,
+    ambient_light_color: vec3<f32>,
     ibl_intensity: f32,
+    
+    fog_color_base: vec3<f32>,
+    // 16 byte alignment
+    
+    fog_color_sun: vec3<f32>,
+    // 16 byte alignment
+    
+    fog_extinction: vec3<f32>,
+    // 16 byte alignment
+    
+    fog_inscattering: vec3<f32>,
+    // 16 byte alignment
+    
+    fog_sun_exponent: f32,
+    fog_enabled: u32,
+    // 16 byte alignment
 }
+
+
 
 @group(3) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
 @group(3) @binding(1) var skyboxTexture: texture_cube<f32>;
@@ -132,6 +150,11 @@ fn fetch_light_directional_shadow(light_index: u32, cascade_id: u32, homogeneous
     let proj_correction = 1.0 / homogeneous_coords.w;
     let uv = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
     let depth = homogeneous_coords.z * proj_correction;
+
+    // Return fully lit for fragments outside the light frustum
+    if uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || depth < 0.0 || depth > 1.0 {
+        return 1.0;
+    }
 
     // Texture layers are organized as: [light0-c0, light0-c1, light0-c2, light1-c0, light1-c1, light1-c2, ...]
     let layer_index = light_index * 3u + cascade_id;
@@ -201,9 +224,10 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     }
 
     // IBL - sample skybox based on normal direction
-    let ibl_color = sample_ibl(world_normal) * scene_uniforms.ibl_intensity;
+    // let ibl_color = sample_ibl(world_normal) * scene_uniforms.ibl_intensity;
+    let ibl_color = sample_ibl(world_normal) * 1.0;
+
     let ambient = scene_uniforms.ambient_light_color.rgb + ibl_color;
-    // let ambient = scene_uniforms.ambient_light_color.rgb;
     var color = albedo * ambient;
 
     for (var i: u32 = 0u; i < light_directional_uniforms.light_count; i++) {
@@ -283,7 +307,52 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         }
     }
 
-    output.color = vec4<f32>(color, 1.0);
+    // Distance from camera to fragment
+    let dist = length(view_pos);
 
-    return output;
+    // View direction (camera → point in world space)
+    let view_dir = normalize(world_pos - camera_uniforms.position.xyz);
+
+    // Sun direction (use first directional light)
+    var has_sun = light_directional_uniforms.light_count > 0u;
+    var sun_dir = vec3<f32>(0.0, 1.0, 0.0);
+    if (has_sun) {
+        let light0 = light_directional_uniforms.lights[0];
+        sun_dir = normalize(-light0.direction.xyz);
+    }
+
+    // Sun tint factor based on view direction alignment with sun
+    var sun_amount = 1.0;
+    var fog_color = scene_uniforms.fog_color_base.rgb;
+    if (bool(scene_uniforms.fog_enabled) && has_sun) {
+        sun_amount = max(dot(view_dir, sun_dir), 0.0);
+        let sun_tint = pow(sun_amount, scene_uniforms.fog_sun_exponent);
+        fog_color = mix(scene_uniforms.fog_color_base.rgb, scene_uniforms.fog_color_sun.rgb, sun_tint);
+    }
+
+    // Full scattering model (per-channel extinction + inscattering)
+    if (bool(scene_uniforms.fog_enabled)) {
+        let be = scene_uniforms.fog_extinction;
+        let bi = scene_uniforms.fog_inscattering;
+
+        let extinction = exp(-dist * be);
+        let ins = vec3<f32>(
+            exp(-dist * bi.x),
+            exp(-dist * bi.y),
+            exp(-dist * bi.z)
+        );
+
+        // Final color: (pixel * extinction) + (fog_color * ins)
+        // This is: light that survived + light scattered in from fog
+        color = color * extinction + fog_color * (vec3<f32>(1.0) - ins);
+    }
+    
+    output.color = vec4<f32>(color, 1.0);
+    // output.color = vec4<f32>(world_normal * 0.5 + 0.5, 1.0); // Normalize to 0-1 range
+    // output.color = vec4<f32>(ibl_color, 1.0);
+    // let mag = length(world_normal);
+    // output.color = vec4<f32>(vec3(mag), 1.0);
+    // let NdotV = abs(dot(world_normal, normalize(camera_uniforms.position.xyz - world_pos)));
+    // output.color = vec4<f32>(vec3(NdotV), 1.0);
+        return output;
 }

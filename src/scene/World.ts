@@ -1,9 +1,7 @@
 import { Scene } from "./Scene";
-import { Vec3 } from "../math";
 
 export class World {
   scenes: Scene[] = [];
-  ambientLightColor: Vec3 = new Vec3(0.05, 0.05, 0.05);
 
   constructor() {}
 

@@ -61,11 +61,11 @@ export class GeometryBuffer {
 
     this.sampler = device.createSampler({
       label: "G-Buffer Sampler",
-      magFilter: "nearest",
-      minFilter: "nearest",
-      mipmapFilter: "nearest",
-      addressModeU: "repeat",
-      addressModeV: "repeat",
+      magFilter: "linear",
+      minFilter: "linear",
+      mipmapFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
     });
 
     this.bindGroupLayout = device.createBindGroupLayout({

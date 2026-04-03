@@ -9,6 +9,8 @@ Not in order:
   Snap shadows to pixels to avoid jittering?
 
 - IBL: Image based lighting, sample the environment map to derive ambient lighting
+- This is close, there's just an issue with the edges - they're outlined and black for some reason?
+
 - Fog with gradient map option
   - Add fog params to scene uniforms, should have params for falloff curve, and an array of color stops
 
