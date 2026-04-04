@@ -37,8 +37,8 @@ export class MaterialManager {
     this.device = device;
 
     this.defaultSampler = device.createSampler({
-      magFilter: "linear",
-      minFilter: "linear",
+      magFilter: "nearest",
+      minFilter: "nearest",
       mipmapFilter: "linear",
       addressModeU: "repeat",
       addressModeV: "repeat",

@@ -61,8 +61,8 @@ export class GeometryBuffer {
 
     this.sampler = device.createSampler({
       label: "G-Buffer Sampler",
-      magFilter: "linear",
-      minFilter: "linear",
+      magFilter: "nearest",
+      minFilter: "nearest",
       mipmapFilter: "linear",
       addressModeU: "clamp-to-edge",
       addressModeV: "clamp-to-edge",

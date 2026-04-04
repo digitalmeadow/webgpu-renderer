@@ -30,7 +30,7 @@ export class SceneUniforms {
   constructor(device: GPUDevice) {
     this.device = device;
 
-    const bufferSize = 112;
+    const bufferSize = 96;
     this.data = new Float32Array(bufferSize / 4);
     this.dataU32 = new Uint32Array(this.data.buffer);
 
@@ -171,5 +171,13 @@ export class SceneUniforms {
 
   getSkyboxTexture(): CubeTexture | null {
     return this.skyboxTexture;
+  }
+
+  getPlaceholderTextureView(): GPUTextureView {
+    return this.placeholderTextureView;
+  }
+
+  getPlaceholderSampler(): GPUSampler {
+    return this.placeholderSampler;
   }
 }

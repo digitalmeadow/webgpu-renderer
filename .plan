@@ -5,10 +5,9 @@ Debug why front headlights with a white emissive texture value, are rendering ye
 Get windscreen slight alpha and reflections working properly
 
 Not in order:
-- Soft shadows (PCF and then softer-when-further-away)
+  Shadows
+  Softer when further away from contact point (complex, expensive)
   Snap shadows to pixels to avoid jittering?
-
-- LUT for nice filmic mapping
 
 - Try rendering a tree pack to billboarded with normals for foliage
 - Ambient occlusion
@@ -17,3 +16,4 @@ Not in order:
 --- Features ----
 
 - Projection mapping, e.g. casting complex shadows (via video as a projection onto the scene)
+  - Complex lights, like with complex shadows, blender uses these screens which you put in front of sceen lights

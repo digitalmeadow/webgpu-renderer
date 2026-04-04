@@ -3,6 +3,7 @@ import { Mesh } from "../../mesh";
 import { SpotLight } from "../../lights";
 import { Vertex } from "../../geometries";
 import { MaterialManager } from "../../materials";
+import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
 
 export class ShadowPassSpotLight {
   private device: GPUDevice;
@@ -99,8 +100,8 @@ export class ShadowPassSpotLight {
         depthWriteEnabled: true,
         depthCompare: "less-equal",
         format: "depth32float",
-        depthBias: 4,
-        depthBiasSlopeScale: 2.0,
+        depthBias: 5000,
+        depthBiasSlopeScale: 1.5,
         depthBiasClamp: 0,
       },
     });
@@ -155,8 +156,17 @@ export class ShadowPassSpotLight {
 
       light.updateShadowMatrix();
 
-      const visibleMeshes = meshes;
-      const visibleTransparentMeshes = transparentMeshes;
+      const frustumPlanes = frustumPlanesFromMatrix(light.viewProjectionMatrix);
+
+      const visibleMeshes = meshes.filter((mesh) => {
+        mesh.updateWorldAABB();
+        return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+      });
+
+      const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
+        mesh.updateWorldAABB();
+        return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+      });
 
       const encoder = device.createCommandEncoder({
         label: `Shadow Pass SpotLight Encoder Light ${lightIndex}`,

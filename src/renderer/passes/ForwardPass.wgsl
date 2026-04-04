@@ -1,5 +1,6 @@
 // Forward Pass Shader for transparent objects
 // Renders transparent meshes with scene lighting and shadows
+// Aligned with LightingPass.wgsl
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -29,19 +30,27 @@ struct MeshUniforms {
 
 @group(1) @binding(0) var<uniform> mesh_uniforms: MeshUniforms;
 
-// Global Bind Group (Group 2): Scene + Light combined
+// Light + Scene (group 2) - combined matching LightingPass structure
 // Scene uniforms
 struct SceneUniforms {
-    ambient_light_color: vec4<f32>,
+    ambient_light_color: vec3<f32>,
     ibl_intensity: f32,
-    _pad1: vec3<f32>,
-    fog_color_base: vec4<f32>,
-    fog_color_sun: vec4<f32>,
-    fog_extinction: vec4<f32>,
-    fog_inscattering: vec4<f32>,
+    
+    fog_color_base: vec3<f32>,
+    // 16 byte alignment
+    
+    fog_color_sun: vec3<f32>,
+    // 16 byte alignment
+    
+    fog_extinction: vec3<f32>,
+    // 16 byte alignment
+    
+    fog_inscattering: vec3<f32>,
+    // 16 byte alignment
+    
     fog_sun_exponent: f32,
     fog_enabled: u32,
-    _pad2: vec2<f32>,
+    // 16 byte alignment
 }
 
 @group(2) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
@@ -88,6 +97,10 @@ struct LightSpotUniformsArray {
 @group(2) @binding(4) var<uniform> light_spot_uniforms: LightSpotUniformsArray;
 @group(2) @binding(5) var light_spot_shadow_texture: texture_depth_2d_array;
 
+// Skybox for IBL
+@group(2) @binding(6) var skyboxTexture: texture_cube<f32>;
+@group(2) @binding(7) var skyboxSampler: sampler;
+
 // Material uniforms (group 3)
 struct MaterialUniforms {
     color: vec4<f32>,
@@ -117,7 +130,27 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 
-// Helper: Select cascade based on view-space depth
+// Vogel disk sampling for shadow smoothing
+const TAU: f32 = 6.283185307179586;
+const GOLDEN_ANGLE: f32 = 3.883222077450933;
+const VOGEL_SAMPLES: u32 = 12u;
+const FILTER_RADIUS: f32 = 8.0;
+
+fn ign(px: i32, py: i32) -> f32 {
+    let fx = f32(px);
+    let fy = f32(py);
+    return fract(52.9829189 * fract(0.06711056 * fx + 0.00583715 * fy));
+}
+
+fn vogel_offset(i: u32, n: u32, rotation: f32) -> vec2<f32> {
+    let f_i = f32(i);
+    let f_n = f32(n);
+    let r = sqrt((f_i + 0.5) / f_n);
+    let th = rotation + f_i * GOLDEN_ANGLE;
+    return vec2<f32>(cos(th), sin(th)) * r;
+}
+
+// Select cascade based on view-space depth
 fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
     if view_space_z < splits.y {
         return 0u;
@@ -128,48 +161,122 @@ fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
     }
 }
 
-// Fetch directional shadow
-fn fetch_light_directional_shadow(light_index: u32, cascade_id: u32, homogeneous_coords: vec4<f32>) -> f32 {
+// Fetch directional shadow with Vogel disk sampling
+fn fetch_light_directional_shadow(light_index: u32, cascade_id: u32, homogeneous_coords: vec4<f32>, frag_coord: vec2<f32>) -> f32 {
     if homogeneous_coords.w <= 0.0 {
         return 1.0;
     }
 
     let flip_correction = vec2<f32>(0.5, -0.5);
     let proj_correction = 1.0 / homogeneous_coords.w;
-    let uv = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
+    let light_local = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
     let depth = homogeneous_coords.z * proj_correction;
 
-    let layer_index = light_index * 3u + cascade_id;
-
-    return textureSampleCompareLevel(
-        light_directional_shadow_texture, sampler_compare, uv, i32(layer_index), depth
-    );
-}
-
-// Fetch spot shadow
-fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: mat4x4<f32>, homogeneous_coords: vec4<f32>) -> f32 {
-    let light_view_pos = view_matrix * vec4<f32>(world_pos, 1.0);
-
-    if light_view_pos.z >= 0.0 {
-        return 0.0;
+    // Return fully lit for fragments outside the light frustum
+    if light_local.x < 0.0 || light_local.x > 1.0 || light_local.y < 0.0 || light_local.y > 1.0 || depth < 0.0 || depth > 1.0 {
+        return 1.0;
     }
 
+    // Texture layers are organized as: [light0-c0, light0-c1, light0-c2, light1-c0, light1-c1, light1-c2, ...]
+    let layer_index = light_index * 3u + cascade_id;
+
+    // Vogel disk sampling for shadow smoothing
+    let px = i32(floor(frag_coord.x));
+    let py = i32(floor(frag_coord.y));
+    let rotation = TAU * ign(px, py);
+    let texel = 1.0 / 2048.0;
+
+    var sum = 0.0;
+    let eps = 1e-5;
+
+    for (var i = 0u; i < VOGEL_SAMPLES; i = i + 1u) {
+        let o = vogel_offset(i, VOGEL_SAMPLES, rotation);
+        let uv = light_local + o * texel * FILTER_RADIUS;
+        let uv_clamped = clamp(uv, vec2<f32>(eps, eps), vec2<f32>(1.0 - eps, 1.0 - eps));
+        sum = sum + textureSampleCompareLevel(
+            light_directional_shadow_texture, sampler_compare, uv_clamped, i32(layer_index), depth
+        );
+    }
+
+    return sum / f32(VOGEL_SAMPLES);
+}
+
+// Fetch spot shadow with Vogel disk sampling
+fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: mat4x4<f32>, homogeneous_coords: vec4<f32>, frag_coord: vec2<f32>) -> f32 {
+    // Transform world position to light view space to check if behind the light
+    let light_view_pos = view_matrix * vec4<f32>(world_pos, 1.0);
+
+    // In right-handed view space, -Z is forward. Points behind the light have Z >= 0
+    if light_view_pos.z >= 0.0 {
+        return 0.0; // Behind the light - no contribution
+    }
+
+    // Points behind the NDC camera should not contribute to lighting
     if homogeneous_coords.w <= 0.0 {
         return 0.0;
     }
 
     let flip_correction = vec2<f32>(0.5, -0.5);
     let proj_correction = 1.0 / homogeneous_coords.w;
-    let uv = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
+    let light_local = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
     let depth = homogeneous_coords.z * proj_correction;
 
-    if uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || depth < 0.0 || depth > 1.0 {
-        return 0.0;
+    // Check if position is within spotlight frustum
+    if light_local.x < 0.0 || light_local.x > 1.0 || light_local.y < 0.0 || light_local.y > 1.0 || depth < 0.0 || depth > 1.0 {
+        return 0.0; // Outside spotlight frustum - fully shadowed
     }
 
-    return textureSampleCompareLevel(
-        light_spot_shadow_texture, sampler_compare, uv, i32(light_index), depth
-    );
+    // Vogel disk sampling for shadow smoothing
+    let px = i32(floor(frag_coord.x));
+    let py = i32(floor(frag_coord.y));
+    let rotation = TAU * ign(px, py);
+    let texel = 1.0 / 1024.0;
+
+    var sum = 0.0;
+    let eps = 1e-5;
+
+    for (var i = 0u; i < VOGEL_SAMPLES; i = i + 1u) {
+        let o = vogel_offset(i, VOGEL_SAMPLES, rotation);
+        let uv = light_local + o * texel * FILTER_RADIUS;
+        let uv_clamped = clamp(uv, vec2<f32>(eps, eps), vec2<f32>(1.0 - eps, 1.0 - eps));
+        sum = sum + textureSampleCompareLevel(
+            light_spot_shadow_texture, sampler_compare, uv_clamped, i32(light_index), depth
+        );
+    }
+
+    return sum / f32(VOGEL_SAMPLES);
+}
+
+// IBL (Image-Based Lighting) - sample skybox based on normal direction
+fn sample_ibl(normal: vec3<f32>) -> vec3<f32> {
+    let max_mip = 2.0;
+    return textureSampleLevel(skyboxTexture, skyboxSampler, normal, max_mip).rgb;
+}
+
+// Specular IBL - environment reflection with Schlick fresnel
+const MAX_ENV_MIP_LEVELS: f32 = 4.0;
+
+fn sample_specular_ibl(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness: f32, metalness: f32, albedo: vec3<f32>) -> vec3<f32> {
+    let V = normalize(camera_uniforms.position.xyz - world_pos);
+    let N = normalize(world_normal);
+    let R = reflect(-V, N);
+    let NdotV = max(dot(N, V), 0.0);
+
+    // Roughness-based mip selection
+    let mip = roughness * MAX_ENV_MIP_LEVELS;
+    let env_color = textureSampleLevel(skyboxTexture, skyboxSampler, R, mip).rgb;
+
+    // F0: dielectric uses 0.04, metals use albedo color
+    let dielectric_F0 = vec3<f32>(0.15);
+    let F0 = mix(vec3<f32>(dielectric_F0), albedo, metalness);
+    // Schlick fresnel approximation
+    let schlick = 1.5;
+    let fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, schlick);
+
+    // Reduce specular contribution at high roughness
+    let roughness_factor = 1.0 - roughness * roughness;
+
+    return env_color * fresnel * roughness_factor;
 }
 
 struct FragmentOutput {
@@ -180,12 +287,45 @@ struct FragmentOutput {
 fn fs_main(in: VertexOutput) -> FragmentOutput {
     var output: FragmentOutput;
 
+    // Sample textures
     let albedo_tex = textureSample(albedo_texture, material_sampler, in.uv_coords);
+    let normal_tex = textureSample(normal_texture, material_sampler, in.uv_coords);
+    let metal_rough = textureSample(metalness_roughness_texture, material_sampler, in.uv_coords);
 
+    let metalness = metal_rough.r;
+    let roughness = metal_rough.g;
     let albedo = vec4<f32>(albedo_tex.rgb * material_uniforms.color.rgb, albedo_tex.a);
-    let world_normal = normalize(in.world_normal);
 
-    var color = albedo.rgb * max(scene_uniforms.ambient_light_color.rgb, vec3<f32>(0.15));
+    // Apply normal map - use tangent-space normal from texture
+    var world_normal = normalize(in.world_normal);
+    let normal_sample = normal_tex.rgb;
+    let normal_mag = dot(normal_sample, normal_sample);
+    if (normal_mag > 0.001) {
+        // Tangent-space normal: transform to world space using TBN
+        // For simplicity, add tangent-space offset to world normal
+        // (proper implementation would require tangent attribute)
+        let T = normalize(cross(in.world_normal, vec3<f32>(0.0, 1.0, 0.0)));
+        let B = cross(in.world_normal, T);
+        let TBN = mat3x3(T, B, in.world_normal);
+        world_normal = normalize(TBN * (normal_sample * 2.0 - 1.0));
+    }
+
+    // Fallback to up vector if normal is invalid (all zeros or NaN)
+    let nmag = dot(world_normal, world_normal);
+    if (nmag < 0.001 || nmag != nmag) {
+        world_normal = vec3<f32>(0.0, 1.0, 0.0);
+    }
+
+    // IBL - matching LightingPass
+    let ibl_color = sample_ibl(world_normal) * scene_uniforms.ibl_intensity;
+    let ambient = scene_uniforms.ambient_light_color.rgb + ibl_color;
+
+    // PBR: metals have no diffuse response
+    let diffuse_albedo = albedo.rgb * (1.0 - metalness);
+    var color = diffuse_albedo * ambient;
+
+    // Specular IBL
+    let specular = sample_specular_ibl(in.world_position, world_normal, roughness, metalness, albedo.rgb) * scene_uniforms.ibl_intensity;
 
     // Directional lights
     for (var i: u32 = 0u; i < light_directional_uniforms.light_count; i++) {
@@ -204,10 +344,9 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let shadow_matrix = light_uniforms.view_projection_matrices[cascade];
             let shadow_coords = shadow_matrix * vec4<f32>(in.world_position, 1.0);
 
-            let shadow = fetch_light_directional_shadow(i, cascade, shadow_coords);
-            let effective_shadow = mix(1.0, shadow, material_uniforms.opacity);
+            let shadow = fetch_light_directional_shadow(i, cascade, shadow_coords, in.position.xy);
 
-            color += albedo.rgb * light_uniforms.color.rgb * light_uniforms.color.a * effective_shadow * diffuse;
+            color += diffuse_albedo * light_uniforms.color.rgb * light_uniforms.color.a * shadow * diffuse;
         }
     }
 
@@ -218,10 +357,11 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         if light_spot.color_intensity.a > 0.0 {
             let shadow_coords = light_spot.view_projection_matrix * vec4<f32>(in.world_position, 1.0);
 
+            let shadow = fetch_light_spot_shadow(j, in.world_position, light_spot.view_matrix, shadow_coords, in.position.xy);
+
             let light_to_frag = in.world_position - light_spot.position.xyz;
             let light_dir = normalize(light_to_frag);
 
-            let forward = normalize(light_spot.forward.xyz);
             let prenumbra_percent = light_spot.fov_prenumbra.y;
 
             // Extract shadow UV from shadow coords
@@ -247,12 +387,60 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             // Apply prenumbra with smooth falloff
             let spot_factor = smoothstep(1.0, 1.0 - prenumbra_percent, normalized_dist);
 
+            // Distance-based falloff using spotlight's frustum
+            let light_distance = shadow_coords.w;
+            let spot_far = light_spot.near_far.y;
+            let normalized_dist_from_light = clamp(light_distance / spot_far, 0.0, 1.0);
+            let dist_falloff = (1.0 - normalized_dist_from_light) / (1.0 + normalized_dist_from_light * normalized_dist_from_light);
+
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
-            let shadow = fetch_light_spot_shadow(j, in.world_position, light_spot.view_matrix, shadow_coords);
-
-            color += albedo.rgb * light_spot.color_intensity.rgb * light_spot.color_intensity.a * shadow * diffuse * spot_factor;
+            color += diffuse_albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * shadow * spot_factor * dist_falloff;
         }
+    }
+
+    // Add specular IBL
+    color += specular;
+
+    // Fog - matching LightingPass
+    // Distance from camera to fragment
+    let view_pos = camera_uniforms.view_matrix * vec4<f32>(in.world_position, 1.0);
+    let dist = length(view_pos.xyz);
+
+    // View direction (camera → point in world space)
+    let view_dir = normalize(in.world_position - camera_uniforms.position.xyz);
+
+    // Sun direction (use first directional light)
+    var has_sun = light_directional_uniforms.light_count > 0u;
+    var sun_dir = vec3<f32>(0.0, 1.0, 0.0);
+    if (has_sun) {
+        let light0 = light_directional_uniforms.lights[0];
+        sun_dir = normalize(-light0.direction.xyz);
+    }
+
+    // Sun tint factor based on view direction alignment with sun
+    var sun_amount = 1.0;
+    var fog_color = scene_uniforms.fog_color_base.rgb;
+    if (bool(scene_uniforms.fog_enabled) && has_sun) {
+        sun_amount = max(dot(view_dir, sun_dir), 0.0);
+        let sun_tint = pow(sun_amount, scene_uniforms.fog_sun_exponent);
+        fog_color = mix(scene_uniforms.fog_color_base.rgb, scene_uniforms.fog_color_sun.rgb, sun_tint);
+    }
+
+    // Full scattering model (per-channel extinction + inscattering)
+    if (bool(scene_uniforms.fog_enabled)) {
+        let be = scene_uniforms.fog_extinction;
+        let bi = scene_uniforms.fog_inscattering;
+
+        let extinction = exp(-dist * be);
+        let ins = vec3<f32>(
+            exp(-dist * bi.x),
+            exp(-dist * bi.y),
+            exp(-dist * bi.z)
+        );
+
+        // Final color: (pixel * extinction) + (fog_color * ins)
+        color = color * extinction + fog_color * (vec3<f32>(1.0) - ins);
     }
 
     output.color = vec4<f32>(color, albedo.a * material_uniforms.opacity);

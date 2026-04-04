@@ -12,7 +12,7 @@ export class ForwardPass {
   private materialBindGroupLayout: GPUBindGroupLayout;
   private materialManager: MaterialManager;
   private meshBindGroupLayout: GPUBindGroupLayout;
-  private globalBindGroupLayout: GPUBindGroupLayout;
+  private lightSceneBindGroupLayout: GPUBindGroupLayout;
   private lightManager: LightManager;
   private sceneUniforms: SceneUniforms;
 
@@ -45,8 +45,8 @@ export class ForwardPass {
       ],
     });
 
-    this.globalBindGroupLayout = device.createBindGroupLayout({
-      label: "Forward Pass Global Bind Group Layout",
+    this.lightSceneBindGroupLayout = device.createBindGroupLayout({
+      label: "Forward Pass Light Scene Bind Group Layout",
       entries: [
         {
           binding: 0,
@@ -78,6 +78,16 @@ export class ForwardPass {
           visibility: GPUShaderStage.FRAGMENT,
           texture: { sampleType: "depth", viewDimension: "2d-array" },
         },
+        {
+          binding: 6,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { viewDimension: "cube" },
+        },
+        {
+          binding: 7,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "filtering" },
+        },
       ],
     });
 
@@ -87,7 +97,7 @@ export class ForwardPass {
         bindGroupLayouts: [
           cameraBindGroupLayout,
           this.meshBindGroupLayout,
-          this.globalBindGroupLayout,
+          this.lightSceneBindGroupLayout,
           this.materialBindGroupLayout,
         ],
       }),
@@ -136,9 +146,13 @@ export class ForwardPass {
     outputView: GPUTextureView,
     depthView: GPUTextureView,
   ): void {
-    const globalBindGroup = this.device.createBindGroup({
-      label: "Forward Pass Global Bind Group",
-      layout: this.globalBindGroupLayout,
+    const skyboxTexture = this.sceneUniforms.getSkyboxTexture();
+    const skyboxTextureView = skyboxTexture?.gpuTextureView;
+    const skyboxSampler = skyboxTexture?.gpuSampler;
+
+    const lightSceneBindGroup = this.device.createBindGroup({
+      label: "Forward Pass Light Scene Bind Group",
+      layout: this.lightSceneBindGroupLayout,
       entries: [
         {
           binding: 0,
@@ -168,6 +182,15 @@ export class ForwardPass {
             this.lightManager.spotShadowTextureView ||
             this.lightManager.dummyShadowTextureView,
         },
+        {
+          binding: 6,
+          resource:
+            skyboxTextureView || this.sceneUniforms.getPlaceholderTextureView(),
+        },
+        {
+          binding: 7,
+          resource: skyboxSampler || this.sceneUniforms.getPlaceholderSampler(),
+        },
       ],
     });
 
@@ -188,7 +211,7 @@ export class ForwardPass {
 
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, camera.uniforms.bindGroup);
-    passEncoder.setBindGroup(2, globalBindGroup);
+    passEncoder.setBindGroup(2, lightSceneBindGroup);
 
     for (const mesh of meshes) {
       if (!mesh.material) {
