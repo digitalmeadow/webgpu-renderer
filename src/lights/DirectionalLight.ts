@@ -194,13 +194,19 @@ export class DirectionalLight extends Light {
       max.x += SHADOW_XY_PADDING;
       max.y += SHADOW_XY_PADDING;
 
+      const width = max.x - min.x;
+      const height = max.y - min.y;
+      const maxDim = Math.max(width, height);
+      const centerX = (min.x + max.x) / 2;
+      const centerY = (min.y + max.y) / 2;
+
       const projMatrix = Mat4.ortho(
-        min.x,
-        max.x,
-        min.y,
-        max.y,
-        -max.z, // near distance (positive)
-        -min.z, // far distance (positive)
+        centerX - maxDim,
+        centerX + maxDim,
+        centerY - maxDim,
+        centerY + maxDim,
+        -max.z,
+        -min.z,
       );
 
       // Multiply in correct order: projection * view

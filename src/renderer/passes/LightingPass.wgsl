@@ -141,32 +141,68 @@ fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
     }
 }
 
+// Vogel disk sampling for shadow smoothing
+const TAU: f32 = 6.283185307179586;
+const GOLDEN_ANGLE: f32 = 3.883222077450933;
+const VOGEL_SAMPLES: u32 = 12u;
+const FILTER_RADIUS: f32 = 8.0;
+
+fn ign(px: i32, py: i32) -> f32 {
+    let fx = f32(px);
+    let fy = f32(py);
+    return fract(52.9829189 * fract(0.06711056 * fx + 0.00583715 * fy));
+}
+
+fn vogel_offset(i: u32, n: u32, rotation: f32) -> vec2<f32> {
+    let f_i = f32(i);
+    let f_n = f32(n);
+    let r = sqrt((f_i + 0.5) / f_n);
+    let th = rotation + f_i * GOLDEN_ANGLE;
+    return vec2<f32>(cos(th), sin(th)) * r;
+}
+
 // Fetch directional shadow
-fn fetch_light_directional_shadow(light_index: u32, cascade_id: u32, homogeneous_coords: vec4<f32>) -> f32 {
+fn fetch_light_directional_shadow(light_index: u32, cascade_id: u32, homogeneous_coords: vec4<f32>, frag_coord: vec2<f32>) -> f32 {
     if homogeneous_coords.w <= 0.0 {
         return 1.0;
     }
 
     let flip_correction = vec2<f32>(0.5, -0.5);
     let proj_correction = 1.0 / homogeneous_coords.w;
-    let uv = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
+    let light_local = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
     let depth = homogeneous_coords.z * proj_correction;
 
     // Return fully lit for fragments outside the light frustum
-    if uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || depth < 0.0 || depth > 1.0 {
+    if light_local.x < 0.0 || light_local.x > 1.0 || light_local.y < 0.0 || light_local.y > 1.0 || depth < 0.0 || depth > 1.0 {
         return 1.0;
     }
 
     // Texture layers are organized as: [light0-c0, light0-c1, light0-c2, light1-c0, light1-c1, light1-c2, ...]
     let layer_index = light_index * 3u + cascade_id;
 
-    return textureSampleCompareLevel(
-        light_directional_shadow_texture, sampler_compare, uv, i32(layer_index), depth
-    );
+    // Vogel disk sampling for shadow smoothing
+    let px = i32(floor(frag_coord.x));
+    let py = i32(floor(frag_coord.y));
+    let rotation = TAU * ign(px, py);
+    let texel = 1.0 / 2048.0;
+
+    var sum = 0.0;
+    let eps = 1e-5;
+
+    for (var i = 0u; i < VOGEL_SAMPLES; i = i + 1u) {
+        let o = vogel_offset(i, VOGEL_SAMPLES, rotation);
+        let uv = light_local + o * texel * FILTER_RADIUS;
+        let uv_clamped = clamp(uv, vec2<f32>(eps, eps), vec2<f32>(1.0 - eps, 1.0 - eps));
+        sum = sum + textureSampleCompareLevel(
+            light_directional_shadow_texture, sampler_compare, uv_clamped, i32(layer_index), depth
+        );
+    }
+
+    return sum / f32(VOGEL_SAMPLES);
 }
 
 // Fetch spot shadow
-fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: mat4x4<f32>, homogeneous_coords: vec4<f32>) -> f32 {
+fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: mat4x4<f32>, homogeneous_coords: vec4<f32>, frag_coord: vec2<f32>) -> f32 {
     // Transform world position to light view space to check if behind the light
     let light_view_pos = view_matrix * vec4<f32>(world_pos, 1.0);
 
@@ -182,17 +218,33 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
 
     let flip_correction = vec2<f32>(0.5, -0.5);
     let proj_correction = 1.0 / homogeneous_coords.w;
-    let uv = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
+    let light_local = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
     let depth = homogeneous_coords.z * proj_correction;
 
     // Check if position is within spotlight frustum
-    if uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || depth < 0.0 || depth > 1.0 {
+    if light_local.x < 0.0 || light_local.x > 1.0 || light_local.y < 0.0 || light_local.y > 1.0 || depth < 0.0 || depth > 1.0 {
         return 0.0; // Outside spotlight frustum - fully shadowed
     }
 
-    return textureSampleCompareLevel(
-        light_spot_shadow_texture, sampler_compare, uv, i32(light_index), depth
-    );
+    // Vogel disk sampling for shadow smoothing
+    let px = i32(floor(frag_coord.x));
+    let py = i32(floor(frag_coord.y));
+    let rotation = TAU * ign(px, py);
+    let texel = 1.0 / 1024.0;
+
+    var sum = 0.0;
+    let eps = 1e-5;
+
+    for (var i = 0u; i < VOGEL_SAMPLES; i = i + 1u) {
+        let o = vogel_offset(i, VOGEL_SAMPLES, rotation);
+        let uv = light_local + o * texel * FILTER_RADIUS;
+        let uv_clamped = clamp(uv, vec2<f32>(eps, eps), vec2<f32>(1.0 - eps, 1.0 - eps));
+        sum = sum + textureSampleCompareLevel(
+            light_spot_shadow_texture, sampler_compare, uv_clamped, i32(light_index), depth
+        );
+    }
+
+    return sum / f32(VOGEL_SAMPLES);
 }
 
 // IBL (Image-Based Lighting) - sample skybox based on normal direction
@@ -279,7 +331,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let shadow_matrix = light_uniforms.view_projection_matrices[cascade];
             let shadow_coords = shadow_matrix * vec4<f32>(world_pos, 1.0);
 
-            let shadow = fetch_light_directional_shadow(i, cascade, shadow_coords);
+            let shadow = fetch_light_directional_shadow(i, cascade, shadow_coords, in.position.xy);
 
             color += diffuse_albedo * light_uniforms.color.rgb * light_uniforms.color.a * shadow * diffuse;
         }
@@ -294,7 +346,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let shadow_coords = light_spot.view_projection_matrix * vec4<f32>(world_pos, 1.0);
 
             // Sample shadow map
-            let shadow = fetch_light_spot_shadow(j, world_pos, light_spot.view_matrix, shadow_coords);
+            let shadow = fetch_light_spot_shadow(j, world_pos, light_spot.view_matrix, shadow_coords, in.position.xy);
 
             // Calculate light direction (light → fragment)
             let light_dir = normalize(light_spot.position.xyz - world_pos);
@@ -346,6 +398,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     color += specular;
     color += emissive;
 
+    // Fog: https://iquilezles.org/articles/fog/
     // Distance from camera to fragment
     let dist = length(view_pos);
 

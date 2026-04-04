@@ -233,7 +233,7 @@ fn ign(px: i32, py: i32) -> f32 {
 const TAU: f32 = 6.283185307179586;
 const GOLDEN_ANGLE: f32 = 3.883222077450933;
 const VOGEL_SAMPLES: u32 = 12u;
-const FILTER_RADIUS: f32 = 2.0;
+const FILTER_RADIUS: f32 = 100.0;
 
 fn vogel_offset(i: u32, n: u32, rotation: f32) -> vec2<f32> {
     let f_i = f32(i);
