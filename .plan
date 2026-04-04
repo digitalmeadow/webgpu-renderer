@@ -8,8 +8,7 @@ Not in order:
 - Soft shadows (PCF and then softer-when-further-away)
   Snap shadows to pixels to avoid jittering?
 
-- IBL: Image based lighting, sample the environment map to derive ambient lighting
-- This is close, there's just an issue with the edges - they're outlined and black for some reason?
+- LUT for nice filmic mapping
 
 - Try rendering a tree pack to billboarded with normals for foliage
 - Ambient occlusion

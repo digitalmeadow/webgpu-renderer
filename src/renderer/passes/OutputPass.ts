@@ -18,6 +18,7 @@ export class OutputPass {
   private lastRenderHeight: number = 0;
   private lastViewportWidth: number = 0;
   private lastViewportHeight: number = 0;
+  private lastInputView: GPUTextureView | null = null;
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -71,7 +72,7 @@ export class OutputPass {
         entryPoint: "fs_main",
         targets: [
           {
-            format: navigator.gpu.getPreferredCanvasFormat(),
+            format: "rgba16float",
           },
         ],
       },
@@ -92,6 +93,7 @@ export class OutputPass {
   ): void {
     if (
       this.uniformsBindGroup === null ||
+      this.lastInputView !== inputView ||
       this.lastRenderWidth !== renderWidth ||
       this.lastRenderHeight !== renderHeight ||
       this.lastViewportWidth !== viewportWidth ||
@@ -137,6 +139,7 @@ export class OutputPass {
       this.lastRenderHeight = renderHeight;
       this.lastViewportWidth = viewportWidth;
       this.lastViewportHeight = viewportHeight;
+      this.lastInputView = inputView;
     }
 
     const passEncoder = encoder.beginRenderPass({
@@ -153,7 +156,7 @@ export class OutputPass {
 
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, this.uniformsBindGroup);
-    passEncoder.draw(6);
+    passEncoder.draw(3);
     passEncoder.end();
   }
 }

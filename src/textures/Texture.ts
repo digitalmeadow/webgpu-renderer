@@ -9,6 +9,8 @@ export class Texture {
   async load(): Promise<void> {
     const response = await fetch(this.url);
     const blob = await response.blob();
-    this.bitmap = await createImageBitmap(blob);
+    this.bitmap = await createImageBitmap(blob, {
+      colorSpaceConversion: "none",
+    });
   }
 }

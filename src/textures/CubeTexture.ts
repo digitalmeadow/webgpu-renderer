@@ -44,7 +44,9 @@ export class CubeTexture {
               throw new Error(`Failed to load cubemap face: ${url}`);
             }
             const blob = await response.blob();
-            const bitmap = await createImageBitmap(blob);
+            const bitmap = await createImageBitmap(blob, {
+              colorSpaceConversion: "none",
+            });
             return { face: faceIndex, mipLevel, bitmap };
           })(),
         );
@@ -74,7 +76,7 @@ export class CubeTexture {
       mipLevelCount: MIP_LEVELS,
       sampleCount: 1,
       dimension: "2d",
-      format: "rgba8unorm",
+      format: "rgba8unorm-srgb",
       usage:
         GPUTextureUsage.TEXTURE_BINDING |
         GPUTextureUsage.COPY_DST |

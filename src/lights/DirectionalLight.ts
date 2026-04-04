@@ -4,7 +4,7 @@ import { EntityType } from "../scene/Entity";
 
 export const SHADOW_MAP_CASCADES_COUNT = 3;
 export const DEFAULT_SHADOW_CASCADE_SPLITS = [0.0, 0.33, 0.66, 1.0];
-export const OFFSET = 10;
+export const OFFSET = 0;
 export const SHADOW_XY_PADDING = 0;
 
 export class DirectionalLight extends Light {

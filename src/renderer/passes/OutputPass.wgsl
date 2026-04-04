@@ -32,5 +32,13 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(input_texture, sampler_linear, in.uv_coords);
+    let linear = textureSample(input_texture, sampler_linear, in.uv_coords).rgb;
+
+    // sRGB gamma encoding 
+    let cutoff = vec3<f32>(0.0031308);
+    let low = linear * 12.92;
+    let high = 1.055 * pow(linear, vec3<f32>(1.0 / 2.4)) - 0.055;
+    var srgb = select(high, low, linear < cutoff);
+
+    return vec4<f32>(srgb, 1.0);
 }

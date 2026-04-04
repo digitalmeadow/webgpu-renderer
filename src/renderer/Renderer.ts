@@ -79,7 +79,7 @@ export class Renderer {
     this.targetRenderHeight = options.renderHeight ?? 0;
     this.devicePixelRatioOption = options.devicePixelRatio ?? 1;
     this.device = null as unknown as GPUDevice;
-    this.format = navigator.gpu.getPreferredCanvasFormat();
+    this.format = "rgba16float";
 
     this.geometryBuffer = null as unknown as GeometryBuffer;
     this.geometryPass = null as unknown as GeometryPass;
@@ -113,12 +113,11 @@ export class Renderer {
       throw new Error("Could not get WebGPU context");
     }
 
-    this.format = navigator.gpu.getPreferredCanvasFormat();
-
+    console.log("using format", this.format);
     this.context.configure({
       device: this.device,
       format: this.format,
-      alphaMode: "premultiplied",
+      alphaMode: "opaque",
     });
 
     this.materialManager = new MaterialManager(this.device);
@@ -420,26 +419,19 @@ export class Renderer {
         height: this.renderHeight,
       };
 
+      // Strict A/B ping-pong: pass 0 → B, pass 1 → A, pass 2 → B, ...
+      // lightingPass.outputView is the initial read source and is never written to.
+      // readView always points to the texture written by the previous pass.
       let readView: GPUTextureView = this.lightingPass.outputView;
-      let writeView: GPUTextureView = this.postPassViewB!;
 
       for (let i = 0; i < this.postPasses.length; i++) {
-        const pass = this.postPasses[i];
-        const isLastPass = i === this.postPasses.length - 1;
-        const outputView = isLastPass
-          ? this.postPassViewA!
-          : this.postPassViewB!;
-
-        pass.render(readView, outputView, postContext);
-
-        if (!isLastPass) {
-          const temp = readView;
-          readView = writeView;
-          writeView = temp;
-        }
+        const writeView =
+          i % 2 === 0 ? this.postPassViewB! : this.postPassViewA!;
+        this.postPasses[i].render(readView, writeView, postContext);
+        readView = writeView;
       }
 
-      lastOutputView = this.postPassViewA!;
+      lastOutputView = readView;
     }
 
     // Output Pass
@@ -486,7 +478,8 @@ export class Renderer {
     if (
       this.postPassTextureA &&
       this.postPassTextureA.width === this.renderWidth &&
-      this.postPassTextureA.height === this.renderHeight
+      this.postPassTextureA.height === this.renderHeight &&
+      this.postPassTextureA.format === "rgba16float"
     ) {
       return;
     }
@@ -502,7 +495,7 @@ export class Renderer {
       this.device.createTexture({
         label,
         size: [this.renderWidth, this.renderHeight],
-        format: navigator.gpu.getPreferredCanvasFormat(),
+        format: "rgba16float",
         usage:
           GPUTextureUsage.TEXTURE_BINDING |
           GPUTextureUsage.RENDER_ATTACHMENT |
@@ -551,7 +544,7 @@ export class Renderer {
         this.device.createTexture({
           label,
           size: [this.renderWidth, this.renderHeight],
-          format: navigator.gpu.getPreferredCanvasFormat(),
+          format: "rgba16float",
           usage:
             GPUTextureUsage.TEXTURE_BINDING |
             GPUTextureUsage.RENDER_ATTACHMENT |

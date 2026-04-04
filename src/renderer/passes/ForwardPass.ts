@@ -101,7 +101,7 @@ export class ForwardPass {
         entryPoint: "fs_main",
         targets: [
           {
-            format: navigator.gpu.getPreferredCanvasFormat(),
+            format: "rgba16float",
             blend: {
               color: {
                 srcFactor: "src-alpha",
@@ -154,7 +154,9 @@ export class ForwardPass {
         },
         {
           binding: 3,
-          resource: this.lightManager.shadowTextureView || this.lightManager.dummyShadowTextureView,
+          resource:
+            this.lightManager.shadowTextureView ||
+            this.lightManager.dummyShadowTextureView,
         },
         {
           binding: 4,
@@ -162,7 +164,9 @@ export class ForwardPass {
         },
         {
           binding: 5,
-          resource: this.lightManager.spotShadowTextureView || this.lightManager.dummyShadowTextureView,
+          resource:
+            this.lightManager.spotShadowTextureView ||
+            this.lightManager.dummyShadowTextureView,
         },
       ],
     });

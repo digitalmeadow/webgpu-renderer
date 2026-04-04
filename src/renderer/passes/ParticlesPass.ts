@@ -99,7 +99,7 @@ export class ParticlesPass {
         entryPoint: "fs_main",
         targets: [
           {
-            format: navigator.gpu.getPreferredCanvasFormat(),
+            format: "rgba16float",
             blend: {
               color: {
                 srcFactor: "src-alpha",

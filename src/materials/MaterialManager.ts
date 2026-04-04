@@ -66,7 +66,7 @@ export class MaterialManager {
       mipLevelCount: 4,
       sampleCount: 1,
       dimension: "2d",
-      format: "rgba8unorm",
+      format: "rgba8unorm-srgb",
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
     this.placeholderEnvView = this.placeholderEnvTexture.createView({
@@ -213,7 +213,7 @@ export class MaterialManager {
             ]
           : [
               {
-                format: navigator.gpu.getPreferredCanvasFormat(),
+                format: "rgba16float",
                 blend: {
                   color: {
                     srcFactor: "src-alpha",
@@ -300,7 +300,7 @@ export class MaterialManager {
             ]
           : [
               {
-                format: navigator.gpu.getPreferredCanvasFormat(),
+                format: "rgba16float",
                 blend: {
                   color: {
                     srcFactor: "src-alpha",

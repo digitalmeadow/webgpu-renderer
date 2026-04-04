@@ -146,7 +146,7 @@ export class GeometryBuffer {
     this.albedoTexture = device.createTexture({
       label: "G-Buffer Albedo Texture",
       size: [width, height],
-      format: "rgba8unorm",
+      format: "rgba8unorm-srgb",
       usage:
         GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });

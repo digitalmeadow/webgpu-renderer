@@ -26,7 +26,7 @@ export class LightingPass {
     this.outputTexture = device.createTexture({
       label: "Lighting Pass Output Texture",
       size: [width, height],
-      format: navigator.gpu.getPreferredCanvasFormat(),
+      format: "rgba16float",
       usage:
         GPUTextureUsage.TEXTURE_BINDING |
         GPUTextureUsage.RENDER_ATTACHMENT |
@@ -54,7 +54,7 @@ export class LightingPass {
         entryPoint: "fs_main",
         targets: [
           {
-            format: navigator.gpu.getPreferredCanvasFormat(),
+            format: "rgba16float",
           },
         ],
       },
@@ -69,7 +69,7 @@ export class LightingPass {
     this.outputTexture = device.createTexture({
       label: "Lighting Pass Output Texture",
       size: [width, height],
-      format: navigator.gpu.getPreferredCanvasFormat(),
+      format: "rgba16float",
       usage:
         GPUTextureUsage.TEXTURE_BINDING |
         GPUTextureUsage.RENDER_ATTACHMENT |
