@@ -157,24 +157,20 @@ export class ShadowPassSpotLight {
 
       const frustumPlanes = frustumPlanesFromMatrix(light.viewProjectionMatrix);
 
-      // const visibleOpaqueMeshes = opaqueMeshes.filter((mesh) => {
-      //   mesh.updateWorldAABB();
-      //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-      // });
-      //
-      // const visibleAlphaTestMeshes = alphaTestMeshes.filter((mesh) => {
-      //   mesh.updateWorldAABB();
-      //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-      // });
-      //
-      // const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
-      //   mesh.updateWorldAABB();
-      //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-      // });
-      // Disabling culling for now
-      const visibleOpaqueMeshes = opaqueMeshes;
-      const visibleAlphaTestMeshes = alphaTestMeshes;
-      const visibleTransparentMeshes = transparentMeshes;
+      const visibleOpaqueMeshes = opaqueMeshes.filter((mesh) => {
+        mesh.updateWorldAABB();
+        return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+      });
+
+      const visibleAlphaTestMeshes = alphaTestMeshes.filter((mesh) => {
+        mesh.updateWorldAABB();
+        return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+      });
+
+      const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
+        mesh.updateWorldAABB();
+        return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+      });
 
       const encoder = device.createCommandEncoder({
         label: `Shadow Pass SpotLight Encoder Light ${lightIndex}`,
@@ -233,13 +229,11 @@ export class ShadowPassSpotLight {
 
           const materialBindGroup = mesh.material
             ? this.materialManager.getBindGroup(mesh.material)
-            : null;
+            : this.materialManager.fallbackBindGroup;
 
           passEncoder.setBindGroup(0, light.shadowBindGroup);
           passEncoder.setBindGroup(1, meshBindGroup);
-          if (materialBindGroup) {
-            passEncoder.setBindGroup(2, materialBindGroup);
-          }
+          passEncoder.setBindGroup(2, materialBindGroup);
           passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
           passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
           passEncoder.drawIndexed(mesh.geometry.indexCount);
@@ -265,13 +259,11 @@ export class ShadowPassSpotLight {
 
           const materialBindGroup = mesh.material
             ? this.materialManager.getBindGroup(mesh.material)
-            : null;
+            : this.materialManager.fallbackBindGroup;
 
           passEncoder.setBindGroup(0, light.shadowBindGroup);
           passEncoder.setBindGroup(1, meshBindGroup);
-          if (materialBindGroup) {
-            passEncoder.setBindGroup(2, materialBindGroup);
-          }
+          passEncoder.setBindGroup(2, materialBindGroup);
           passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
           passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
           passEncoder.drawIndexed(mesh.geometry.indexCount);

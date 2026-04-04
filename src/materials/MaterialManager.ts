@@ -22,6 +22,7 @@ export class MaterialManager {
   private placeholderEnvTexture: GPUTexture;
   private placeholderEnvView: GPUTextureView;
   private placeholderEnvSampler: GPUSampler;
+  public readonly fallbackBindGroup: GPUBindGroup;
 
   private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> =
     new Map();
@@ -132,6 +133,38 @@ export class MaterialManager {
           texture: { sampleType: "float" },
         },
       ],
+    });
+
+    this.fallbackBindGroup = device.createBindGroup({
+      label: "Fallback Material Bind Group",
+      layout: this.materialBindGroupLayout,
+      entries: [
+        { binding: 0, resource: this.defaultSampler },
+        { binding: 1, resource: this.placeholderAlbedoTexture.createView() },
+        { binding: 2, resource: this.placeholderNormalTexture.createView() },
+        {
+          binding: 3,
+          resource: this.placeholderMetalRoughnessTexture.createView(),
+        },
+        {
+          binding: 4,
+          resource: { buffer: this.createFallbackUniformBuffer() },
+        },
+        { binding: 5, resource: this.placeholderEnvView },
+        { binding: 6, resource: this.placeholderEnvSampler },
+        {
+          binding: 7,
+          resource: this.placeholderEmissiveTexture.createView(),
+        },
+      ],
+    });
+  }
+
+  private createFallbackUniformBuffer(): GPUBuffer {
+    return this.device.createBuffer({
+      label: "Fallback Uniform Buffer",
+      size: 256,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
   }
 
@@ -414,7 +447,7 @@ export class MaterialManager {
 
     if (resolvedMaterialType === MaterialType.PBR) {
       const pbrMaterial = material as MaterialPBR;
-      if (!pbrMaterial.albedoTexture) return null;
+      if (!pbrMaterial.albedoTexture) return this.fallbackBindGroup;
       const albedoView = this.textureCache
         .get(pbrMaterial.albedoTexture)
         ?.createView();
@@ -520,6 +553,6 @@ export class MaterialManager {
       return bindGroup;
     }
 
-    return null;
+    return this.fallbackBindGroup;
   }
 }

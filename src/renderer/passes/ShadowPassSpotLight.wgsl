@@ -64,5 +64,5 @@ fn fs_main(in: VertexOutput) -> @builtin(frag_depth) f32 {
     if (albedo.a == 0.0) {
         discard;
     }
-    return in.position.z / in.position.w;
+    return in.position.z;
 }

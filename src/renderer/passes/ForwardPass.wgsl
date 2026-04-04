@@ -208,7 +208,7 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
 
     // In right-handed view space, -Z is forward. Points behind the light have Z >= 0
     if light_view_pos.z >= 0.0 {
-        return 1.0; // Behind the light - no contribution
+        return 0.0; // Behind the light - no contribution
     }
 
     // Points behind the NDC camera should not contribute to lighting
