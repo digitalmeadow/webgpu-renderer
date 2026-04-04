@@ -162,7 +162,8 @@ export class ShadowPassDirectionalLight {
   public render(
     device: GPUDevice,
     directionalLights: DirectionalLight[],
-    meshes: Mesh[],
+    opaqueMeshes: Mesh[],
+    alphaTestMeshes: Mesh[] = [],
     transparentMeshes: Mesh[] = [],
   ): void {
     for (
@@ -183,7 +184,12 @@ export class ShadowPassDirectionalLight {
           light.viewProjectionMatrices[cascadeIndex],
         );
 
-        const visibleMeshes = meshes.filter((mesh) => {
+        const visibleOpaqueMeshes = opaqueMeshes.filter((mesh) => {
+          mesh.updateWorldAABB();
+          return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+        });
+
+        const visibleAlphaTestMeshes = alphaTestMeshes.filter((mesh) => {
           mesh.updateWorldAABB();
           return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
         });
@@ -213,7 +219,7 @@ export class ShadowPassDirectionalLight {
 
         passEncoder.setPipeline(this.pipeline);
 
-        for (const mesh of visibleMeshes) {
+        for (const mesh of visibleOpaqueMeshes) {
           mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
 
           const meshBindGroup = this.device.createBindGroup({
@@ -232,6 +238,38 @@ export class ShadowPassDirectionalLight {
           passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
           passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
           passEncoder.drawIndexed(mesh.geometry.indexCount);
+        }
+
+        if (visibleAlphaTestMeshes.length > 0) {
+          passEncoder.setPipeline(this.transparentPipeline);
+
+          for (const mesh of visibleAlphaTestMeshes) {
+            mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+
+            const meshBindGroup = this.device.createBindGroup({
+              label: "Shadow Pass AlphaTest Mesh Bind Group",
+              layout: this.meshBindGroupLayout,
+              entries: [
+                {
+                  binding: 0,
+                  resource: { buffer: mesh.uniforms.buffer },
+                },
+              ],
+            });
+
+            const materialBindGroup = mesh.material
+              ? this.materialManager.getBindGroup(mesh.material)
+              : null;
+
+            passEncoder.setBindGroup(0, light.shadowBindGroup);
+            passEncoder.setBindGroup(1, meshBindGroup);
+            if (materialBindGroup) {
+              passEncoder.setBindGroup(2, materialBindGroup);
+            }
+            passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
+            passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
+            passEncoder.drawIndexed(mesh.geometry.indexCount);
+          }
         }
 
         if (visibleTransparentMeshes.length > 0) {

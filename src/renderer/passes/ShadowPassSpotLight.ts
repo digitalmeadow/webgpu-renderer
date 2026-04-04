@@ -94,7 +94,7 @@ export class ShadowPassSpotLight {
       },
       primitive: {
         topology: "triangle-list",
-        cullMode: "front",
+        cullMode: "back",
       },
       depthStencil: {
         depthWriteEnabled: true,
@@ -133,8 +133,8 @@ export class ShadowPassSpotLight {
         depthWriteEnabled: true,
         depthCompare: "less-equal",
         format: "depth32float",
-        depthBias: 4,
-        depthBiasSlopeScale: 2.0,
+        depthBias: 5000,
+        depthBiasSlopeScale: 1.5,
         depthBiasClamp: 0,
       },
     });
@@ -148,25 +148,33 @@ export class ShadowPassSpotLight {
   public render(
     device: GPUDevice,
     spotLights: SpotLight[],
-    meshes: Mesh[],
+    opaqueMeshes: Mesh[],
+    alphaTestMeshes: Mesh[] = [],
     transparentMeshes: Mesh[] = [],
   ): void {
     for (let lightIndex = 0; lightIndex < spotLights.length; lightIndex++) {
       const light = spotLights[lightIndex];
 
-      light.updateShadowMatrix();
-
       const frustumPlanes = frustumPlanesFromMatrix(light.viewProjectionMatrix);
 
-      const visibleMeshes = meshes.filter((mesh) => {
-        mesh.updateWorldAABB();
-        return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-      });
-
-      const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
-        mesh.updateWorldAABB();
-        return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-      });
+      // const visibleOpaqueMeshes = opaqueMeshes.filter((mesh) => {
+      //   mesh.updateWorldAABB();
+      //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+      // });
+      //
+      // const visibleAlphaTestMeshes = alphaTestMeshes.filter((mesh) => {
+      //   mesh.updateWorldAABB();
+      //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+      // });
+      //
+      // const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
+      //   mesh.updateWorldAABB();
+      //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+      // });
+      // Disabling culling for now
+      const visibleOpaqueMeshes = opaqueMeshes;
+      const visibleAlphaTestMeshes = alphaTestMeshes;
+      const visibleTransparentMeshes = transparentMeshes;
 
       const encoder = device.createCommandEncoder({
         label: `Shadow Pass SpotLight Encoder Light ${lightIndex}`,
@@ -185,7 +193,7 @@ export class ShadowPassSpotLight {
 
       passEncoder.setPipeline(this.pipeline);
 
-      for (const mesh of visibleMeshes) {
+      for (const mesh of visibleOpaqueMeshes) {
         mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
 
         const meshBindGroup = this.device.createBindGroup({
@@ -204,6 +212,38 @@ export class ShadowPassSpotLight {
         passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
         passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
         passEncoder.drawIndexed(mesh.geometry.indexCount);
+      }
+
+      if (visibleAlphaTestMeshes.length > 0) {
+        passEncoder.setPipeline(this.transparentPipeline);
+
+        for (const mesh of visibleAlphaTestMeshes) {
+          mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+
+          const meshBindGroup = this.device.createBindGroup({
+            label: "Shadow Pass SpotLight AlphaTest Mesh Bind Group",
+            layout: this.meshBindGroupLayout,
+            entries: [
+              {
+                binding: 0,
+                resource: { buffer: mesh.uniforms.buffer },
+              },
+            ],
+          });
+
+          const materialBindGroup = mesh.material
+            ? this.materialManager.getBindGroup(mesh.material)
+            : null;
+
+          passEncoder.setBindGroup(0, light.shadowBindGroup);
+          passEncoder.setBindGroup(1, meshBindGroup);
+          if (materialBindGroup) {
+            passEncoder.setBindGroup(2, materialBindGroup);
+          }
+          passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
+          passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
+          passEncoder.drawIndexed(mesh.geometry.indexCount);
+        }
       }
 
       if (visibleTransparentMeshes.length > 0) {

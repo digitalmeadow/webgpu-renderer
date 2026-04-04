@@ -208,7 +208,7 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
 
     // In right-handed view space, -Z is forward. Points behind the light have Z >= 0
     if light_view_pos.z >= 0.0 {
-        return 0.0; // Behind the light - no contribution
+        return 1.0; // Behind the light - no contribution
     }
 
     // Points behind the NDC camera should not contribute to lighting
@@ -223,7 +223,7 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
 
     // Check if position is within spotlight frustum
     if light_local.x < 0.0 || light_local.x > 1.0 || light_local.y < 0.0 || light_local.y > 1.0 || depth < 0.0 || depth > 1.0 {
-        return 0.0; // Outside spotlight frustum - fully shadowed
+        return 1.0; // Outside spotlight frustum - fully lit
     }
 
     // Vogel disk sampling for shadow smoothing

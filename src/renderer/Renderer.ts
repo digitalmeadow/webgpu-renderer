@@ -113,7 +113,6 @@ export class Renderer {
       throw new Error("Could not get WebGPU context");
     }
 
-    console.log("using format", this.format);
     this.context.configure({
       device: this.device,
       format: this.format,
@@ -332,6 +331,7 @@ export class Renderer {
         this.device,
         directionalLights,
         opaqueMeshes,
+        alphaTestMeshes,
         blendMeshes,
       );
 
@@ -350,6 +350,7 @@ export class Renderer {
         this.device,
         spotLights,
         opaqueMeshes,
+        alphaTestMeshes,
         blendMeshes,
       );
 
