@@ -2,6 +2,7 @@
 --- Visuals ---
 
 Debug why front headlights with a white emissive texture value, are rendering yellow when emissive is turned up to 1, 1, 1
+Debug why opaque meshes billboard isn't working
 Get windscreen slight alpha and reflections working properly
 
 Not in order:

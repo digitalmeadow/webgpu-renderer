@@ -384,6 +384,17 @@ export class Renderer {
       );
     }
 
+    // Forward Pass (transparency)
+    if (this.forwardPass && blendMeshes.length > 0) {
+      this.forwardPass.render(
+        commandEncoder,
+        blendMeshes,
+        camera,
+        this.lightingPass.outputView,
+        this.geometryBuffer.depthView,
+      );
+    }
+
     // Particles Pass
     const emitters = this.collectParticleEmitters(world);
     for (const emitter of emitters) {
@@ -394,17 +405,6 @@ export class Renderer {
         commandEncoder,
         camera,
         emitters,
-        this.lightingPass.outputView,
-        this.geometryBuffer.depthView,
-      );
-    }
-
-    // Forward Pass (transparency)
-    if (this.forwardPass && blendMeshes.length > 0) {
-      this.forwardPass.render(
-        commandEncoder,
-        blendMeshes,
-        camera,
         this.lightingPass.outputView,
         this.geometryBuffer.depthView,
       );
