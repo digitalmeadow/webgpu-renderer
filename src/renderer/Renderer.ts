@@ -26,6 +26,7 @@ export interface RendererOptions {
   renderWidth?: number;
   renderHeight?: number;
   devicePixelRatio?: number;
+  transparentSortEnabled?: boolean;
 }
 
 const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
@@ -47,6 +48,7 @@ export class Renderer {
 
   public frustumCulling: boolean = false;
   public skyboxTexture: CubeTexture | null = null;
+  public transparentSortEnabled: boolean = true;
 
   public renderWidth: number = 0;
   public renderHeight: number = 0;
@@ -78,6 +80,7 @@ export class Renderer {
     this.targetRenderWidth = options.renderWidth ?? 0;
     this.targetRenderHeight = options.renderHeight ?? 0;
     this.devicePixelRatioOption = options.devicePixelRatio ?? 1;
+    this.transparentSortEnabled = options.transparentSortEnabled ?? true;
     this.device = null as unknown as GPUDevice;
     this.format = "rgba16float";
 
@@ -207,6 +210,7 @@ export class Renderer {
       this.geometryPass.meshBindGroupLayout,
       this.lightManager,
       this.sceneUniforms,
+      this.transparentSortEnabled,
     );
 
     this.skyboxPass = new SkyboxPass(

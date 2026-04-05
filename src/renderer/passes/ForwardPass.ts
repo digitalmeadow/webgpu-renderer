@@ -4,6 +4,7 @@ import { LightManager } from "../../lights/LightManager";
 import { SceneUniforms } from "../../uniforms";
 import { Camera } from "../../camera";
 import { Vertex } from "../../geometries";
+import { Vec3 } from "../../math";
 import shader from "./ForwardPass.wgsl?raw";
 
 export class ForwardPass {
@@ -15,6 +16,7 @@ export class ForwardPass {
   private lightSceneBindGroupLayout: GPUBindGroupLayout;
   private lightManager: LightManager;
   private sceneUniforms: SceneUniforms;
+  private sortEnabled: boolean;
 
   constructor(
     device: GPUDevice,
@@ -22,6 +24,7 @@ export class ForwardPass {
     meshBindGroupLayout: GPUBindGroupLayout,
     lightManager: LightManager,
     sceneUniforms: SceneUniforms,
+    sortEnabled: boolean = true,
   ) {
     this.device = device;
     this.materialManager = materialManager;
@@ -29,6 +32,7 @@ export class ForwardPass {
     this.meshBindGroupLayout = meshBindGroupLayout;
     this.lightManager = lightManager;
     this.sceneUniforms = sceneUniforms;
+    this.sortEnabled = sortEnabled;
 
     const shaderModule = device.createShaderModule({
       code: shader,
@@ -212,6 +216,21 @@ export class ForwardPass {
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, camera.uniforms.bindGroup);
     passEncoder.setBindGroup(2, lightSceneBindGroup);
+
+    if (this.sortEnabled) {
+      const cameraPos = camera.position;
+      meshes.sort((a, b) => {
+        const distA = Vec3.distanceSquared(
+          a.transform.getWorldPosition(),
+          cameraPos,
+        );
+        const distB = Vec3.distanceSquared(
+          b.transform.getWorldPosition(),
+          cameraPos,
+        );
+        return distB - distA;
+      });
+    }
 
     for (const mesh of meshes) {
       if (!mesh.material) {
