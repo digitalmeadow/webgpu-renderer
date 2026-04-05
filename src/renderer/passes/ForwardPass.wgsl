@@ -150,7 +150,7 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
 
     let right = normalize(cross(safe_forward, axisVec));
     let up = axisVec;
-    let billboard_forward = -safe_forward;
+    let billboard_forward = safe_forward;
 
     return mat3x3<f32>(right, up, billboard_forward);
 }
@@ -174,7 +174,8 @@ fn vs_main(in: VertexInput) -> VertexOutput {
         let billboarded_normal = billboard_matrix * in.normal;
         out.position = camera_uniforms.view_projection_matrix * vec4<f32>(mesh_pos + billboarded_pos, 1.0);
         out.world_position = mesh_pos + billboarded_pos;
-        out.world_normal = (mesh_uniforms.model_matrix * vec4<f32>(billboarded_normal, 0.0)).xyz;
+        // Billboard normal is already in world space - don't apply model matrix
+        out.world_normal = billboarded_normal;
         out.uv_coords = in.uv;
         return out;
     }
@@ -416,7 +417,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
             let shadow = fetch_light_spot_shadow(j, in.world_position, light_spot.view_matrix, shadow_coords, in.position.xy);
 
-            let light_to_frag = in.world_position - light_spot.position.xyz;
+            let light_to_frag = light_spot.position.xyz - in.world_position;
             let light_dir = normalize(light_to_frag);
 
             let prenumbra_percent = light_spot.fov_prenumbra.y;
