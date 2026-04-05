@@ -11,6 +11,7 @@ export class MeshUniforms {
 
   private jointMatricesData: Float32Array;
   private applySkinningValue: Uint32Array;
+  private billboardAxisValue: Uint32Array;
 
   constructor(device: GPUDevice) {
     this.modelMatrix = Mat4.create();
@@ -19,6 +20,7 @@ export class MeshUniforms {
 
     this.jointMatricesData = new Float32Array(MAX_JOINTS * 16);
     this.applySkinningValue = new Uint32Array([0]);
+    this.billboardAxisValue = new Uint32Array([0]);
 
     const bufferSize = 64 + MAX_JOINTS * 64 + 16;
 
@@ -51,8 +53,23 @@ export class MeshUniforms {
     });
   }
 
-  update(device: GPUDevice, modelMatrix: Mat4): void {
+  update(
+    device: GPUDevice,
+    modelMatrix: Mat4,
+    billboardAxis: number = 0,
+  ): void {
     device.queue.writeBuffer(this.buffer, 0, modelMatrix.data as any);
+
+    // 0 = disabled, 1 = x, 2 = y, 3 = z
+    // Write at offset after modelMatrix + joint_matrices + applySkinning
+    // modelMatrix (64) + joint_matrices (MAX_JOINTS * 64) + apply_skinning (4) = 4164 for MAX_JOINTS=64
+    this.billboardAxisValue[0] = billboardAxis;
+    const billboardOffset = 64 + MAX_JOINTS * 64 + 4;
+    device.queue.writeBuffer(
+      this.buffer,
+      billboardOffset,
+      this.billboardAxisValue.buffer,
+    );
   }
 
   updateJointMatrices(device: GPUDevice, matrices: Mat4[]): void {

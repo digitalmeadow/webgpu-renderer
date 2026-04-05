@@ -165,12 +165,25 @@ export class GeometryPass {
 
       if (!pipelineToUse) return;
 
+      const billboardAxis =
+        mesh.billboard === "x"
+          ? 1
+          : mesh.billboard === "y"
+            ? 2
+            : mesh.billboard === "z"
+              ? 3
+              : 0;
+      mesh.uniforms.update(
+        device,
+        mesh.transform.getWorldMatrix(),
+        billboardAxis,
+      );
+
       if (pipelineToUse !== currentPipeline) {
         passEncoder.setPipeline(pipelineToUse);
         currentPipeline = pipelineToUse;
       }
 
-      mesh.uniforms.update(device, mesh.transform.getWorldMatrix());
       passEncoder.setBindGroup(1, mesh.uniforms.bindGroup);
 
       const materialBindGroup = materialManager.getBindGroup(mesh.material);

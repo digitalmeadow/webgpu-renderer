@@ -10,6 +10,7 @@ Not in order:
   Snap shadows to pixels to avoid jittering?
 
 - Try rendering a tree pack to billboarded with normals for foliage
+  - Add billboarding option to meshes as a GLTF extra option
 - Ambient occlusion
 
 

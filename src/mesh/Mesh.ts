@@ -11,6 +11,7 @@ export class Mesh extends Entity {
   public uniforms: MeshUniforms;
   public material: MaterialBase | null = null;
   public skinData: SkinData | null = null;
+  public billboard: "x" | "y" | "z" | 0 = 0;
   private device: GPUDevice;
 
   constructor(

@@ -45,10 +45,44 @@ struct MeshUniforms {
     model_transform_matrix: mat4x4<f32>,
     joint_matrices: array<mat4x4<f32>, MAX_JOINTS>,
     apply_skinning: u32,
+    billboardAxis: u32,
 }
 
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
 @group(1) @binding(0) var<uniform> model: MeshUniforms;
+
+fn get_billboard_axis(axis: u32) -> vec3<f32> {
+    return select(
+        select(vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(1.0, 0.0, 0.0), axis == 1u),
+        vec3<f32>(0.0, 1.0, 0.0),
+        axis == 2u
+    );
+}
+
+fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat3x3<f32> {
+    let forward = normalize(camera.position.xyz - mesh_pos);
+
+    let forwardDotAxis = dot(forward, axisVec);
+    let is_edge_case = abs(forwardDotAxis) > 0.995;
+
+    var safe_forward = forward;
+    if (is_edge_case) {
+        let axis_component = select(0.0, 1.0, abs(axisVec.x) > 0.5);
+        let default_fwd = select(
+            vec3<f32>(0.0, 0.0, 1.0),
+            vec3<f32>(1.0, 0.0, 0.0),
+            axis_component > 0.5
+        );
+        safe_forward = default_fwd - axisVec * dot(default_fwd, axisVec);
+        safe_forward = normalize(safe_forward);
+    }
+
+    let right = normalize(cross(safe_forward, axisVec));
+    let up = axisVec;
+    let billboard_forward = -safe_forward;
+
+    return mat3x3<f32>(right, up, billboard_forward);
+}
 
 @group(2) @binding(0) var defaultSampler: sampler;
 @group(2) @binding(1) var albedoTexture: texture_2d<f32>;
@@ -78,16 +112,33 @@ fn vs_main(
     );
 
     let skinned_position = skin_matrix * position;
-    let final_position = select(position, skinned_position, bool(model.apply_skinning));
+    let local_pos = select(position.xyz, skinned_position.xyz, bool(model.apply_skinning));
+    let local_normal = normal;
 
-    let world_position = model.model_transform_matrix * final_position;
-    output.world_position = world_position.xyz;
-    output.world_normal = (model.model_transform_matrix * vec4<f32>(normal, 0.0)).xyz;
-    output.world_tangent = (model.model_transform_matrix * vec4<f32>(tangent.xyz, 0.0));
+    // Extract world position from model matrix translation (column 4)
+    let mesh_pos = model.model_transform_matrix[3].xyz;
+    
+    // Apply billboarding if enabled
+    if (model.billboardAxis != 0u) {
+        let axisVec = get_billboard_axis(model.billboardAxis);
+        let billboard_matrix = compute_billboard_orientation(mesh_pos, axisVec);
+        
+        let billboarded_pos = billboard_matrix * local_pos;
+        let billboarded_normal = billboard_matrix * local_normal;
+        output.world_position = mesh_pos + billboarded_pos;
+        output.world_normal = (model.model_transform_matrix * vec4<f32>(billboarded_normal, 0.0)).xyz;
+        output.world_tangent = (model.model_transform_matrix * vec4<f32>(billboarded_normal, 0.0));
+    } else {
+        let world_position = model.model_transform_matrix * vec4<f32>(local_pos, 1.0);
+        output.world_position = world_position.xyz;
+        output.world_normal = (model.model_transform_matrix * vec4<f32>(local_normal, 0.0)).xyz;
+        output.world_tangent = (model.model_transform_matrix * vec4<f32>(tangent.xyz, 0.0));
+    }
+    
     output.uv_coords = uv;
 
-    let view_position = camera.view_matrix * world_position;
-    output.position = camera.view_projection_matrix * world_position;
+    let view_position = camera.view_matrix * vec4<f32>(output.world_position, 1.0);
+    output.position = camera.view_projection_matrix * vec4<f32>(output.world_position, 1.0);
 
     return output;
 }

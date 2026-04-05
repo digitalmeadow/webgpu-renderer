@@ -26,6 +26,9 @@ struct CameraUniforms {
 // Mesh uniforms (group 1)
 struct MeshUniforms {
     model_matrix: mat4x4<f32>,
+    joint_matrices: array<mat4x4<f32>, 64>,
+    apply_skinning: u32,
+    billboardAxis: u32,
 }
 
 @group(1) @binding(0) var<uniform> mesh_uniforms: MeshUniforms;
@@ -119,13 +122,67 @@ struct VertexInput {
     @location(2) uv: vec2<f32>,
 };
 
+fn get_billboard_axis(axis: u32) -> vec3<f32> {
+    return select(
+        select(vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(1.0, 0.0, 0.0), axis == 1u),
+        vec3<f32>(0.0, 1.0, 0.0),
+        axis == 2u
+    );
+}
+
+fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat3x3<f32> {
+    let forward = normalize(camera_uniforms.position.xyz - mesh_pos);
+
+    let forwardDotAxis = dot(forward, axisVec);
+    let is_edge_case = abs(forwardDotAxis) > 0.995;
+
+    var safe_forward = forward;
+    if (is_edge_case) {
+        let axis_component = select(0.0, 1.0, abs(axisVec.x) > 0.5);
+        let default_fwd = select(
+            vec3<f32>(0.0, 0.0, 1.0),
+            vec3<f32>(1.0, 0.0, 0.0),
+            axis_component > 0.5
+        );
+        safe_forward = default_fwd - axisVec * dot(default_fwd, axisVec);
+        safe_forward = normalize(safe_forward);
+    }
+
+    let right = normalize(cross(safe_forward, axisVec));
+    let up = axisVec;
+    let billboard_forward = -safe_forward;
+
+    return mat3x3<f32>(right, up, billboard_forward);
+}
+
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    let world_pos = mesh_uniforms.model_matrix * vec4<f32>(in.position, 1.0);
-    out.position = camera_uniforms.view_projection_matrix * world_pos;
-    out.world_position = world_pos.xyz;
-    out.world_normal = (mesh_uniforms.model_matrix * vec4<f32>(in.normal, 0.0)).xyz;
+    
+    var local_pos = in.position;
+    var local_normal = in.normal;
+    
+    // Extract world position directly from model matrix translation (column 4)
+    let mesh_pos = mesh_uniforms.model_matrix[3].xyz;
+    
+    // Apply billboarding if enabled
+    if (mesh_uniforms.billboardAxis != 0u) {
+        let axisVec = get_billboard_axis(mesh_uniforms.billboardAxis);
+        let billboard_matrix = compute_billboard_orientation(mesh_pos, axisVec);
+        
+        let billboarded_pos = billboard_matrix * in.position;
+        let billboarded_normal = billboard_matrix * in.normal;
+        out.position = camera_uniforms.view_projection_matrix * vec4<f32>(mesh_pos + billboarded_pos, 1.0);
+        out.world_position = mesh_pos + billboarded_pos;
+        out.world_normal = (mesh_uniforms.model_matrix * vec4<f32>(billboarded_normal, 0.0)).xyz;
+        out.uv_coords = in.uv;
+        return out;
+    }
+    
+    let world_position = mesh_uniforms.model_matrix * vec4<f32>(local_pos, 1.0);
+    out.position = camera_uniforms.view_projection_matrix * world_position;
+    out.world_position = world_position.xyz;
+    out.world_normal = (mesh_uniforms.model_matrix * vec4<f32>(local_normal, 0.0)).xyz;
     out.uv_coords = in.uv;
     return out;
 }

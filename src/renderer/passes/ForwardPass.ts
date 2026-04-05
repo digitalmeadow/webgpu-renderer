@@ -218,7 +218,19 @@ export class ForwardPass {
         continue;
       }
 
-      mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+      const billboardAxis =
+        mesh.billboard === "x"
+          ? 1
+          : mesh.billboard === "y"
+            ? 2
+            : mesh.billboard === "z"
+              ? 3
+              : 0;
+      mesh.uniforms.update(
+        this.device,
+        mesh.transform.getWorldMatrix(),
+        billboardAxis,
+      );
 
       const meshBindGroup = this.device.createBindGroup({
         layout: this.meshBindGroupLayout,
