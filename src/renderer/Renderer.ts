@@ -27,6 +27,7 @@ export interface RendererOptions {
   renderHeight?: number;
   devicePixelRatio?: number;
   transparentSortEnabled?: boolean;
+  antiAliasingScale?: number;
 }
 
 const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
@@ -44,6 +45,7 @@ export class Renderer {
   private targetRenderWidth: number;
   private targetRenderHeight: number;
   private devicePixelRatioOption: number;
+  private antiAliasingScale: number;
   private cameras: Set<Camera> = new Set();
 
   public frustumCulling: boolean = false;
@@ -81,6 +83,7 @@ export class Renderer {
     this.targetRenderHeight = options.renderHeight ?? 0;
     this.devicePixelRatioOption = options.devicePixelRatio ?? 1;
     this.transparentSortEnabled = options.transparentSortEnabled ?? true;
+    this.antiAliasingScale = options.antiAliasingScale ?? 1;
     this.device = null as unknown as GPUDevice;
     this.format = "rgba16float";
 
@@ -136,11 +139,15 @@ export class Renderer {
     const canvasHeight = Math.round(rect.height * dpr);
 
     if (this.targetRenderWidth === 0 || this.targetRenderHeight === 0) {
-      this.renderWidth = canvasWidth;
-      this.renderHeight = canvasHeight;
+      this.renderWidth = Math.round(canvasWidth * this.antiAliasingScale);
+      this.renderHeight = Math.round(canvasHeight * this.antiAliasingScale);
     } else {
-      this.renderWidth = this.targetRenderWidth;
-      this.renderHeight = this.targetRenderHeight;
+      this.renderWidth = Math.round(
+        this.targetRenderWidth * this.antiAliasingScale,
+      );
+      this.renderHeight = Math.round(
+        this.targetRenderHeight * this.antiAliasingScale,
+      );
     }
 
     this.setup();
@@ -238,6 +245,9 @@ export class Renderer {
       Math.min(h, this.device.limits.maxTextureDimension2D),
     );
 
+    this.renderWidth = Math.round(this.canvas.width * this.antiAliasingScale);
+    this.renderHeight = Math.round(this.canvas.height * this.antiAliasingScale);
+
     this.context.configure({
       device: this.device,
       format: this.format,
@@ -248,6 +258,8 @@ export class Renderer {
       camera.resize(this.canvas.width, this.canvas.height);
       camera.update(this.device);
     }
+
+    this.recreateRenderTargets();
   }
 
   public registerCamera(camera: Camera): void {

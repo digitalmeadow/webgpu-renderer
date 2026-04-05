@@ -21,6 +21,9 @@ struct LightSpotUniforms {
     position: vec4<f32>,
     near_far: vec4<f32>,
     color_intensity: vec4<f32>,
+    forward: vec4<f32>,
+    fov_prenumbra: vec4<f32>,
+    aspect_radius: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> light_spot_uniforms: LightSpotUniforms;
@@ -29,9 +32,42 @@ struct MeshUniforms {
     model_transform_matrix: mat4x4<f32>,
     joint_matrices: array<mat4x4<f32>, MAX_JOINTS>,
     apply_skinning: u32,
+    billboardAxis: u32,
 }
 
 @group(1) @binding(0) var<uniform> mesh_uniforms: MeshUniforms;
+
+fn get_billboard_axis(axis: u32) -> vec3<f32> {
+    return select(
+        select(vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(1.0, 0.0, 0.0), axis == 1u),
+        vec3<f32>(0.0, 1.0, 0.0),
+        axis == 2u
+    );
+}
+
+fn compute_light_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>, lightDir: vec3<f32>) -> mat3x3<f32> {
+    let forward = normalize(-lightDir);
+
+    let forwardDotAxis = dot(forward, axisVec);
+    let is_edge_case = abs(forwardDotAxis) > 0.995;
+
+    var safe_forward = forward;
+    if (is_edge_case) {
+        let axis_component = select(0.0, 1.0, abs(axisVec.x) > 0.5);
+        let default_fwd = select(
+            vec3<f32>(0.0, 0.0, 1.0),
+            vec3<f32>(1.0, 0.0, 0.0),
+            axis_component > 0.5
+        );
+        safe_forward = default_fwd - axisVec * dot(default_fwd, axisVec);
+        safe_forward = normalize(safe_forward);
+    }
+
+    let right = normalize(cross(safe_forward, axisVec));
+    let up = axisVec;
+
+    return mat3x3<f32>(right, up, safe_forward);
+}
 
 @group(2) @binding(0) var defaultSampler: sampler;
 @group(2) @binding(1) var albedoTexture: texture_2d<f32>;
@@ -48,9 +84,19 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     );
     
     let skinned_position = skin_matrix * in.position;
-    let final_position = select(in.position, skinned_position, bool(mesh_uniforms.apply_skinning));
-    
-    let model_position = mesh_uniforms.model_transform_matrix * final_position;
+    let local_pos = select(in.position.xyz, skinned_position.xyz, bool(mesh_uniforms.apply_skinning));
+
+    let mesh_pos = mesh_uniforms.model_transform_matrix[3].xyz;
+    var final_local_pos = local_pos;
+
+    if (mesh_uniforms.billboardAxis != 0u) {
+        let axisVec = get_billboard_axis(mesh_uniforms.billboardAxis);
+        let lightDir = normalize(light_spot_uniforms.forward.xyz);
+        let billboard_matrix = compute_light_billboard_orientation(mesh_pos, axisVec, lightDir);
+        final_local_pos = billboard_matrix * local_pos;
+    }
+
+    let model_position = mesh_uniforms.model_transform_matrix * vec4<f32>(final_local_pos, 1.0);
     let clip_position = light_spot_uniforms.view_projection_matrix * model_position;
     output.position = clip_position;
     output.uv = in.uv;
