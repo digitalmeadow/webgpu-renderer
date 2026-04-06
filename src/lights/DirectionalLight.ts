@@ -102,13 +102,22 @@ export class DirectionalLight extends Light {
 
     const lightDir = Vec3.normalize(this.direction);
 
+    // Light's up vector: avoid gimbal lock if light is nearly vertical
     const upCandidate = Vec3.create(0, 1, 0);
     const dot = Math.abs(Vec3.dot(lightDir, upCandidate));
     const up = dot > 0.9 ? Vec3.create(1, 0, 0) : upCandidate;
 
+    // Camera's local coordinate system (use temp cross to avoid collapse)
     const forward = Vec3.normalize(cameraDirection.copy());
-    const right = Vec3.normalize(Vec3.cross(forward, Vec3.create(0, 1, 0)));
+    const tempRight = Vec3.cross(forward, Vec3.create(0, 1, 0));
+    const len = Vec3.len(tempRight);
+    const right =
+      len > 0.0001
+        ? Vec3.normalize(tempRight)
+        : Vec3.normalize(Vec3.cross(forward, Vec3.create(1, 0, 0)));
     const cameraUp = Vec3.cross(right, forward);
+
+    const tanHalfFov = Math.tan(cameraFov / 2);
 
     const actualSplits: number[] = [cameraNear];
 
@@ -129,32 +138,49 @@ export class DirectionalLight extends Light {
       );
       actualSplits.push(splitFar);
 
-      const cascadeMid = (splitNear + splitFar) / 2;
-
-      const center = Vec3.create();
-      Vec3.copy(cameraPosition, center);
-      Vec3.addScaled(center, forward, cascadeMid, center);
-
-      const halfHeight = (splitFar - splitNear) * Math.tan(cameraFov / 2);
-      const halfWidth = halfHeight * cameraAspect;
+      // Compute frustum corners at both near and far planes
+      // Each cascade covers from splitNear to splitFar
+      const halfHeightNear = splitNear * tanHalfFov;
+      const halfWidthNear = halfHeightNear * cameraAspect;
+      const halfHeightFar = splitFar * tanHalfFov;
+      const halfWidthFar = halfHeightFar * cameraAspect;
 
       const corners: Vec3[] = [];
-      const halfHeights = [halfHeight, -halfHeight];
-      const halfWidths = [-halfWidth, halfWidth];
 
-      for (const h of halfHeights) {
-        for (const w of halfWidths) {
-          const corner = Vec3.create();
-          Vec3.copy(center, corner);
-          Vec3.addScaled(corner, right, w, corner);
-          Vec3.addScaled(corner, cameraUp, h, corner);
-          Vec3.addScaled(corner, forward, 0, corner);
-          corners.push(corner);
+      // Helper to compute frustum corners at a given distance
+      const computeCornersAtDistance = (
+        dist: number,
+        halfW: number,
+        halfH: number,
+      ) => {
+        const halfHeights = [halfH, -halfH];
+        const halfWidths = [-halfW, halfW];
+        for (const h of halfHeights) {
+          for (const w of halfWidths) {
+            const corner = Vec3.create();
+            Vec3.copy(cameraPosition, corner);
+            Vec3.addScaled(corner, forward, dist, corner);
+            Vec3.addScaled(corner, right, w, corner);
+            Vec3.addScaled(corner, cameraUp, h, corner);
+            corners.push(corner);
+          }
         }
-      }
+      };
 
-      const min = Vec3.create(Infinity, Infinity, Infinity);
-      const max = Vec3.create(-Infinity, -Infinity, -Infinity);
+      // Build 4 corners at splitNear distance
+      computeCornersAtDistance(splitNear, halfWidthNear, halfHeightNear);
+      // Build 4 corners at splitFar distance
+      computeCornersAtDistance(splitFar, halfWidthFar, halfHeightFar);
+
+      // Compute center as midpoint of the frustum slice
+      const center = Vec3.create();
+      const midDist = (splitNear + splitFar) / 2;
+      Vec3.copy(cameraPosition, center);
+      Vec3.addScaled(center, forward, midDist, center);
+
+      // Compute AABB of all 8 corners in world space
+      let min = Vec3.create(Infinity, Infinity, Infinity);
+      let max = Vec3.create(-Infinity, -Infinity, -Infinity);
 
       for (const corner of corners) {
         min.data[0] = Math.min(min.data[0], corner.x);
@@ -165,11 +191,13 @@ export class DirectionalLight extends Light {
         max.data[2] = Math.max(max.data[2], corner.z);
       }
 
+      // Add padding for shadow casters near frustum edges
       min.x -= SHADOW_XY_PADDING;
       min.y -= SHADOW_XY_PADDING;
       max.x += SHADOW_XY_PADDING;
       max.y += SHADOW_XY_PADDING;
 
+      // Position shadow camera at light source looking toward center
       const eyeDistance = max.z - min.z + OFFSET;
       const eye = Vec3.create();
       Vec3.copy(center, eye);
@@ -177,6 +205,7 @@ export class DirectionalLight extends Light {
 
       const viewMatrix = Mat4.lookAt(eye, center, up);
 
+      // Compute AABB in light's view space for orthographic projection
       let viewMin = Vec3.create(Infinity, Infinity, Infinity);
       let viewMax = Vec3.create(-Infinity, -Infinity, -Infinity);
       for (const corner of corners) {
