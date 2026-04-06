@@ -41,8 +41,10 @@ fn get_billboard_axis(axis: u32) -> vec3<f32> {
     );
 }
 
-fn compute_light_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>, lightDir: vec3<f32>) -> mat3x3<f32> {
-    let forward = normalize(-lightDir);
+fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat3x3<f32> {
+    // For a directional light, the "viewer" is at infinity in the -direction.
+    // forward points from the mesh toward the light source (away from the light ray direction).
+    let forward = normalize(-light_directional_uniforms.direction.xyz);
 
     let forwardDotAxis = dot(forward, axisVec);
     let is_edge_case = abs(forwardDotAxis) > 0.995;
@@ -61,8 +63,9 @@ fn compute_light_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>, 
 
     let right = normalize(cross(safe_forward, axisVec));
     let up = axisVec;
+    let billboard_forward = safe_forward;
 
-    return mat3x3<f32>(right, up, safe_forward);
+    return mat3x3<f32>(right, up, billboard_forward);
 }
 
 @group(2) @binding(0) var defaultSampler: sampler;
@@ -87,9 +90,15 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
     if (mesh_uniforms.billboardAxis != 0u) {
         let axisVec = get_billboard_axis(mesh_uniforms.billboardAxis);
-        let lightDir = normalize(-light_directional_uniforms.direction.xyz);
-        let billboard_matrix = compute_light_billboard_orientation(mesh_pos, axisVec, lightDir);
-        final_local_pos = billboard_matrix * local_pos;
+        let billboard_matrix = compute_billboard_orientation(mesh_pos, axisVec);
+        let billboarded_pos = billboard_matrix * local_pos;
+        // World position = mesh translation + billboard-rotated local offset.
+        // Do NOT apply the full model matrix here — that would re-apply rotation/scale
+        // on top of the already world-space billboard vertices.
+        let clip_position = light_directional_uniforms.view_projection_matrices[light_directional_uniforms.active_view_projection_index] * vec4<f32>(mesh_pos + billboarded_pos, 1.0);
+        output.position = clip_position;
+        output.uv = in.uv;
+        return output;
     }
 
     let model_position = mesh_uniforms.model_transform_matrix * vec4<f32>(final_local_pos, 1.0);

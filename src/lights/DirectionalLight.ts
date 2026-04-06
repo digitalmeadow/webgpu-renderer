@@ -100,24 +100,15 @@ export class DirectionalLight extends Light {
       return;
     }
 
-    // Light direction represents the direction light rays travel (towards objects)
-    // For a downward light (0,-1,0), we want the camera positioned ABOVE looking DOWN
     const lightDir = Vec3.normalize(this.direction);
 
-    // Up vector: avoid gimbal lock if light is nearly vertical
     const upCandidate = Vec3.create(0, 1, 0);
     const dot = Math.abs(Vec3.dot(lightDir, upCandidate));
     const up = dot > 0.9 ? Vec3.create(1, 0, 0) : upCandidate;
 
-    // Compute full camera frustum corners in world space
-    const frustumCorners: Vec3[] = this.computeFallbackFrustumCorners(
-      cameraPosition,
-      cameraDirection,
-      cameraNear,
-      cameraFar,
-      cameraFov,
-      cameraAspect,
-    );
+    const forward = Vec3.normalize(cameraDirection.copy());
+    const right = Vec3.normalize(Vec3.cross(forward, Vec3.create(0, 1, 0)));
+    const cameraUp = Vec3.cross(right, forward);
 
     const actualSplits: number[] = [cameraNear];
 
@@ -126,7 +117,6 @@ export class DirectionalLight extends Light {
       cascadeIndex < SHADOW_MAP_CASCADES_COUNT;
       cascadeIndex++
     ) {
-      // Compute near/far split distances
       const splitNear = this.lerp(
         cameraNear,
         cameraFar,
@@ -139,77 +129,82 @@ export class DirectionalLight extends Light {
       );
       actualSplits.push(splitFar);
 
-      const tNear = (splitNear - cameraNear) / (cameraFar - cameraNear);
-      const tFar = (splitFar - cameraNear) / (cameraFar - cameraNear);
+      const cascadeMid = (splitNear + splitFar) / 2;
 
-      // Interpolate frustum corners for this cascade
-      const splitCorners: Vec3[] = [];
-      for (let i = 0; i < 4; i++) {
-        const nearCorner = frustumCorners[i];
-        const farCorner = frustumCorners[i + 4];
-        splitCorners.push(Vec3.lerp(nearCorner, farCorner, tNear));
-        splitCorners.push(Vec3.lerp(nearCorner, farCorner, tFar));
+      const center = Vec3.create();
+      Vec3.copy(cameraPosition, center);
+      Vec3.addScaled(center, forward, cascadeMid, center);
+
+      const halfHeight = (splitFar - splitNear) * Math.tan(cameraFov / 2);
+      const halfWidth = halfHeight * cameraAspect;
+
+      const corners: Vec3[] = [];
+      const halfHeights = [halfHeight, -halfHeight];
+      const halfWidths = [-halfWidth, halfWidth];
+
+      for (const h of halfHeights) {
+        for (const w of halfWidths) {
+          const corner = Vec3.create();
+          Vec3.copy(center, corner);
+          Vec3.addScaled(corner, right, w, corner);
+          Vec3.addScaled(corner, cameraUp, h, corner);
+          Vec3.addScaled(corner, forward, 0, corner);
+          corners.push(corner);
+        }
       }
 
-      // Compute cascade frustum center
-      const center = Vec3.zero();
-      for (const c of splitCorners) Vec3.add(center, c, center);
-      Vec3.scale(center, 1 / splitCorners.length, center);
+      const min = Vec3.create(Infinity, Infinity, Infinity);
+      const max = Vec3.create(-Infinity, -Infinity, -Infinity);
 
-      // Calculate minimum eye distance to ensure all corners have negative Z in view space
-      // For each corner: d > dot(corner - center, -lightDir)
-      const negLightDir = Vec3.scale(lightDir, -1, Vec3.create());
-      let dMin = -Infinity;
-      for (const corner of splitCorners) {
-        const offset = Vec3.sub(corner, center, Vec3.create());
-        const projection = Vec3.dot(offset, negLightDir);
-        dMin = Math.max(dMin, projection);
-      }
-      // Add a large Z-extrusion buffer to capture casters outside the visible frustum slice.
-      const eyeDistance = dMin + OFFSET;
-
-      // Position eye along light direction from center
-      const eye = Vec3.sub(
-        center,
-        Vec3.scale(lightDir, eyeDistance, Vec3.create()),
-      );
-      const viewMatrix = Mat4.lookAt(eye, center, up);
-
-      // Compute tight AABB from cascade corners only (no extrusion)
-      let min = Vec3.create(Infinity, Infinity, Infinity);
-      let max = Vec3.create(-Infinity, -Infinity, -Infinity);
-      for (const corner of splitCorners) {
-        const lc = Vec3.transformMat4(corner, viewMatrix);
-        min.data[0] = Math.min(min.data[0], lc.x);
-        min.data[1] = Math.min(min.data[1], lc.y);
-        min.data[2] = Math.min(min.data[2], lc.z);
-        max.data[0] = Math.max(max.data[0], lc.x);
-        max.data[1] = Math.max(max.data[1], lc.y);
-        max.data[2] = Math.max(max.data[2], lc.z);
+      for (const corner of corners) {
+        min.data[0] = Math.min(min.data[0], corner.x);
+        min.data[1] = Math.min(min.data[1], corner.y);
+        min.data[2] = Math.min(min.data[2], corner.z);
+        max.data[0] = Math.max(max.data[0], corner.x);
+        max.data[1] = Math.max(max.data[1], corner.y);
+        max.data[2] = Math.max(max.data[2], corner.z);
       }
 
-      // Add lateral padding to ensure objects moving within the camera frustum are still captured
       min.x -= SHADOW_XY_PADDING;
       min.y -= SHADOW_XY_PADDING;
       max.x += SHADOW_XY_PADDING;
       max.y += SHADOW_XY_PADDING;
 
-      const width = max.x - min.x;
-      const height = max.y - min.y;
+      const eyeDistance = max.z - min.z + OFFSET;
+      const eye = Vec3.create();
+      Vec3.copy(center, eye);
+      Vec3.addScaled(eye, lightDir, -eyeDistance, eye);
+
+      const viewMatrix = Mat4.lookAt(eye, center, up);
+
+      let viewMin = Vec3.create(Infinity, Infinity, Infinity);
+      let viewMax = Vec3.create(-Infinity, -Infinity, -Infinity);
+      for (const corner of corners) {
+        const lc = Vec3.transformMat4(corner, viewMatrix);
+        viewMin.data[0] = Math.min(viewMin.data[0], lc.x);
+        viewMin.data[1] = Math.min(viewMin.data[1], lc.y);
+        viewMin.data[2] = Math.min(viewMin.data[2], lc.z);
+        viewMax.data[0] = Math.max(viewMax.data[0], lc.x);
+        viewMax.data[1] = Math.max(viewMax.data[1], lc.y);
+        viewMax.data[2] = Math.max(viewMax.data[2], lc.z);
+      }
+
+      const width = viewMax.x - viewMin.x;
+      const height = viewMax.y - viewMin.y;
       const maxDim = Math.max(width, height);
-      const centerX = (min.x + max.x) / 2;
-      const centerY = (min.y + max.y) / 2;
+      const halfDim = maxDim / 2;
+      const centerX = (viewMin.x + viewMax.x) / 2;
+      const centerY = (viewMin.y + viewMax.y) / 2;
 
       const projMatrix = Mat4.ortho(
-        centerX - maxDim,
-        centerX + maxDim,
-        centerY - maxDim,
-        centerY + maxDim,
-        -max.z,
-        -min.z,
+        centerX - halfDim,
+        centerX + halfDim,
+        centerY - halfDim,
+        centerY + halfDim,
+        -viewMax.z,
+        -viewMin.z,
       );
 
-      // Multiply in correct order: projection * view
       Mat4.multiply(
         projMatrix,
         viewMatrix,
