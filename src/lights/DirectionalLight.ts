@@ -6,6 +6,9 @@ export const SHADOW_MAP_CASCADES_COUNT = 3;
 export const DEFAULT_SHADOW_CASCADE_SPLITS = [0.0, 0.33, 0.66, 1.0];
 export const OFFSET = 0;
 export const SHADOW_XY_PADDING = 0;
+export const CASCADE_OVERLAP_FACTOR = 0.1; // 10% overlap between cascades
+export const MIN_DEPTH_RATIO = 1.0; // Ensure far is at least 30% deeper than near relative to actual depth
+export const MIN_DEPTH_LATERAL_RATIO = 1.0; // At least 10% of lateral size
 
 export class DirectionalLight extends Light {
   readonly type = EntityType.LightDirectional;
@@ -138,45 +141,37 @@ export class DirectionalLight extends Light {
       );
       actualSplits.push(splitFar);
 
-      // Compute frustum corners at both near and far planes
-      // Each cascade covers from splitNear to splitFar
-      const halfHeightNear = splitNear * tanHalfFov;
-      const halfWidthNear = halfHeightNear * cameraAspect;
-      const halfHeightFar = splitFar * tanHalfFov;
-      const halfWidthFar = halfHeightFar * cameraAspect;
+      // Compute frustum corners at splitFar distance only (standard CSSM)
+      // Apply overlap factor to expand frustum for shadow continuity
+      const effectiveSplitFar = splitFar * (1 + CASCADE_OVERLAP_FACTOR);
+      const halfHeight = effectiveSplitFar * tanHalfFov;
+      const halfWidth = halfHeight * cameraAspect;
 
       const corners: Vec3[] = [];
 
-      // Helper to compute frustum corners at a given distance
-      const computeCornersAtDistance = (
-        dist: number,
-        halfW: number,
-        halfH: number,
-      ) => {
-        const halfHeights = [halfH, -halfH];
-        const halfWidths = [-halfW, halfW];
-        for (const h of halfHeights) {
-          for (const w of halfWidths) {
-            const corner = Vec3.create();
-            Vec3.copy(cameraPosition, corner);
-            Vec3.addScaled(corner, forward, dist, corner);
-            Vec3.addScaled(corner, right, w, corner);
-            Vec3.addScaled(corner, cameraUp, h, corner);
-            corners.push(corner);
-          }
+      // Build 4 corners at effective splitFar distance
+      const halfHeights = [halfHeight, -halfHeight];
+      const halfWidths = [-halfWidth, halfWidth];
+      for (const h of halfHeights) {
+        for (const w of halfWidths) {
+          const corner = Vec3.create();
+          Vec3.copy(cameraPosition, corner);
+          Vec3.addScaled(corner, forward, splitFar, corner);
+          Vec3.addScaled(corner, right, w, corner);
+          Vec3.addScaled(corner, cameraUp, h, corner);
+          corners.push(corner);
         }
-      };
+      }
 
-      // Build 4 corners at splitNear distance
-      computeCornersAtDistance(splitNear, halfWidthNear, halfHeightNear);
-      // Build 4 corners at splitFar distance
-      computeCornersAtDistance(splitFar, halfWidthFar, halfHeightFar);
+      // Compute center as average of all 4 corners
+      // This is more stable than midpoint along camera forward
+      const center = Vec3.zero();
+      for (const c of corners) Vec3.add(center, c, center);
+      Vec3.scale(center, 1 / corners.length, center);
 
-      // Compute center as midpoint of the frustum slice
-      const center = Vec3.create();
-      const midDist = (splitNear + splitFar) / 2;
-      Vec3.copy(cameraPosition, center);
-      Vec3.addScaled(center, forward, midDist, center);
+      console.log(
+        `[Shadow] Cascade ${cascadeIndex}: splitNear=${splitNear.toFixed(1)}, splitFar=${splitFar.toFixed(1)}`,
+      );
 
       // Compute AABB of all 8 corners in world space
       let min = Vec3.create(Infinity, Infinity, Infinity);
@@ -205,7 +200,7 @@ export class DirectionalLight extends Light {
 
       const viewMatrix = Mat4.lookAt(eye, center, up);
 
-      // Compute AABB in light's view space for orthographic projection
+      // Compute AABB in light's view space for orthographic projection (X/Y only)
       let viewMin = Vec3.create(Infinity, Infinity, Infinity);
       let viewMax = Vec3.create(-Infinity, -Infinity, -Infinity);
       for (const corner of corners) {
@@ -225,13 +220,48 @@ export class DirectionalLight extends Light {
       const centerX = (viewMin.x + viewMax.x) / 2;
       const centerY = (viewMin.y + viewMax.y) / 2;
 
+      // Option 3: Eye-centered Z (relative distances from eye along light direction)
+      // This prevents collapse when camera aligns with light direction
+      let minZDist = Infinity;
+      let maxZDist = -Infinity;
+      for (const corner of corners) {
+        const toCorner = Vec3.sub(corner, eye, Vec3.create());
+        const zDist = Vec3.dot(toCorner, lightDir);
+        minZDist = Math.min(minZDist, zDist);
+        maxZDist = Math.max(maxZDist, zDist);
+      }
+
+      // Add minimum depth for robustness
+      const minDepthFromSplit = splitFar * MIN_DEPTH_RATIO;
+      const minDepthFromLateral = maxDim * MIN_DEPTH_LATERAL_RATIO;
+      const minDepth = Math.max(minDepthFromSplit, minDepthFromLateral);
+
+      const orthoNear = minZDist;
+      const orthoFar = Math.max(maxZDist, orthoNear + minDepth);
+
+      console.log(
+        `[Shadow]   eye-centered Z: near=${orthoNear.toFixed(1)} far=${maxZDist.toFixed(1)}`,
+      );
+      console.log(
+        `[Shadow]   minDepth: splitFar=${minDepthFromSplit.toFixed(1)} lateral=${minDepthFromLateral.toFixed(1)} final=${minDepth.toFixed(1)}`,
+      );
+      console.log(
+        `[Shadow]   ortho: near=${orthoNear.toFixed(1)} far=${orthoFar.toFixed(1)}`,
+      );
+      console.log(
+        `[Shadow]   minDepth: splitFar=${minDepthFromSplit.toFixed(1)} lateral=${minDepthFromLateral.toFixed(1)} final=${minDepth.toFixed(1)}`,
+      );
+      console.log(
+        `[Shadow]   ortho: near=${orthoNear.toFixed(1)} far=${orthoFar.toFixed(1)}`,
+      );
+
       const projMatrix = Mat4.ortho(
         centerX - halfDim,
         centerX + halfDim,
         centerY - halfDim,
         centerY + halfDim,
-        -viewMax.z,
-        -viewMin.z,
+        orthoNear,
+        orthoFar,
       );
 
       Mat4.multiply(
