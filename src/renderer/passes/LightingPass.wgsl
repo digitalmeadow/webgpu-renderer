@@ -287,7 +287,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let albedo = textureSample(gbuffer_albedo, sampler_linear, in.uv_coords).rgb;
     let normal_sample = textureSample(gbuffer_normal, sampler_linear, in.uv_coords);
     let metal_rough = textureSample(gbuffer_metallic_roughness, sampler_linear, in.uv_coords);
-    let metalness = metal_rough.r;
+    let metalness = metal_rough.b;
     let roughness = metal_rough.g;
     let emissive = textureSample(gbuffer_emissive, sampler_linear, in.uv_coords).rgb;
     let depth = textureLoad(gbuffer_depth, vec2<i32>(in.uv_coords * vec2<f32>(textureDimensions(gbuffer_depth))), 0);

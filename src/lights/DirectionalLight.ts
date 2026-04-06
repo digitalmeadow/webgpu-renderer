@@ -4,8 +4,9 @@ import { EntityType } from "../scene/Entity";
 
 export const SHADOW_MAP_CASCADES_COUNT = 3;
 export const DEFAULT_SHADOW_CASCADE_SPLITS = [0.0, 0.33, 0.66, 1.0];
-export const OFFSET = 0;
+export const OFFSET = 0.0;
 export const SHADOW_XY_PADDING = 0;
+export const SHADOW_Z_PADDING = 10.0; // Padding for Z to prevent clipping
 export const CASCADE_OVERLAP_FACTOR = 0.5; // 10% overlap between cascades
 export const MIN_DEPTH_RATIO = 1.0; // Ensure far is at least 30% deeper than near relative to actual depth
 export const MIN_DEPTH_LATERAL_RATIO = 1.0; // At least 10% of lateral size
@@ -247,8 +248,10 @@ export class DirectionalLight extends Light {
       const minDepthFromLateral = maxDim * MIN_DEPTH_LATERAL_RATIO;
       const minDepth = Math.max(minDepthFromSplit, minDepthFromLateral);
 
-      const orthoNear = lightSpaceNear;
-      const orthoFar = Math.max(lightSpaceFar, orthoNear + minDepth);
+      // Add Z padding to prevent clipping
+      const orthoNear = lightSpaceNear - SHADOW_Z_PADDING;
+      const orthoFar =
+        Math.max(lightSpaceFar, orthoNear + minDepth) + SHADOW_Z_PADDING;
 
       console.log(
         `[Shadow]   lightSpace X: ${viewMin.x.toFixed(1)} to ${viewMax.x.toFixed(1)} (${width.toFixed(1)})`,
