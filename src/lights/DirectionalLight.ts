@@ -185,10 +185,6 @@ export class DirectionalLight extends Light {
       Vec3.copy(cameraPosition, center);
       Vec3.addScaled(center, forward, midDist, center);
 
-      console.log(
-        `[Shadow] Cascade ${cascadeIndex}: splitNear=${splitNear.toFixed(1)}, splitFar=${splitFar.toFixed(1)}`,
-      );
-
       // Compute AABB of all 8 corners in world space
       let min = Vec3.create(Infinity, Infinity, Infinity);
       let max = Vec3.create(-Infinity, -Infinity, -Infinity);
@@ -252,22 +248,6 @@ export class DirectionalLight extends Light {
       const orthoNear = lightSpaceNear - SHADOW_Z_PADDING;
       const orthoFar =
         Math.max(lightSpaceFar, orthoNear + minDepth) + SHADOW_Z_PADDING;
-
-      console.log(
-        `[Shadow]   lightSpace X: ${viewMin.x.toFixed(1)} to ${viewMax.x.toFixed(1)} (${width.toFixed(1)})`,
-      );
-      console.log(
-        `[Shadow]   lightSpace Y: ${viewMin.y.toFixed(1)} to ${viewMax.y.toFixed(1)} (${height.toFixed(1)})`,
-      );
-      console.log(
-        `[Shadow]   lightSpace Z: near=${lightSpaceNear.toFixed(1)} far=${lightSpaceFar.toFixed(1)} depth=${lightSpaceDepth.toFixed(1)}`,
-      );
-      console.log(
-        `[Shadow]   minDepth: splitFar=${minDepthFromSplit.toFixed(1)} lateral=${minDepthFromLateral.toFixed(1)} final=${minDepth.toFixed(1)}`,
-      );
-      console.log(
-        `[Shadow]   ortho: near=${orthoNear.toFixed(1)} far=${orthoFar.toFixed(1)}`,
-      );
 
       const projMatrix = Mat4.ortho(
         centerX - halfDim,

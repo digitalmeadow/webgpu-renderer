@@ -184,24 +184,20 @@ export class ShadowPassDirectionalLight {
           light.viewProjectionMatrices[cascadeIndex],
         );
 
-        // const visibleOpaqueMeshes = opaqueMeshes.filter((mesh) => {
-        //   mesh.updateWorldAABB();
-        //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-        // });
-        //
-        // const visibleAlphaTestMeshes = alphaTestMeshes.filter((mesh) => {
-        //   mesh.updateWorldAABB();
-        //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-        // });
-        //
-        // const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
-        //   mesh.updateWorldAABB();
-        //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-        // });
-        // For debugginbg disable frustum culling to ensure all meshes are rendered in the shadow map
-        const visibleOpaqueMeshes = opaqueMeshes;
-        const visibleAlphaTestMeshes = alphaTestMeshes;
-        const visibleTransparentMeshes = transparentMeshes;
+        const visibleOpaqueMeshes = opaqueMeshes.filter((mesh) => {
+          mesh.updateWorldAABB();
+          return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+        });
+
+        const visibleAlphaTestMeshes = alphaTestMeshes.filter((mesh) => {
+          mesh.updateWorldAABB();
+          return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+        });
+
+        const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
+          mesh.updateWorldAABB();
+          return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+        });
 
         const textureLayerIndex =
           lightIndex * SHADOW_MAP_CASCADES_COUNT + cascadeIndex;

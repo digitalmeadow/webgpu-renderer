@@ -3,7 +3,8 @@
 
 Debug why front headlights with a white emissive texture value, are rendering yellow when emissive is turned up to 1, 1, 1
 Debug why opaque meshes billboard isn't working
-Get windscreen slight alpha and reflections working properly
+
+Set up instancing to render thousands of trees and foliage
 
 Not in order:
   Anti Aliasing
@@ -16,8 +17,6 @@ Not in order:
   Softer when further away from contact point (complex, expensive)
   Snap shadows to pixels to avoid jittering?
 
-- Try rendering a tree pack to billboarded with normals for foliage
-  - Add billboarding option to meshes as a GLTF extra option
 - Ambient occlusion
 
 

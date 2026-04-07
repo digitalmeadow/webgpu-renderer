@@ -245,8 +245,19 @@ export class Renderer {
       Math.min(h, this.device.limits.maxTextureDimension2D),
     );
 
-    this.renderWidth = Math.round(this.canvas.width * this.antiAliasingScale);
-    this.renderHeight = Math.round(this.canvas.height * this.antiAliasingScale);
+    if (this.targetRenderWidth === 0 || this.targetRenderHeight === 0) {
+      this.renderWidth = Math.round(this.canvas.width * this.antiAliasingScale);
+      this.renderHeight = Math.round(
+        this.canvas.height * this.antiAliasingScale,
+      );
+    } else {
+      this.renderWidth = Math.round(
+        this.targetRenderWidth * this.antiAliasingScale,
+      );
+      this.renderHeight = Math.round(
+        this.targetRenderHeight * this.antiAliasingScale,
+      );
+    }
 
     this.context.configure({
       device: this.device,
