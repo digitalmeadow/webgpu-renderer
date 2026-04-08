@@ -7,6 +7,13 @@ import { Vertex } from "../geometries";
 import { Texture, CubeTexture } from "../textures";
 import geometryPassShader from "../renderer/passes/GeometryPass.wgsl?raw";
 import forwardPassShader from "../renderer/passes/ForwardPass.wgsl?raw";
+import { TextureSettings } from "../renderer/Renderer";
+
+interface ResolvedTextureSettings {
+  mipmapEnabled: boolean;
+  maxMipLevels: number | undefined;
+  mipmapFilter: "nearest" | "linear";
+}
 
 export class MaterialManager {
   private device: GPUDevice;
@@ -23,6 +30,7 @@ export class MaterialManager {
   private placeholderEnvView: GPUTextureView;
   private placeholderEnvSampler: GPUSampler;
   public readonly fallbackBindGroup: GPUBindGroup;
+  private textureSettings: ResolvedTextureSettings;
 
   private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> =
     new Map();
@@ -34,8 +42,13 @@ export class MaterialManager {
   private baseGeometryShader: string;
   private baseForwardShader: string;
 
-  constructor(device: GPUDevice) {
+  constructor(device: GPUDevice, textureSettings?: TextureSettings) {
     this.device = device;
+    this.textureSettings = {
+      mipmapEnabled: textureSettings?.mipmapEnabled ?? true,
+      maxMipLevels: textureSettings?.maxMipLevels,
+      mipmapFilter: textureSettings?.mipmapFilter ?? "linear",
+    };
 
     this.defaultSampler = device.createSampler({
       magFilter: "nearest",
@@ -398,9 +411,21 @@ export class MaterialManager {
   private createTextureResources(texture: Texture): void {
     if (!texture.bitmap) return;
 
+    const width = texture.bitmap.width;
+    const height = texture.bitmap.height;
+
+    let mipLevelCount = 1;
+    if (this.textureSettings.mipmapEnabled) {
+      const fullMips = Math.floor(Math.log2(Math.max(width, height))) + 1;
+      mipLevelCount = this.textureSettings.maxMipLevels
+        ? Math.min(this.textureSettings.maxMipLevels, fullMips)
+        : fullMips;
+    }
+
     const gpuTexture = this.device.createTexture({
-      size: [texture.bitmap.width, texture.bitmap.height],
+      size: [width, height],
       format: "rgba8unorm",
+      mipLevelCount,
       usage:
         GPUTextureUsage.TEXTURE_BINDING |
         GPUTextureUsage.COPY_DST |
@@ -410,10 +435,150 @@ export class MaterialManager {
     this.device.queue.copyExternalImageToTexture(
       { source: texture.bitmap },
       { texture: gpuTexture },
-      { width: texture.bitmap.width, height: texture.bitmap.height },
+      { width, height },
     );
 
+    if (mipLevelCount > 1) {
+      this.generateMipmaps(gpuTexture, width, height, mipLevelCount);
+    }
+
     this.textureCache.set(texture, gpuTexture);
+  }
+
+  private generateMipmaps(
+    texture: GPUTexture,
+    baseWidth: number,
+    baseHeight: number,
+    mipLevelCount: number,
+  ): void {
+    const mipmapShaderCode = `
+      @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+      @group(0) @binding(1) var inputSampler: sampler;
+
+      struct VertexOutput {
+        @builtin(position) position: vec4<f32>,
+        @location(0) uv: vec2<f32>,
+      }
+
+      @vertex
+      fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+        var positions = array<vec2<f32>, 6>(
+          vec2<f32>(-1.0, -1.0),
+          vec2<f32>(1.0, -1.0),
+          vec2<f32>(1.0, 1.0),
+          vec2<f32>(-1.0, -1.0),
+          vec2<f32>(1.0, 1.0),
+          vec2<f32>(-1.0, 1.0)
+        );
+        var uvs = array<vec2<f32>, 6>(
+          vec2<f32>(0.0, 1.0),
+          vec2<f32>(1.0, 1.0),
+          vec2<f32>(1.0, 0.0),
+          vec2<f32>(0.0, 1.0),
+          vec2<f32>(1.0, 0.0),
+          vec2<f32>(0.0, 0.0)
+        );
+        var output: VertexOutput;
+        output.position = vec4<f32>(positions[vertexIndex], 0.0, 1.0);
+        output.uv = uvs[vertexIndex];
+        return output;
+      }
+
+      @fragment
+      fn fragmentMain(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+        return textureSample(inputTexture, inputSampler, uv);
+      }
+    `;
+
+    const shaderModule = this.device.createShaderModule({
+      code: mipmapShaderCode,
+    });
+
+    const sampler = this.device.createSampler({
+      minFilter: "linear",
+      magFilter: "linear",
+      mipmapFilter: "linear",
+    });
+
+    const pipeline = this.device.createRenderPipeline({
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [
+          this.device.createBindGroupLayout({
+            entries: [
+              {
+                binding: 0,
+                visibility: GPUShaderStage.FRAGMENT,
+                texture: { sampleType: "float" },
+              },
+              {
+                binding: 1,
+                visibility: GPUShaderStage.FRAGMENT,
+                sampler: { type: "filtering" },
+              },
+            ],
+          }),
+        ],
+      }),
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vertexMain",
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fragmentMain",
+        targets: [{ format: "rgba8unorm" }],
+      },
+      primitive: {
+        topology: "triangle-list",
+      },
+    });
+
+    const encoder = this.device.createCommandEncoder({
+      label: "mipmap generation encoder",
+    });
+
+    let currentWidth = baseWidth;
+    let currentHeight = baseHeight;
+
+    for (let mipLevel = 1; mipLevel < mipLevelCount; mipLevel++) {
+      currentWidth = Math.max(1, Math.floor(currentWidth / 2));
+      currentHeight = Math.max(1, Math.floor(currentHeight / 2));
+
+      const bindGroup = this.device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          {
+            binding: 0,
+            resource: texture.createView({
+              baseMipLevel: mipLevel - 1,
+              mipLevelCount: 1,
+            }),
+          },
+          { binding: 1, resource: sampler },
+        ],
+      });
+
+      const passEncoder = encoder.beginRenderPass({
+        colorAttachments: [
+          {
+            view: texture.createView({
+              baseMipLevel: mipLevel,
+              mipLevelCount: 1,
+            }),
+            loadOp: "clear",
+            storeOp: "store",
+            clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          },
+        ],
+      });
+
+      passEncoder.setPipeline(pipeline);
+      passEncoder.setBindGroup(0, bindGroup);
+      passEncoder.draw(6);
+      passEncoder.end();
+    }
+
+    this.device.queue.submit([encoder.finish()]);
   }
 
   getOrCreateCubeTexture(

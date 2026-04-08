@@ -20,6 +20,18 @@ import { Light, DirectionalLight, SpotLight } from "../lights";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../math";
 import { CubeTexture } from "../textures/CubeTexture";
 
+export interface TextureSettings {
+  mipmapEnabled?: boolean;
+  maxMipLevels?: number | undefined;
+  mipmapFilter?: "nearest" | "linear";
+}
+
+interface ResolvedTextureSettings {
+  mipmapEnabled: boolean;
+  maxMipLevels: number | undefined;
+  mipmapFilter: "nearest" | "linear";
+}
+
 export interface RendererOptions {
   maxDirectionalLights?: number;
   maxSpotLights?: number;
@@ -28,12 +40,19 @@ export interface RendererOptions {
   devicePixelRatio?: number;
   transparentSortEnabled?: boolean;
   antiAliasingScale?: number;
+  textureSettings?: TextureSettings;
 }
 
 const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
 const DEFAULT_MAX_SPOT_LIGHTS = 1;
 const MAX_SHADOW_MAP_SIZE = 2048;
 const SHADOW_MAP_SIZE_RATIO = 2;
+
+const DEFAULT_TEXTURE_SETTINGS: ResolvedTextureSettings = {
+  mipmapEnabled: true,
+  maxMipLevels: undefined,
+  mipmapFilter: "linear",
+};
 
 export class Renderer {
   private canvas: HTMLCanvasElement;
@@ -46,6 +65,7 @@ export class Renderer {
   private targetRenderHeight: number;
   private devicePixelRatioOption: number;
   private antiAliasingScale: number;
+  private textureSettings: ResolvedTextureSettings;
   private cameras: Set<Camera> = new Set();
 
   public frustumCulling: boolean = false;
@@ -84,6 +104,17 @@ export class Renderer {
     this.devicePixelRatioOption = options.devicePixelRatio ?? 1;
     this.transparentSortEnabled = options.transparentSortEnabled ?? true;
     this.antiAliasingScale = options.antiAliasingScale ?? 1;
+    this.textureSettings = {
+      mipmapEnabled:
+        options.textureSettings?.mipmapEnabled ??
+        DEFAULT_TEXTURE_SETTINGS.mipmapEnabled,
+      maxMipLevels:
+        options.textureSettings?.maxMipLevels ??
+        DEFAULT_TEXTURE_SETTINGS.maxMipLevels,
+      mipmapFilter:
+        options.textureSettings?.mipmapFilter ??
+        DEFAULT_TEXTURE_SETTINGS.mipmapFilter,
+    };
     this.device = null as unknown as GPUDevice;
     this.format = "rgba16float";
 
@@ -125,7 +156,10 @@ export class Renderer {
       alphaMode: "opaque",
     });
 
-    this.materialManager = new MaterialManager(this.device);
+    this.materialManager = new MaterialManager(
+      this.device,
+      this.textureSettings,
+    );
     this.lightManager = new LightManager(
       this.device,
       this.maxDirectionalLights,
