@@ -60,7 +60,7 @@ fn get_billboard_axis(axis: u32) -> vec3<f32> {
 }
 
 fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat3x3<f32> {
-    let forward = normalize(camera.position.xyz - mesh_pos);
+    let forward = normalize(mesh_pos - camera.position.xyz);
 
     let forwardDotAxis = dot(forward, axisVec);
     let is_edge_case = abs(forwardDotAxis) > 0.995;
@@ -77,11 +77,10 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
         safe_forward = normalize(safe_forward);
     }
 
-    let right = normalize(cross(safe_forward, axisVec));
+    let right = normalize(cross(axisVec, safe_forward));
     let up = axisVec;
-    let billboard_forward = -safe_forward;
 
-    return mat3x3<f32>(right, up, billboard_forward);
+    return mat3x3<f32>(right, up, safe_forward);
 }
 
 @group(2) @binding(0) var defaultSampler: sampler;
@@ -138,7 +137,7 @@ fn vs_main(
     output.uv_coords = uv;
 
     let view_position = camera.view_matrix * vec4<f32>(output.world_position, 1.0);
-    output.position = camera.view_projection_matrix * vec4<f32>(output.world_position, 1.0);
+    output.position = camera.projection_matrix * view_position;
 
     return output;
 }

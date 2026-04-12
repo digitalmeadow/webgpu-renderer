@@ -119,5 +119,6 @@ fn fs_main(in: VertexOutput) -> @builtin(frag_depth) f32 {
     if (albedo.a == 0.0) {
         discard;
     }
-    return in.position.z;
+    // WebGPU ortho matrix produces NDC Z in [0,1] directly
+    return in.position.z / in.position.w;
 }

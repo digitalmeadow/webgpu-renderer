@@ -170,6 +170,7 @@ fn fetch_light_directional_shadow(light_index: u32, cascade_id: u32, homogeneous
     let flip_correction = vec2<f32>(0.5, -0.5);
     let proj_correction = 1.0 / homogeneous_coords.w;
     let light_local = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
+    // WebGPU ortho matrix produces NDC Z in [0,1] directly
     let depth = homogeneous_coords.z * proj_correction;
 
     // Return fully lit for fragments outside the light frustum
@@ -325,7 +326,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
             // Directional light with cascade shadow
-            let view_space_z = -view_pos.z;
+            let view_space_z = view_pos.z;
             let cascade = select_cascade(view_space_z, light_uniforms.cascade_splits);
 
             let shadow_matrix = light_uniforms.view_projection_matrices[cascade];

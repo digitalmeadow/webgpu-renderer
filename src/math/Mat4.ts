@@ -697,7 +697,8 @@ export class Mat4 {
   ): Mat4 {
     out ??= new Mat4();
     const f = 1 / Math.tan(fovY / 2);
-    const nf = 1 / (near - far); // note near - far
+    // WebGPU convention: use (far - near), not (near - far)
+    const nf = 1 / (near - far);
 
     out.data[0] = f / aspect;
     out.data[1] = 0;
@@ -711,12 +712,13 @@ export class Mat4 {
 
     out.data[8] = 0;
     out.data[9] = 0;
-    out.data[10] = far * nf; // far / (near - far)
-    out.data[11] = -1; // MUST be -1
+    // WebGPU: produces NDC Z in [0,1] range
+    out.data[10] = far * nf;
+    out.data[11] = -1; // WebGPU uses 1 (OpenGL uses -1)
 
     out.data[12] = 0;
     out.data[13] = 0;
-    out.data[14] = near * far * nf; // near*far / (near - far)
+    out.data[14] = far * near * nf;
     out.data[15] = 0;
 
     return out;
@@ -732,24 +734,28 @@ export class Mat4 {
     out?: Mat4,
   ): Mat4 {
     out ??= new Mat4();
-    const lr = 1 / (left - right);
-    const bt = 1 / (bottom - top);
-    const nf = 1 / (near - far);
-    out.data[0] = -2 * lr;
+    const rl = 1 / (right - left);
+    const tb = 1 / (top - bottom);
+    const fn = 1 / (far - near);
+
+    out.data[0] = 2 * rl;
     out.data[1] = 0;
     out.data[2] = 0;
     out.data[3] = 0;
+
     out.data[4] = 0;
-    out.data[5] = -2 * bt;
+    out.data[5] = 2 * tb;
     out.data[6] = 0;
     out.data[7] = 0;
+
     out.data[8] = 0;
     out.data[9] = 0;
-    out.data[10] = nf;
+    out.data[10] = fn;
     out.data[11] = 0;
-    out.data[12] = (left + right) * lr;
-    out.data[13] = (top + bottom) * bt;
-    out.data[14] = near / (near - far);
+
+    out.data[12] = -(left + right) * rl;
+    out.data[13] = -(top + bottom) * tb;
+    out.data[14] = -near * fn;
     out.data[15] = 1;
     return out;
   }
