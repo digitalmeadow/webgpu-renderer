@@ -154,4 +154,27 @@ export class Camera {
     this.updateProjection();
     this.updateView();
   }
+
+  getForward(): Vec3 {
+    return Vec3.normalize(Vec3.sub(this.target, this.position));
+  }
+
+  getUp(): Vec3 {
+    const forward = this.getForward();
+    const worldUp = Vec3.create(0, 1, 0);
+
+    // Handle case where forward is nearly parallel to world up
+    const dot = Math.abs(Vec3.dot(forward, worldUp));
+    const tempRight =
+      dot > 0.9
+        ? Vec3.cross(forward, Vec3.create(1, 0, 0))
+        : Vec3.cross(forward, worldUp);
+
+    const right = Vec3.normalize(tempRight);
+    return Vec3.normalize(Vec3.cross(right, forward));
+  }
+
+  getDirection(): Vec3 {
+    return this.getForward();
+  }
 }

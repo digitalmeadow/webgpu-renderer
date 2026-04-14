@@ -11,7 +11,7 @@ export const SHADOW_XY_PADDING = 0;
 // Use positive values for WebGPU convention (near < far, both positive)
 export const SHADOW_ORTHO_NEAR = 500.0;
 export const SHADOW_ORTHO_FAR = 3500.0;
-export const CASCADE_OVERLAP_FACTOR = 0.5; // 10% overlap between cascades
+export const CASCADE_OVERLAP_FACTOR = 0.0; // No overlap - tight fit for better precision
 export const MIN_DEPTH_RATIO = 1.0; // Ensure far is at least 30% deeper than near relative to actual depth
 export const MIN_DEPTH_LATERAL_RATIO = 1.0; // At least 10% of lateral size
 
@@ -129,6 +129,18 @@ export class DirectionalLight extends Light {
     console.log(
       `[ShadowCascade] Light dir (normalized): (${lightDir.x.toFixed(3)}, ${lightDir.y.toFixed(3)}, ${lightDir.z.toFixed(3)})`,
     );
+
+    // Validate camera direction is normalized
+    const dirLength = Vec3.len(cameraDirection);
+    if (Math.abs(dirLength - 1.0) > 0.01) {
+      console.warn(
+        `[ShadowCascade] Camera direction not normalized! Length: ${dirLength.toFixed(3)} (expected 1.000)`,
+      );
+    } else {
+      console.log(
+        `[ShadowCascade] Camera direction validated: length=${dirLength.toFixed(6)}`,
+      );
+    }
 
     // Light's up vector: avoid gimbal lock if light is nearly vertical
     const upCandidate = Vec3.create(0, 1, 0);
@@ -263,11 +275,14 @@ export class DirectionalLight extends Light {
         `[ShadowCascade]   world AABB (padded): min=(${min.x.toFixed(2)}, ${min.y.toFixed(2)}, ${min.z.toFixed(2)}), max=(${max.x.toFixed(2)}, ${max.y.toFixed(2)}, ${max.z.toFixed(2)})`,
       );
 
-      // Position shadow camera at light source looking toward center
+      // Position shadow camera to look down the light direction
+      // Mat4.lookAt() builds a view matrix where the Z-axis points FROM center TO eye (backward)
+      // So to make the camera look along lightDir, we position the eye at center + eyeDistance * lightDir
+      // This way, the -Z axis (forward) will point along -lightDir (the direction light travels)
       const eyeDistance = max.z - min.z + OFFSET;
       const eye = Vec3.create();
       Vec3.copy(center, eye);
-      Vec3.addScaled(eye, lightDir, -eyeDistance, eye);
+      Vec3.addScaled(eye, lightDir, eyeDistance, eye); // eye = center + eyeDistance * lightDir
 
       console.log(
         `[ShadowCascade]   eyeDistance=${eyeDistance.toFixed(2)}, eye=(${eye.x.toFixed(2)}, ${eye.y.toFixed(2)}, ${eye.z.toFixed(2)})`,
@@ -315,14 +330,25 @@ export class DirectionalLight extends Light {
         `[ShadowCascade]   centerX=${centerX.toFixed(2)}, centerY=${centerY.toFixed(2)}`,
       );
 
-      // Use fixed ortho Z range - robust against camera position changes
-      // This prevents degenerate matrices when light-view-space Z flips
-      const orthoNear = SHADOW_ORTHO_NEAR;
-      const orthoFar = SHADOW_ORTHO_FAR;
+      // Use light-space AABB Z extent for ortho bounds
+      // The ortho matrix maps: z_ndc = (z - near) / (far - near)
+      // We want: scene at viewZMin -> z_ndc = 0, scene at viewZMax -> z_ndc = 1
+      // So we need: near = viewZMin, far = viewZMax
+      const viewZMin = viewMin.z;
+      const viewZMax = viewMax.z;
 
-      console.log(
-        `[ShadowCascade]   ORTHO: left=${(centerX - halfDim).toFixed(2)}, right=${(centerX + halfDim).toFixed(2)}, bottom=${(centerY - halfDim).toFixed(2)}, top=${(centerY + halfDim).toFixed(2)}`,
-      );
+      // Ensure orthoNear < orthoFar for correct depth direction
+      // viewZMin should be closest to eye (most negative), viewZMax furthest (least negative)
+      let orthoNear = viewZMin;
+      let orthoFar = viewZMax;
+
+      // If somehow reversed (shouldn't happen with proper eye placement), swap them
+      if (orthoNear >= orthoFar) {
+        const temp = orthoNear;
+        orthoNear = orthoFar;
+        orthoFar = temp;
+      }
+
       console.log(
         `[ShadowCascade]   ORTHO: near=${orthoNear.toFixed(2)}, far=${orthoFar.toFixed(2)}, depth=${(orthoFar - orthoNear).toFixed(2)}`,
       );
@@ -345,20 +371,22 @@ export class DirectionalLight extends Light {
         `[ShadowCascade]   projMatrix determinant: ${preDet.toFixed(6)}`,
       );
 
-      // Create temporary VP before multiply
+      // Create temporary VP - multiply in correct order: V * P
+      // This applies view first (world -> view), then projection (view -> clip)
       const tempVP = Mat4.create();
-      Mat4.multiply(projMatrix, viewMatrix, tempVP);
+      Mat4.multiply(viewMatrix, projMatrix, tempVP);
       const preMulVPDet = Mat4.determinant(tempVP);
       console.log(
         `[ShadowCascade]   VP pre-copy determinant: ${preMulVPDet.toFixed(6)}`,
       );
 
-      if (Math.abs(preMulVPDet) < 0.0001) {
+      if (Math.abs(preMulVPDet) < 0.000001) {
         console.warn(
           `[ShadowCascade]   WARNING: VP matrix has near-zero determinant (degenerate)!`,
         );
       }
 
+      // Correct order: P * V (projection then view, matching Camera.ts pattern)
       Mat4.multiply(
         projMatrix,
         viewMatrix,
@@ -370,7 +398,7 @@ export class DirectionalLight extends Light {
         `[ShadowCascade]   VP[${cascadeIndex}] determinant: ${vpDet.toFixed(6)}`,
       );
 
-      if (Math.abs(vpDet) < 0.0001) {
+      if (Math.abs(vpDet) < 0.000001) {
         console.warn(
           `[ShadowCascade]   WARNING: Final VP matrix has near-zero determinant (degenerate)! This will cause shadow issues!`,
         );

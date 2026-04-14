@@ -115,6 +115,8 @@ fn fs_main(in: VertexOutput) -> @builtin(frag_depth) f32 {
     if (albedo.a == 0.0) {
         discard;
     }
-    // WebGPU ortho matrix now produces NDC Z in [0,1] directly
+    // For orthographic projection in WebGPU:
+    // The ortho matrix already maps view-space Z [near, far] to NDC Z [0, 1]
+    // w = 1.0 for ortho, so z/w = z produces correct NDC depth
     return in.position.z / in.position.w;
 }

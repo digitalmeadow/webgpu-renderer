@@ -210,9 +210,13 @@ fn vogel_offset(i: u32, n: u32, rotation: f32) -> vec2<f32> {
 
 // Select cascade based on view-space depth
 fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
-    if view_space_z < splits.y {
+    // Convert negative view-space Z to positive depth distance
+    // In right-handed view space, -Z is forward, so objects in front have negative Z
+    let depth = abs(view_space_z);
+    
+    if depth < splits.y {
         return 0u;
-    } else if view_space_z < splits.z {
+    } else if depth < splits.z {
         return 1u;
     } else {
         return 2u;
@@ -391,6 +395,8 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         let light_uniforms = light_directional_uniforms.lights[i];
 
         if light_uniforms.color.a > 0.0 {
+            // Light direction points where light is facing (light → scene)
+            // For lighting, we need direction TO light (scene → light), so negate
             let light_dir = normalize(-light_uniforms.direction.xyz);
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
@@ -470,6 +476,8 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let view_dir = normalize(in.world_position - camera_uniforms.position.xyz);
 
     // Sun direction (use first directional light)
+    // For fog sun glow, we need direction TOWARD the sun (opposite of where light points)
+    // light.direction points where light faces (down), we want direction to sun (up), so negate
     var has_sun = light_directional_uniforms.light_count > 0u;
     var sun_dir = vec3<f32>(0.0, 1.0, 0.0);
     if (has_sun) {

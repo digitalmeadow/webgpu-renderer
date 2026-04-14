@@ -419,11 +419,7 @@ export class LightManager {
     const activeLights = directionalLights.slice(0, this.maxDirectionalLights);
 
     if (activeLights.length > 0) {
-      const cameraDirection = new Vec3(
-        camera.target.data[0] - camera.position.data[0],
-        camera.target.data[1] - camera.position.data[1],
-        camera.target.data[2] - camera.position.data[2],
-      );
+      const cameraDirection = camera.getForward();
 
       for (let i = 0; i < this.maxDirectionalLights; i++) {
         const light = activeLights[i];

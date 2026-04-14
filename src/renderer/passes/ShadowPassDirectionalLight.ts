@@ -93,6 +93,8 @@ export class ShadowPassDirectionalLight {
 
     const shaderModule = this.device.createShaderModule({ code: shader });
 
+    // Opaque pipeline: NO fragment shader - uses hardware depth write
+    // This is faster and matches the old working behavior
     this.pipeline = this.device.createRenderPipeline({
       label: "Shadow Pass Pipeline",
       layout: this.device.createPipelineLayout({
@@ -120,6 +122,7 @@ export class ShadowPassDirectionalLight {
       },
     });
 
+    // Transparent pipeline: HAS fragment shader for alpha testing
     this.transparentPipeline = this.device.createRenderPipeline({
       label: "Shadow Pass Transparent Pipeline",
       layout: this.device.createPipelineLayout({
@@ -184,20 +187,25 @@ export class ShadowPassDirectionalLight {
           light.viewProjectionMatrices[cascadeIndex],
         );
 
-        const visibleOpaqueMeshes = opaqueMeshes.filter((mesh) => {
-          mesh.updateWorldAABB();
-          return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-        });
+        // const visibleOpaqueMeshes = opaqueMeshes.filter((mesh) => {
+        //   mesh.updateWorldAABB();
+        //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+        // });
+        //
+        // const visibleAlphaTestMeshes = alphaTestMeshes.filter((mesh) => {
+        //   mesh.updateWorldAABB();
+        //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+        // });
+        //
+        // const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
+        //   mesh.updateWorldAABB();
+        //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+        // });
 
-        const visibleAlphaTestMeshes = alphaTestMeshes.filter((mesh) => {
-          mesh.updateWorldAABB();
-          return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-        });
-
-        const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
-          mesh.updateWorldAABB();
-          return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-        });
+        // Disable cullling for debugging:
+        const visibleTransparentMeshes = transparentMeshes;
+        const visibleAlphaTestMeshes = alphaTestMeshes;
+        const visibleOpaqueMeshes = opaqueMeshes;
 
         const textureLayerIndex =
           lightIndex * SHADOW_MAP_CASCADES_COUNT + cascadeIndex;

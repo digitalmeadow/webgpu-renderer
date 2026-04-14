@@ -145,58 +145,39 @@ export class Mat4 {
   }
 
   static determinant(m: Mat4): number {
-    const m00 = m.data[0],
-      m01 = m.data[1],
-      m02 = m.data[2],
-      m03 = m.data[3];
-    const m10 = m.data[4],
-      m11 = m.data[5],
-      m12 = m.data[6],
-      m13 = m.data[7];
-    const m20 = m.data[8],
-      m21 = m.data[9],
-      m22 = m.data[10],
-      m23 = m.data[11];
-    const m30 = m.data[12],
-      m31 = m.data[13],
-      m32 = m.data[14],
-      m33 = m.data[15];
+    const a00 = m.data[0],
+      a01 = m.data[1],
+      a02 = m.data[2],
+      a03 = m.data[3];
+    const a10 = m.data[4],
+      a11 = m.data[5],
+      a12 = m.data[6],
+      a13 = m.data[7];
+    const a20 = m.data[8],
+      a21 = m.data[9],
+      a22 = m.data[10],
+      a23 = m.data[11];
+    const a30 = m.data[12],
+      a31 = m.data[13],
+      a32 = m.data[14],
+      a33 = m.data[15];
 
-    const tmp0 = m22 * m33;
-    const tmp1 = m32 * m23;
-    const tmp2 = m12 * m33;
-    const tmp3 = m32 * m13;
-    const tmp4 = m12 * m23;
-    const tmp5 = m22 * m13;
-    const tmp6 = m02 * m33;
-    const tmp7 = m32 * m03;
-    const tmp8 = m02 * m23;
-    const tmp9 = m22 * m03;
-    const tmp10 = m02 * m13;
-    const tmp11 = m12 * m03;
+    const b00 = a00 * a11 - a01 * a10;
+    const b01 = a00 * a12 - a02 * a10;
+    const b02 = a00 * a13 - a03 * a10;
+    const b03 = a01 * a12 - a02 * a11;
+    const b04 = a01 * a13 - a03 * a11;
+    const b05 = a02 * a13 - a03 * a12;
+    const b06 = a20 * a31 - a21 * a30;
+    const b07 = a20 * a32 - a22 * a30;
+    const b08 = a20 * a33 - a23 * a30;
+    const b09 = a21 * a32 - a22 * a31;
+    const b10 = a21 * a33 - a23 * a31;
+    const b11 = a22 * a33 - a23 * a32;
 
-    const t0 =
-      tmp0 * m11 +
-      tmp3 * m21 +
-      tmp4 * m31 -
-      (tmp1 * m11 + tmp2 * m21 + tmp5 * m31);
-    const t1 =
-      tmp1 * m01 +
-      tmp6 * m21 +
-      tmp9 * m31 -
-      (tmp0 * m01 + tmp7 * m21 + tmp8 * m31);
-    const t2 =
-      tmp2 * m01 +
-      tmp7 * m11 +
-      tmp10 * m31 -
-      (tmp3 * m01 + tmp6 * m11 + tmp11 * m31);
-    const t3 =
-      tmp5 * m01 +
-      tmp8 * m11 +
-      tmp11 * m21 -
-      (tmp4 * m01 + tmp9 * m11 + tmp10 * m21);
-
-    return m00 * t0 + m10 * t1 + m20 * t2 + m30 * t3;
+    return (
+      b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06
+    );
   }
 
   static transpose(m: Mat4, out?: Mat4): Mat4 {
@@ -734,27 +715,25 @@ export class Mat4 {
     out?: Mat4,
   ): Mat4 {
     out ??= new Mat4();
-    const rl = 1 / (right - left);
-    const tb = 1 / (top - bottom);
+    const lr = 1 / (left - right);
+    const bt = 1 / (bottom - top);
+    // Correct formula for WebGPU: maps [near, far] to NDC [0, 1]
+    // z_ndc = (z - near) / (far - near) = z * (1/(far-near)) - near/(far-near)
     const fn = 1 / (far - near);
-
-    out.data[0] = 2 * rl;
+    out.data[0] = -2 * lr;
     out.data[1] = 0;
     out.data[2] = 0;
     out.data[3] = 0;
-
     out.data[4] = 0;
-    out.data[5] = 2 * tb;
+    out.data[5] = -2 * bt;
     out.data[6] = 0;
     out.data[7] = 0;
-
     out.data[8] = 0;
     out.data[9] = 0;
     out.data[10] = fn;
     out.data[11] = 0;
-
-    out.data[12] = -(left + right) * rl;
-    out.data[13] = -(top + bottom) * tb;
+    out.data[12] = (left + right) * lr;
+    out.data[13] = (top + bottom) * bt;
     out.data[14] = -near * fn;
     out.data[15] = 1;
     return out;
