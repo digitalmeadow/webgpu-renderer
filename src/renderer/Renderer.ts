@@ -528,6 +528,14 @@ export class Renderer {
     return this.materialManager;
   }
 
+  public getCameraBindGroupLayout(): GPUBindGroupLayout {
+    return this.cameraBindGroupLayout;
+  }
+
+  public getLightingBindGroupLayout(): GPUBindGroupLayout {
+    return this.lightManager.lightingBindGroupLayout;
+  }
+
   public setSkyboxTexture(texture: CubeTexture | null): void {
     this.skyboxTexture = texture;
     this.sceneUniforms.setSkyboxTexture(texture);
