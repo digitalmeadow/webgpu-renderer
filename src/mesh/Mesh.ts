@@ -4,14 +4,19 @@ import { Entity, EntityType } from "../scene/Entity";
 import { Geometry } from "../geometries";
 import { Mat4 } from "../math";
 import { SkinData } from "../skinning";
+import { InstanceData, DEFAULT_INSTANCE_DATA } from "../scene/InstanceData";
 
 export class Mesh extends Entity {
   readonly type = EntityType.Mesh;
   public geometry: Geometry;
+  // NOTE: uniforms are kept for skinning support, but not used in instanced rendering
+  // TODO: Implement skinning support for instanced rendering
   public uniforms: MeshUniforms;
   public material: MaterialBase | null = null;
   public skinData: SkinData | null = null;
   public billboard: "x" | "y" | "z" | 0 = 0;
+  public instanceGroupId: string | null = null;
+  public instanceData: InstanceData = DEFAULT_INSTANCE_DATA;
   private device: GPUDevice;
 
   constructor(

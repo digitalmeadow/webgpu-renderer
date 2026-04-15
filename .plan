@@ -10,14 +10,14 @@ Not in order:
   Anti Aliasing
   (SSA done, need MMSA next)
 
+  Godrays
+
   Mipmaps
 
-  Fix shadows
   Animate trees with movement
 
   Shadows
   Softer when further away from contact point (complex, expensive)
-  Snap shadows to pixels to avoid jittering?
 
 - Ambient occlusion
 

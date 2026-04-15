@@ -10,11 +10,13 @@ import {
   MaterialCustom,
   MaterialType,
 } from "../../materials";
+import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
 
 export class GeometryPass {
   private pipeline: GPURenderPipeline;
   public cameraBindGroupLayout: GPUBindGroupLayout;
-  public meshBindGroupLayout: GPUBindGroupLayout;
+  private instanceGroupManager: InstanceGroupManager =
+    new InstanceGroupManager();
 
   constructor(
     device: GPUDevice,
@@ -36,30 +38,18 @@ export class GeometryPass {
       ],
     });
 
-    this.meshBindGroupLayout = device.createBindGroupLayout({
-      label: "Mesh Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
-
     this.pipeline = device.createRenderPipeline({
       label: "Geometry Pass Pipeline",
       layout: device.createPipelineLayout({
         bindGroupLayouts: [
           this.cameraBindGroupLayout,
-          this.meshBindGroupLayout,
           materialManager.materialBindGroupLayout,
         ],
       }),
       vertex: {
         module: shaderModule,
         entryPoint: "vs_main",
-        buffers: [Vertex.getBufferLayout()],
+        buffers: [Vertex.getBufferLayout(), getInstanceBufferLayout()],
       },
       fragment: {
         module: shaderModule,
@@ -92,6 +82,13 @@ export class GeometryPass {
     camera: Camera,
     materialManager: MaterialManager,
   ): void {
+    // Build instance groups for all meshes
+    const allMeshes = [...opaqueMeshes, ...alphaTestMeshes];
+    const instanceGroups = this.instanceGroupManager.buildGroups(
+      device,
+      allMeshes,
+    );
+
     const passEncoder = encoder.beginRenderPass({
       label: "Geometry Pass",
       colorAttachments: [
@@ -132,77 +129,49 @@ export class GeometryPass {
 
     let currentPipeline: GPURenderPipeline | null = null;
 
-    const renderMesh = (mesh: Mesh) => {
-      if (!mesh.uniforms || !mesh.material) return;
+    // Render each instance group
+    for (const group of instanceGroups) {
+      if (!group.instanceBuffer || group.instanceCount === 0) continue;
 
       let pipelineToUse: GPURenderPipeline | null = null;
 
-      if (mesh.material.type === MaterialType.Custom) {
-        pipelineToUse = materialManager.getCustomPipeline(
-          mesh.material as import("../../materials/MaterialCustom").MaterialCustom,
-          camera,
-          this.meshBindGroupLayout,
-          "geometry",
-        );
+      // Check if material needs custom pipeline
+      if (group.material.type === MaterialType.Custom) {
+        // Custom materials need special handling - skip for now
+        // TODO: Support custom pipelines with instancing
+        pipelineToUse = null;
       } else if (
-        mesh.material.type === MaterialType.Basic ||
-        (mesh.material.type === MaterialType.PBR &&
-          (mesh.material as any).hooks.albedo)
+        group.material.type === MaterialType.Basic ||
+        (group.material.type === MaterialType.PBR &&
+          (group.material as any).hooks?.albedo)
       ) {
-        const basicOrPbr =
-          mesh.material.type === MaterialType.Basic
-            ? (mesh.material as MaterialBasic)
-            : (mesh.material as MaterialPBR);
-        pipelineToUse = materialManager.getHookPipeline(
-          basicOrPbr,
-          camera,
-          this.meshBindGroupLayout,
-          "geometry",
-        );
+        // Materials with hooks need special handling - skip for now
+        // TODO: Support hook pipelines with instancing
+        pipelineToUse = null;
       } else {
         pipelineToUse = this.pipeline;
       }
 
-      if (!pipelineToUse) return;
-
-      const billboardAxis =
-        mesh.billboard === "x"
-          ? 1
-          : mesh.billboard === "y"
-            ? 2
-            : mesh.billboard === "z"
-              ? 3
-              : 0;
-      mesh.uniforms.update(
-        device,
-        mesh.transform.getWorldMatrix(),
-        billboardAxis,
-      );
+      if (!pipelineToUse) continue;
 
       if (pipelineToUse !== currentPipeline) {
         passEncoder.setPipeline(pipelineToUse);
         currentPipeline = pipelineToUse;
       }
 
-      passEncoder.setBindGroup(1, mesh.uniforms.bindGroup);
+      // Material bind group moved to group 1 (was group 2)
+      const materialBindGroup = materialManager.getBindGroup(group.material);
+      if (!materialBindGroup) continue;
 
-      const materialBindGroup = materialManager.getBindGroup(mesh.material);
-      if (!materialBindGroup) {
-        return;
-      }
-      passEncoder.setBindGroup(2, materialBindGroup);
+      passEncoder.setBindGroup(1, materialBindGroup);
 
-      passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
-      passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
-      passEncoder.drawIndexed(mesh.geometry.indexCount);
-    };
+      // Set vertex and instance buffers
+      passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
+      passEncoder.setVertexBuffer(1, group.instanceBuffer);
+      passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
 
-    for (const mesh of opaqueMeshes) {
-      renderMesh(mesh);
-    }
-
-    for (const mesh of alphaTestMeshes) {
-      renderMesh(mesh);
+      // Draw all instances in one call
+      passEncoder.drawIndexed(group.geometry.indexCount, group.instanceCount);
     }
 
     passEncoder.end();

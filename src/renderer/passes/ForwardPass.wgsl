@@ -21,19 +21,19 @@ struct CameraUniforms {
     far: f32,
 }
 
-@group(0) @binding(0) var<uniform> camera_uniforms: CameraUniforms;
-
-// Mesh uniforms (group 1)
-struct MeshUniforms {
-    model_matrix: mat4x4<f32>,
-    joint_matrices: array<mat4x4<f32>, 64>,
-    apply_skinning: u32,
-    billboardAxis: u32,
+struct InstanceInput {
+    @location(6) model_matrix_0: vec4<f32>,
+    @location(7) model_matrix_1: vec4<f32>,
+    @location(8) model_matrix_2: vec4<f32>,
+    @location(9) model_matrix_3: vec4<f32>,
+    @location(10) billboard_axis: u32,
+    @location(11) custom_data_0: vec4<f32>,
+    @location(12) custom_data_1: vec4<f32>,
 }
 
-@group(1) @binding(0) var<uniform> mesh_uniforms: MeshUniforms;
+@group(0) @binding(0) var<uniform> camera_uniforms: CameraUniforms;
 
-// Light + Scene (group 2) - combined matching LightingPass structure
+// Light + Scene (group 1) - combined matching LightingPass structure
 // Scene uniforms
 struct SceneUniforms {
     ambient_light_color: vec3<f32>,
@@ -55,8 +55,6 @@ struct SceneUniforms {
     fog_enabled: u32,
     // 16 byte alignment
 }
-
-@group(2) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
 
 // Directional Light Uniforms
 const MAX_DIRECTIONAL_LIGHTS: u32 = 4;
@@ -94,27 +92,29 @@ struct LightSpotUniformsArray {
     light_count: u32,
 };
 
-@group(2) @binding(1) var sampler_compare: sampler_comparison;
-@group(2) @binding(2) var<uniform> light_directional_uniforms: LightDirectionalUniformsArray;
-@group(2) @binding(3) var light_directional_shadow_texture: texture_depth_2d_array;
-@group(2) @binding(4) var<uniform> light_spot_uniforms: LightSpotUniformsArray;
-@group(2) @binding(5) var light_spot_shadow_texture: texture_depth_2d_array;
+@group(1) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
+
+@group(1) @binding(1) var sampler_compare: sampler_comparison;
+@group(1) @binding(2) var<uniform> light_directional_uniforms: LightDirectionalUniformsArray;
+@group(1) @binding(3) var light_directional_shadow_texture: texture_depth_2d_array;
+@group(1) @binding(4) var<uniform> light_spot_uniforms: LightSpotUniformsArray;
+@group(1) @binding(5) var light_spot_shadow_texture: texture_depth_2d_array;
 
 // Skybox for IBL
-@group(2) @binding(6) var skyboxTexture: texture_cube<f32>;
-@group(2) @binding(7) var skyboxSampler: sampler;
+@group(1) @binding(6) var skyboxTexture: texture_cube<f32>;
+@group(1) @binding(7) var skyboxSampler: sampler;
 
-// Material uniforms (group 3)
+// Material uniforms (group 2)
 struct MaterialUniforms {
     color: vec4<f32>,
     opacity: f32,
 }
 
-@group(3) @binding(0) var material_sampler: sampler;
-@group(3) @binding(1) var albedo_texture: texture_2d<f32>;
-@group(3) @binding(2) var normal_texture: texture_2d<f32>;
-@group(3) @binding(3) var metalness_roughness_texture: texture_2d<f32>;
-@group(3) @binding(4) var<uniform> material_uniforms: MaterialUniforms;
+@group(2) @binding(0) var material_sampler: sampler;
+@group(2) @binding(1) var albedo_texture: texture_2d<f32>;
+@group(2) @binding(2) var normal_texture: texture_2d<f32>;
+@group(2) @binding(3) var metalness_roughness_texture: texture_2d<f32>;
+@group(2) @binding(4) var<uniform> material_uniforms: MaterialUniforms;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -156,18 +156,26 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
 }
 
 @vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
     var out: VertexOutput;
+    
+    // Reconstruct model matrix from instance data
+    let model_matrix = mat4x4<f32>(
+        instance.model_matrix_0,
+        instance.model_matrix_1,
+        instance.model_matrix_2,
+        instance.model_matrix_3,
+    );
     
     var local_pos = in.position;
     var local_normal = in.normal;
     
     // Extract world position directly from model matrix translation (column 4)
-    let mesh_pos = mesh_uniforms.model_matrix[3].xyz;
+    let mesh_pos = model_matrix[3].xyz;
     
     // Apply billboarding if enabled
-    if (mesh_uniforms.billboardAxis != 0u) {
-        let axisVec = get_billboard_axis(mesh_uniforms.billboardAxis);
+    if (instance.billboard_axis != 0u) {
+        let axisVec = get_billboard_axis(instance.billboard_axis);
         let billboard_matrix = compute_billboard_orientation(mesh_pos, axisVec);
         
         let billboarded_pos = billboard_matrix * in.position;
@@ -180,10 +188,10 @@ fn vs_main(in: VertexInput) -> VertexOutput {
         return out;
     }
     
-    let world_position = mesh_uniforms.model_matrix * vec4<f32>(local_pos, 1.0);
+    let world_position = model_matrix * vec4<f32>(local_pos, 1.0);
     out.position = camera_uniforms.view_projection_matrix * world_position;
     out.world_position = world_position.xyz;
-    out.world_normal = (mesh_uniforms.model_matrix * vec4<f32>(local_normal, 0.0)).xyz;
+    out.world_normal = (model_matrix * vec4<f32>(local_normal, 0.0)).xyz;
     out.uv_coords = in.uv;
     return out;
 }

@@ -1,0 +1,162 @@
+import { Mesh } from "../mesh";
+import { InstanceGroup, INSTANCE_STRIDE } from "./InstanceGroup";
+import { Geometry } from "../geometries";
+import { MaterialBase } from "../materials";
+
+export class InstanceGroupManager {
+  private groups: Map<string, InstanceGroup> = new Map();
+  private geometryIds: WeakMap<Geometry, number> = new WeakMap();
+  private materialIds: WeakMap<MaterialBase, number> = new WeakMap();
+  private nextGeometryId = 0;
+  private nextMaterialId = 0;
+
+  buildGroups(device: GPUDevice, meshes: Mesh[]): InstanceGroup[] {
+    this.groups.clear();
+
+    // Debug logging for first few meshes
+    let debugCount = 0;
+    const maxDebugLogs = 3;
+
+    for (const mesh of meshes) {
+      if (!mesh.material) continue;
+
+      const key = this.getGroupKey(mesh);
+
+      // Log details for first few meshes to debug batching
+      if (debugCount < maxDebugLogs) {
+        const geomId = this.getGeometryId(mesh.geometry);
+        const matId = this.getMaterialId(mesh.material);
+        console.log(
+          `[Instancing Debug] Mesh "${mesh.name}":`,
+          `instanceGroupId="${mesh.instanceGroupId || "none"}"`,
+          `geomId=${geomId}`,
+          `matId=${matId}`,
+          `key="${key}"`,
+          `geomObject=${mesh.geometry}`,
+          `matObject=${mesh.material}`,
+        );
+        debugCount++;
+      }
+
+      if (!this.groups.has(key)) {
+        this.groups.set(
+          key,
+          new InstanceGroup(key, mesh.geometry, mesh.material),
+        );
+      }
+
+      this.groups.get(key)!.addMesh(mesh);
+    }
+
+    // Update all instance buffers
+    for (const group of this.groups.values()) {
+      this.updateInstanceBuffer(device, group);
+    }
+
+    // Log instance group statistics
+    this.logInstanceStats();
+
+    return Array.from(this.groups.values());
+  }
+
+  private logInstanceStats(): void {
+    const groups = Array.from(this.groups.values());
+    const totalMeshes = groups.reduce((sum, g) => sum + g.meshes.length, 0);
+    const largeGroups = groups.filter((g) => g.meshes.length >= 100);
+
+    if (largeGroups.length > 0) {
+      console.log(
+        `[Instancing] ${groups.length} groups, ${totalMeshes} meshes total | ${largeGroups.length} groups with 100+ instances:`,
+        largeGroups.map((g) => `${g.meshes.length} instances`).join(", "),
+      );
+    } else if (groups.length > 0) {
+      const maxInstances = Math.max(...groups.map((g) => g.meshes.length));
+      console.log(
+        `[Instancing] ${groups.length} groups, ${totalMeshes} meshes total | Largest group: ${maxInstances} instances`,
+      );
+    }
+  }
+
+  private getGroupKey(mesh: Mesh): string {
+    const geometryId = this.getGeometryId(mesh.geometry);
+    const materialId = this.getMaterialId(mesh.material!);
+
+    // User-specified instance group
+    if (mesh.instanceGroupId) {
+      return `${mesh.instanceGroupId}_${geometryId}_${materialId}`;
+    }
+
+    // Auto-batch by geometry + material
+    return `_auto_${geometryId}_${materialId}`;
+  }
+
+  private getGeometryId(geometry: Geometry): number {
+    if (!this.geometryIds.has(geometry)) {
+      this.geometryIds.set(geometry, this.nextGeometryId++);
+    }
+    return this.geometryIds.get(geometry)!;
+  }
+
+  private getMaterialId(material: MaterialBase): number {
+    if (!this.materialIds.has(material)) {
+      this.materialIds.set(material, this.nextMaterialId++);
+    }
+    return this.materialIds.get(material)!;
+  }
+
+  private updateInstanceBuffer(device: GPUDevice, group: InstanceGroup): void {
+    const size = group.meshes.length * INSTANCE_STRIDE;
+
+    // Create or resize buffer
+    if (!group.instanceBuffer || group.instanceBuffer.size < size) {
+      group.instanceBuffer?.destroy();
+      group.instanceBuffer = device.createBuffer({
+        label: `Instance Buffer ${group.id}`,
+        size,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      });
+    }
+
+    group.instanceBufferData = new ArrayBuffer(size);
+    const floatView = new Float32Array(group.instanceBufferData);
+    const uintView = new Uint32Array(group.instanceBufferData);
+
+    for (let i = 0; i < group.meshes.length; i++) {
+      const mesh = group.meshes[i];
+      const offset = (i * INSTANCE_STRIDE) / 4; // Offset in 32-bit words
+
+      // Model matrix (64 bytes = 16 floats)
+      const matrix = mesh.transform.getWorldMatrix();
+      floatView.set(matrix.data, offset);
+
+      // Billboard axis (4 bytes at offset 64)
+      const billboardValue = this.getBillboardValue(mesh.billboard);
+      uintView[offset + 16] = billboardValue;
+
+      // CustomData0 (16 bytes at offset 68)
+      const data0 = mesh.instanceData?.customData0 || [0, 0, 0, 0];
+      floatView.set(data0, offset + 17);
+
+      // CustomData1 (16 bytes at offset 84)
+      const data1 = mesh.instanceData?.customData1 || [1, 1, 1, 1];
+      floatView.set(data1, offset + 21);
+    }
+
+    device.queue.writeBuffer(group.instanceBuffer, 0, group.instanceBufferData);
+    group.instanceCount = group.meshes.length;
+  }
+
+  private getBillboardValue(billboard: "x" | "y" | "z" | 0): number {
+    if (billboard === "x") return 1;
+    if (billboard === "y") return 2;
+    if (billboard === "z") return 3;
+    return 0;
+  }
+
+  clear(): void {
+    for (const group of this.groups.values()) {
+      group.destroy();
+    }
+    this.groups.clear();
+  }
+}

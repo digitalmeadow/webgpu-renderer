@@ -26,16 +26,17 @@ struct LightSpotUniforms {
     aspect_radius: vec4<f32>,
 }
 
-@group(0) @binding(0) var<uniform> light_spot_uniforms: LightSpotUniforms;
-
-struct MeshUniforms {
-    model_transform_matrix: mat4x4<f32>,
-    joint_matrices: array<mat4x4<f32>, MAX_JOINTS>,
-    apply_skinning: u32,
-    billboardAxis: u32,
+struct InstanceInput {
+    @location(6) model_matrix_0: vec4<f32>,
+    @location(7) model_matrix_1: vec4<f32>,
+    @location(8) model_matrix_2: vec4<f32>,
+    @location(9) model_matrix_3: vec4<f32>,
+    @location(10) billboard_axis: u32,
+    @location(11) custom_data_0: vec4<f32>,
+    @location(12) custom_data_1: vec4<f32>,
 }
 
-@group(1) @binding(0) var<uniform> mesh_uniforms: MeshUniforms;
+@group(0) @binding(0) var<uniform> light_spot_uniforms: LightSpotUniforms;
 
 fn get_billboard_axis(axis: u32) -> vec3<f32> {
     return select(
@@ -72,28 +73,29 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
     return mat3x3<f32>(right, up, billboard_forward);
 }
 
-@group(2) @binding(0) var defaultSampler: sampler;
-@group(2) @binding(1) var albedoTexture: texture_2d<f32>;
+@group(1) @binding(0) var defaultSampler: sampler;
+@group(1) @binding(1) var albedoTexture: texture_2d<f32>;
 
 @vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
     var output: VertexOutput;
     
-    var skin_matrix = mat4x4<f32>(
-        in.joint_weights.x * mesh_uniforms.joint_matrices[i32(in.joint_indices.x)] +
-        in.joint_weights.y * mesh_uniforms.joint_matrices[i32(in.joint_indices.y)] +
-        in.joint_weights.z * mesh_uniforms.joint_matrices[i32(in.joint_indices.z)] +
-        in.joint_weights.w * mesh_uniforms.joint_matrices[i32(in.joint_indices.w)]
+    // Reconstruct model matrix from instance data
+    let model_matrix = mat4x4<f32>(
+        instance.model_matrix_0,
+        instance.model_matrix_1,
+        instance.model_matrix_2,
+        instance.model_matrix_3,
     );
     
-    let skinned_position = skin_matrix * in.position;
-    let local_pos = select(in.position.xyz, skinned_position.xyz, bool(mesh_uniforms.apply_skinning));
+    // Note: Skinning removed for instanced rendering
+    let local_pos = in.position.xyz;
 
-    let mesh_pos = mesh_uniforms.model_transform_matrix[3].xyz;
+    let mesh_pos = model_matrix[3].xyz;
     var final_local_pos = local_pos;
 
-    if (mesh_uniforms.billboardAxis != 0u) {
-        let axisVec = get_billboard_axis(mesh_uniforms.billboardAxis);
+    if (instance.billboard_axis != 0u) {
+        let axisVec = get_billboard_axis(instance.billboard_axis);
         let billboard_matrix = compute_billboard_orientation(mesh_pos, axisVec);
         let billboarded_pos = billboard_matrix * local_pos;
         // World position = mesh translation + billboard-rotated local offset.
@@ -105,7 +107,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
         return output;
     }
 
-    let model_position = mesh_uniforms.model_transform_matrix * vec4<f32>(final_local_pos, 1.0);
+    let model_position = model_matrix * vec4<f32>(final_local_pos, 1.0);
     let clip_position = light_spot_uniforms.view_projection_matrix * model_position;
     output.position = clip_position;
     output.uv = in.uv;

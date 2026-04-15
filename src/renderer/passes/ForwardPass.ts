@@ -6,22 +6,23 @@ import { Camera } from "../../camera";
 import { Vertex } from "../../geometries";
 import { Vec3 } from "../../math";
 import shader from "./ForwardPass.wgsl?raw";
+import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
 
 export class ForwardPass {
   private device: GPUDevice;
   private pipeline: GPURenderPipeline;
   private materialBindGroupLayout: GPUBindGroupLayout;
   private materialManager: MaterialManager;
-  private meshBindGroupLayout: GPUBindGroupLayout;
   private lightSceneBindGroupLayout: GPUBindGroupLayout;
   private lightManager: LightManager;
   private sceneUniforms: SceneUniforms;
   private sortEnabled: boolean;
+  private instanceGroupManager: InstanceGroupManager =
+    new InstanceGroupManager();
 
   constructor(
     device: GPUDevice,
     materialManager: MaterialManager,
-    meshBindGroupLayout: GPUBindGroupLayout,
     lightManager: LightManager,
     sceneUniforms: SceneUniforms,
     sortEnabled: boolean = true,
@@ -29,7 +30,6 @@ export class ForwardPass {
     this.device = device;
     this.materialManager = materialManager;
     this.materialBindGroupLayout = materialManager.materialBindGroupLayout;
-    this.meshBindGroupLayout = meshBindGroupLayout;
     this.lightManager = lightManager;
     this.sceneUniforms = sceneUniforms;
     this.sortEnabled = sortEnabled;
@@ -100,7 +100,6 @@ export class ForwardPass {
       layout: device.createPipelineLayout({
         bindGroupLayouts: [
           cameraBindGroupLayout,
-          this.meshBindGroupLayout,
           this.lightSceneBindGroupLayout,
           this.materialBindGroupLayout,
         ],
@@ -108,7 +107,7 @@ export class ForwardPass {
       vertex: {
         module: shaderModule,
         entryPoint: "vs_main",
-        buffers: [Vertex.getBufferLayout()],
+        buffers: [Vertex.getBufferLayout(), getInstanceBufferLayout()],
       },
       fragment: {
         module: shaderModule,
@@ -150,6 +149,12 @@ export class ForwardPass {
     outputView: GPUTextureView,
     depthView: GPUTextureView,
   ): void {
+    // Build instance groups
+    const instanceGroups = this.instanceGroupManager.buildGroups(
+      this.device,
+      meshes,
+    );
+
     const skyboxTexture = this.sceneUniforms.getSkyboxTexture();
     const skyboxTextureView = skyboxTexture?.gpuTextureView;
     const skyboxSampler = skyboxTexture?.gpuSampler;
@@ -215,64 +220,45 @@ export class ForwardPass {
 
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, camera.uniforms.bindGroup);
-    passEncoder.setBindGroup(2, lightSceneBindGroup);
+    passEncoder.setBindGroup(1, lightSceneBindGroup);
 
+    // Optionally sort instance groups by distance for transparency
     if (this.sortEnabled) {
       const cameraPos = camera.position;
-      meshes.sort((a, b) => {
-        const distA = Vec3.distanceSquared(
-          a.transform.getWorldPosition(),
-          cameraPos,
-        );
-        const distB = Vec3.distanceSquared(
-          b.transform.getWorldPosition(),
-          cameraPos,
-        );
+      instanceGroups.sort((a, b) => {
+        // Use first mesh in group for sorting
+        const distA =
+          a.meshes.length > 0
+            ? Vec3.distanceSquared(
+                a.meshes[0].transform.getWorldPosition(),
+                cameraPos,
+              )
+            : 0;
+        const distB =
+          b.meshes.length > 0
+            ? Vec3.distanceSquared(
+                b.meshes[0].transform.getWorldPosition(),
+                cameraPos,
+              )
+            : 0;
         return distB - distA;
       });
     }
 
-    for (const mesh of meshes) {
-      if (!mesh.material) {
-        continue;
-      }
-
-      const billboardAxis =
-        mesh.billboard === "x"
-          ? 1
-          : mesh.billboard === "y"
-            ? 2
-            : mesh.billboard === "z"
-              ? 3
-              : 0;
-      mesh.uniforms.update(
-        this.device,
-        mesh.transform.getWorldMatrix(),
-        billboardAxis,
-      );
-
-      const meshBindGroup = this.device.createBindGroup({
-        layout: this.meshBindGroupLayout,
-        entries: [
-          {
-            binding: 0,
-            resource: { buffer: mesh.uniforms.buffer },
-          },
-        ],
-      });
-      passEncoder.setBindGroup(1, meshBindGroup);
+    // Render each instance group
+    for (const group of instanceGroups) {
+      if (!group.instanceBuffer || group.instanceCount === 0) continue;
 
       const materialBindGroup = this.materialManager.getBindGroup(
-        mesh.material,
+        group.material,
       );
-      if (!materialBindGroup) {
-        continue;
-      }
+      if (!materialBindGroup) continue;
 
-      passEncoder.setBindGroup(3, materialBindGroup);
-      passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
-      passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
-      passEncoder.drawIndexed(mesh.geometry.indexCount);
+      passEncoder.setBindGroup(2, materialBindGroup);
+      passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
+      passEncoder.setVertexBuffer(1, group.instanceBuffer);
+      passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
+      passEncoder.drawIndexed(group.geometry.indexCount, group.instanceCount);
     }
 
     passEncoder.end();

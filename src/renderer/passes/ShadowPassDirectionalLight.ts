@@ -4,6 +4,7 @@ import { DirectionalLight, SHADOW_MAP_CASCADES_COUNT } from "../../lights";
 import { Vertex } from "../../geometries";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
 import { MaterialManager } from "../../materials";
+import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
 
 export class ShadowPassDirectionalLight {
   private device: GPUDevice;
@@ -12,10 +13,11 @@ export class ShadowPassDirectionalLight {
   private shadowMapSize: number;
   private pipeline!: GPURenderPipeline;
   private transparentPipeline!: GPURenderPipeline;
-  private meshBindGroupLayout!: GPUBindGroupLayout;
   private shadowTexture!: GPUTexture;
   private shadowTextureView!: GPUTextureView;
   private shadowTextureViews: GPUTextureView[] = [];
+  private instanceGroupManager: InstanceGroupManager =
+    new InstanceGroupManager();
 
   constructor(
     device: GPUDevice,
@@ -80,17 +82,6 @@ export class ShadowPassDirectionalLight {
   }
 
   private createPipelines(): void {
-    this.meshBindGroupLayout = this.device.createBindGroupLayout({
-      label: "Shadow Pass Mesh Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
-
     const shaderModule = this.device.createShaderModule({ code: shader });
 
     // Opaque pipeline: NO fragment shader - uses hardware depth write
@@ -100,13 +91,12 @@ export class ShadowPassDirectionalLight {
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [
           DirectionalLight.getShadowBindGroupLayout(this.device),
-          this.meshBindGroupLayout,
         ],
       }),
       vertex: {
         module: shaderModule,
         entryPoint: "vs_main",
-        buffers: [Vertex.getBufferLayout()],
+        buffers: [Vertex.getBufferLayout(), getInstanceBufferLayout()],
       },
       primitive: {
         topology: "triangle-list",
@@ -128,14 +118,13 @@ export class ShadowPassDirectionalLight {
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [
           DirectionalLight.getShadowBindGroupLayout(this.device),
-          this.meshBindGroupLayout,
           this.materialManager.materialBindGroupLayout,
         ],
       }),
       vertex: {
         module: shaderModule,
         entryPoint: "vs_main",
-        buffers: [Vertex.getBufferLayout()],
+        buffers: [Vertex.getBufferLayout(), getInstanceBufferLayout()],
       },
       fragment: {
         module: shaderModule,
@@ -169,6 +158,20 @@ export class ShadowPassDirectionalLight {
     alphaTestMeshes: Mesh[] = [],
     transparentMeshes: Mesh[] = [],
   ): void {
+    // Build instance groups for all mesh types
+    const opaqueGroups = this.instanceGroupManager.buildGroups(
+      device,
+      opaqueMeshes,
+    );
+    const alphaTestGroups = this.instanceGroupManager.buildGroups(
+      device,
+      alphaTestMeshes,
+    );
+    const transparentGroups = this.instanceGroupManager.buildGroups(
+      device,
+      transparentMeshes,
+    );
+
     for (
       let lightIndex = 0;
       lightIndex < directionalLights.length;
@@ -187,25 +190,10 @@ export class ShadowPassDirectionalLight {
           light.viewProjectionMatrices[cascadeIndex],
         );
 
-        // const visibleOpaqueMeshes = opaqueMeshes.filter((mesh) => {
-        //   mesh.updateWorldAABB();
-        //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-        // });
-        //
-        // const visibleAlphaTestMeshes = alphaTestMeshes.filter((mesh) => {
-        //   mesh.updateWorldAABB();
-        //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-        // });
-        //
-        // const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
-        //   mesh.updateWorldAABB();
-        //   return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
-        // });
-
-        // Disable cullling for debugging:
-        const visibleTransparentMeshes = transparentMeshes;
-        const visibleAlphaTestMeshes = alphaTestMeshes;
-        const visibleOpaqueMeshes = opaqueMeshes;
+        // Disable culling for debugging:
+        const visibleOpaqueGroups = opaqueGroups;
+        const visibleAlphaTestGroups = alphaTestGroups;
+        const visibleTransparentGroups = transparentGroups;
 
         const textureLayerIndex =
           lightIndex * SHADOW_MAP_CASCADES_COUNT + cascadeIndex;
@@ -225,90 +213,67 @@ export class ShadowPassDirectionalLight {
           },
         });
 
+        // Render opaque meshes (no fragment shader)
         passEncoder.setPipeline(this.pipeline);
+        passEncoder.setBindGroup(0, light.shadowBindGroup);
 
-        for (const mesh of visibleOpaqueMeshes) {
-          mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+        for (const group of visibleOpaqueGroups) {
+          if (!group.instanceBuffer || group.instanceCount === 0) continue;
 
-          const meshBindGroup = this.device.createBindGroup({
-            label: "Shadow Pass Mesh Bind Group",
-            layout: this.meshBindGroupLayout,
-            entries: [
-              {
-                binding: 0,
-                resource: { buffer: mesh.uniforms.buffer },
-              },
-            ],
-          });
-
-          passEncoder.setBindGroup(0, light.shadowBindGroup);
-          passEncoder.setBindGroup(1, meshBindGroup);
-          passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
-          passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
-          passEncoder.drawIndexed(mesh.geometry.indexCount);
+          passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
+          passEncoder.setVertexBuffer(1, group.instanceBuffer);
+          passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
+          passEncoder.drawIndexed(
+            group.geometry.indexCount,
+            group.instanceCount,
+          );
         }
 
-        if (visibleAlphaTestMeshes.length > 0) {
+        // Render alpha-tested meshes (with fragment shader for alpha discard)
+        if (visibleAlphaTestGroups.length > 0) {
           passEncoder.setPipeline(this.transparentPipeline);
 
-          for (const mesh of visibleAlphaTestMeshes) {
-            mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+          for (const group of visibleAlphaTestGroups) {
+            if (!group.instanceBuffer || group.instanceCount === 0) continue;
 
-            const meshBindGroup = this.device.createBindGroup({
-              label: "Shadow Pass AlphaTest Mesh Bind Group",
-              layout: this.meshBindGroupLayout,
-              entries: [
-                {
-                  binding: 0,
-                  resource: { buffer: mesh.uniforms.buffer },
-                },
-              ],
-            });
-
-            const materialBindGroup = mesh.material
-              ? this.materialManager.getBindGroup(mesh.material)
-              : null;
+            const materialBindGroup = this.materialManager.getBindGroup(
+              group.material,
+            );
+            if (!materialBindGroup) continue;
 
             passEncoder.setBindGroup(0, light.shadowBindGroup);
-            passEncoder.setBindGroup(1, meshBindGroup);
-            if (materialBindGroup) {
-              passEncoder.setBindGroup(2, materialBindGroup);
-            }
-            passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
-            passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
-            passEncoder.drawIndexed(mesh.geometry.indexCount);
+            passEncoder.setBindGroup(1, materialBindGroup);
+            passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
+            passEncoder.setVertexBuffer(1, group.instanceBuffer);
+            passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
+            passEncoder.drawIndexed(
+              group.geometry.indexCount,
+              group.instanceCount,
+            );
           }
         }
 
-        if (visibleTransparentMeshes.length > 0) {
+        // Render transparent meshes (with fragment shader for alpha discard)
+        if (visibleTransparentGroups.length > 0) {
           passEncoder.setPipeline(this.transparentPipeline);
 
-          for (const mesh of visibleTransparentMeshes) {
-            mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+          for (const group of visibleTransparentGroups) {
+            if (!group.instanceBuffer || group.instanceCount === 0) continue;
 
-            const meshBindGroup = this.device.createBindGroup({
-              label: "Shadow Pass Transparent Mesh Bind Group",
-              layout: this.meshBindGroupLayout,
-              entries: [
-                {
-                  binding: 0,
-                  resource: { buffer: mesh.uniforms.buffer },
-                },
-              ],
-            });
-
-            const materialBindGroup = mesh.material
-              ? this.materialManager.getBindGroup(mesh.material)
-              : null;
+            const materialBindGroup = this.materialManager.getBindGroup(
+              group.material,
+            );
+            if (!materialBindGroup) continue;
 
             passEncoder.setBindGroup(0, light.shadowBindGroup);
-            passEncoder.setBindGroup(1, meshBindGroup);
-            if (materialBindGroup) {
-              passEncoder.setBindGroup(2, materialBindGroup);
-            }
-            passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
-            passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
-            passEncoder.drawIndexed(mesh.geometry.indexCount);
+            passEncoder.setBindGroup(1, materialBindGroup);
+            passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
+            passEncoder.setVertexBuffer(1, group.instanceBuffer);
+            passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
+            passEncoder.drawIndexed(
+              group.geometry.indexCount,
+              group.instanceCount,
+            );
           }
         }
 

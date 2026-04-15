@@ -240,23 +240,10 @@ export class DirectionalLight extends Light {
       const centerProjectedX = Vec3.dot(center, lightRight);
       const centerProjectedY = Vec3.dot(center, lightUp);
 
-      // Debug: Show pre-snap light-space coordinates
-      console.log(
-        `[Cascade ${cascadeIndex}] PRE-SNAP light-space: X=${centerProjectedX.toFixed(4)}, Y=${centerProjectedY.toFixed(4)}`,
-      );
-
       const snappedProjectedX =
         Math.floor(centerProjectedX / actualTexelSize) * actualTexelSize;
       const snappedProjectedY =
         Math.floor(centerProjectedY / actualTexelSize) * actualTexelSize;
-
-      // Debug: Show post-snap light-space coordinates and verify discrete jumps
-      console.log(
-        `[Cascade ${cascadeIndex}] POST-SNAP light-space: X=${snappedProjectedX.toFixed(4)}, Y=${snappedProjectedY.toFixed(4)}`,
-      );
-      console.log(
-        `[Cascade ${cascadeIndex}] SNAP-DELTA light-space: dX=${(snappedProjectedX - centerProjectedX).toFixed(4)}, dY=${(snappedProjectedY - centerProjectedY).toFixed(4)} (should be < texelSize)`,
-      );
 
       // Verify snapping is working: delta should always be less than texelSize
       const deltaX = Math.abs(snappedProjectedX - centerProjectedX);
@@ -284,11 +271,6 @@ export class DirectionalLight extends Light {
       Vec3.copy(snappedCenter, eye);
       Vec3.addScaled(eye, lightDir, eyeDistance, eye);
       const viewMatrix = Mat4.lookAt(eye, snappedCenter, up);
-
-      // Log essential snapping info
-      console.log(
-        `[Cascade ${cascadeIndex}] texelSize=${actualTexelSize.toFixed(4)}, worldShift=(${(snappedCenter.x - center.x).toFixed(4)}, ${(snappedCenter.y - center.y).toFixed(4)}, ${(snappedCenter.z - center.z).toFixed(4)})`,
-      );
 
       // Calculate orthographic projection bounds from light-space center
       const centerX = (viewMin.x + viewMax.x) / 2;

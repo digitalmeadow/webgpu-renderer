@@ -4,6 +4,7 @@ import { SpotLight } from "../../lights";
 import { Vertex } from "../../geometries";
 import { MaterialManager } from "../../materials";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
+import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
 
 export class ShadowPassSpotLight {
   private device: GPUDevice;
@@ -12,10 +13,11 @@ export class ShadowPassSpotLight {
   private shadowMapSize: number;
   private pipeline!: GPURenderPipeline;
   private transparentPipeline!: GPURenderPipeline;
-  private meshBindGroupLayout!: GPUBindGroupLayout;
   private shadowTexture!: GPUTexture;
   private shadowTextureView!: GPUTextureView;
   private shadowTextureViews: GPUTextureView[] = [];
+  private instanceGroupManager: InstanceGroupManager =
+    new InstanceGroupManager();
 
   constructor(
     device: GPUDevice,
@@ -66,31 +68,17 @@ export class ShadowPassSpotLight {
   }
 
   private createPipelines(): void {
-    this.meshBindGroupLayout = this.device.createBindGroupLayout({
-      label: "Shadow Pass SpotLight Mesh Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
-
     const shaderModule = this.device.createShaderModule({ code: shader });
 
     this.pipeline = this.device.createRenderPipeline({
       label: "Shadow Pass SpotLight Pipeline",
       layout: this.device.createPipelineLayout({
-        bindGroupLayouts: [
-          SpotLight.getShadowBindGroupLayout(this.device),
-          this.meshBindGroupLayout,
-        ],
+        bindGroupLayouts: [SpotLight.getShadowBindGroupLayout(this.device)],
       }),
       vertex: {
         module: shaderModule,
         entryPoint: "vs_main",
-        buffers: [Vertex.getBufferLayout()],
+        buffers: [Vertex.getBufferLayout(), getInstanceBufferLayout()],
       },
       primitive: {
         topology: "triangle-list",
@@ -111,14 +99,13 @@ export class ShadowPassSpotLight {
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [
           SpotLight.getShadowBindGroupLayout(this.device),
-          this.meshBindGroupLayout,
           this.materialManager.materialBindGroupLayout,
         ],
       }),
       vertex: {
         module: shaderModule,
         entryPoint: "vs_main",
-        buffers: [Vertex.getBufferLayout()],
+        buffers: [Vertex.getBufferLayout(), getInstanceBufferLayout()],
       },
       fragment: {
         module: shaderModule,
@@ -157,6 +144,7 @@ export class ShadowPassSpotLight {
 
       const frustumPlanes = frustumPlanesFromMatrix(light.viewProjectionMatrix);
 
+      // Filter visible meshes
       const visibleOpaqueMeshes = opaqueMeshes.filter((mesh) => {
         mesh.updateWorldAABB();
         return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
@@ -171,6 +159,20 @@ export class ShadowPassSpotLight {
         mesh.updateWorldAABB();
         return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
       });
+
+      // Build instance groups
+      const opaqueGroups = this.instanceGroupManager.buildGroups(
+        device,
+        visibleOpaqueMeshes,
+      );
+      const alphaTestGroups = this.instanceGroupManager.buildGroups(
+        device,
+        visibleAlphaTestMeshes,
+      );
+      const transparentGroups = this.instanceGroupManager.buildGroups(
+        device,
+        visibleTransparentMeshes,
+      );
 
       const encoder = device.createCommandEncoder({
         label: `Shadow Pass SpotLight Encoder Light ${lightIndex}`,
@@ -187,86 +189,64 @@ export class ShadowPassSpotLight {
         },
       });
 
+      // Render opaque groups
       passEncoder.setPipeline(this.pipeline);
+      passEncoder.setBindGroup(0, light.shadowBindGroup);
 
-      for (const mesh of visibleOpaqueMeshes) {
-        mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+      for (const group of opaqueGroups) {
+        if (!group.instanceBuffer || group.instanceCount === 0) continue;
 
-        const meshBindGroup = this.device.createBindGroup({
-          label: "Shadow Pass SpotLight Mesh Bind Group",
-          layout: this.meshBindGroupLayout,
-          entries: [
-            {
-              binding: 0,
-              resource: { buffer: mesh.uniforms.buffer },
-            },
-          ],
-        });
-
-        passEncoder.setBindGroup(0, light.shadowBindGroup);
-        passEncoder.setBindGroup(1, meshBindGroup);
-        passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
-        passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
-        passEncoder.drawIndexed(mesh.geometry.indexCount);
+        passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
+        passEncoder.setVertexBuffer(1, group.instanceBuffer);
+        passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
+        passEncoder.drawIndexed(group.geometry.indexCount, group.instanceCount);
       }
 
-      if (visibleAlphaTestMeshes.length > 0) {
+      // Render alpha-test groups
+      if (alphaTestGroups.length > 0) {
         passEncoder.setPipeline(this.transparentPipeline);
 
-        for (const mesh of visibleAlphaTestMeshes) {
-          mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+        for (const group of alphaTestGroups) {
+          if (!group.instanceBuffer || group.instanceCount === 0) continue;
 
-          const meshBindGroup = this.device.createBindGroup({
-            label: "Shadow Pass SpotLight AlphaTest Mesh Bind Group",
-            layout: this.meshBindGroupLayout,
-            entries: [
-              {
-                binding: 0,
-                resource: { buffer: mesh.uniforms.buffer },
-              },
-            ],
-          });
-
-          const materialBindGroup = mesh.material
-            ? this.materialManager.getBindGroup(mesh.material)
-            : this.materialManager.fallbackBindGroup;
+          const materialBindGroup = this.materialManager.getBindGroup(
+            group.material,
+          );
+          if (!materialBindGroup) continue;
 
           passEncoder.setBindGroup(0, light.shadowBindGroup);
-          passEncoder.setBindGroup(1, meshBindGroup);
-          passEncoder.setBindGroup(2, materialBindGroup);
-          passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
-          passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
-          passEncoder.drawIndexed(mesh.geometry.indexCount);
+          passEncoder.setBindGroup(1, materialBindGroup);
+          passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
+          passEncoder.setVertexBuffer(1, group.instanceBuffer);
+          passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
+          passEncoder.drawIndexed(
+            group.geometry.indexCount,
+            group.instanceCount,
+          );
         }
       }
 
-      if (visibleTransparentMeshes.length > 0) {
+      // Render transparent groups
+      if (transparentGroups.length > 0) {
         passEncoder.setPipeline(this.transparentPipeline);
 
-        for (const mesh of visibleTransparentMeshes) {
-          mesh.uniforms.update(this.device, mesh.transform.getWorldMatrix());
+        for (const group of transparentGroups) {
+          if (!group.instanceBuffer || group.instanceCount === 0) continue;
 
-          const meshBindGroup = this.device.createBindGroup({
-            label: "Shadow Pass SpotLight Transparent Mesh Bind Group",
-            layout: this.meshBindGroupLayout,
-            entries: [
-              {
-                binding: 0,
-                resource: { buffer: mesh.uniforms.buffer },
-              },
-            ],
-          });
-
-          const materialBindGroup = mesh.material
-            ? this.materialManager.getBindGroup(mesh.material)
-            : this.materialManager.fallbackBindGroup;
+          const materialBindGroup = this.materialManager.getBindGroup(
+            group.material,
+          );
+          if (!materialBindGroup) continue;
 
           passEncoder.setBindGroup(0, light.shadowBindGroup);
-          passEncoder.setBindGroup(1, meshBindGroup);
-          passEncoder.setBindGroup(2, materialBindGroup);
-          passEncoder.setVertexBuffer(0, mesh.geometry.vertexBuffer);
-          passEncoder.setIndexBuffer(mesh.geometry.indexBuffer, "uint32");
-          passEncoder.drawIndexed(mesh.geometry.indexCount);
+          passEncoder.setBindGroup(1, materialBindGroup);
+          passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
+          passEncoder.setVertexBuffer(1, group.instanceBuffer);
+          passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
+          passEncoder.drawIndexed(
+            group.geometry.indexCount,
+            group.instanceCount,
+          );
         }
       }
 

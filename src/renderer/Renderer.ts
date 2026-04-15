@@ -248,7 +248,6 @@ export class Renderer {
     this.forwardPass = new ForwardPass(
       this.device,
       this.materialManager,
-      this.geometryPass.meshBindGroupLayout,
       this.lightManager,
       this.sceneUniforms,
       this.transparentSortEnabled,

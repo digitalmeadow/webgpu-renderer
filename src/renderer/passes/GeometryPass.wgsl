@@ -41,15 +41,17 @@ struct CameraUniforms {
     far: f32,
 }
 
-struct MeshUniforms {
-    model_transform_matrix: mat4x4<f32>,
-    joint_matrices: array<mat4x4<f32>, MAX_JOINTS>,
-    apply_skinning: u32,
-    billboardAxis: u32,
+struct InstanceInput {
+    @location(6) model_matrix_0: vec4<f32>,
+    @location(7) model_matrix_1: vec4<f32>,
+    @location(8) model_matrix_2: vec4<f32>,
+    @location(9) model_matrix_3: vec4<f32>,
+    @location(10) billboard_axis: u32,
+    @location(11) custom_data_0: vec4<f32>,
+    @location(12) custom_data_1: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
-@group(1) @binding(0) var<uniform> model: MeshUniforms;
 
 fn get_billboard_axis(axis: u32) -> vec3<f32> {
     return select(
@@ -83,14 +85,14 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
     return mat3x3<f32>(right, up, safe_forward);
 }
 
-@group(2) @binding(0) var defaultSampler: sampler;
-@group(2) @binding(1) var albedoTexture: texture_2d<f32>;
-@group(2) @binding(2) var normalTexture: texture_2d<f32>;
-@group(2) @binding(3) var metalnessRoughnessTexture: texture_2d<f32>;
-@group(2) @binding(4) var<uniform> material: MaterialUniforms;
-@group(2) @binding(5) var environmentTexture: texture_cube<f32>;
-@group(2) @binding(6) var envSampler: sampler;
-@group(2) @binding(7) var emissiveTexture: texture_2d<f32>;
+@group(1) @binding(0) var defaultSampler: sampler;
+@group(1) @binding(1) var albedoTexture: texture_2d<f32>;
+@group(1) @binding(2) var normalTexture: texture_2d<f32>;
+@group(1) @binding(3) var metalnessRoughnessTexture: texture_2d<f32>;
+@group(1) @binding(4) var<uniform> material: MaterialUniforms;
+@group(1) @binding(5) var environmentTexture: texture_cube<f32>;
+@group(1) @binding(6) var envSampler: sampler;
+@group(1) @binding(7) var emissiveTexture: texture_2d<f32>;
 
 @vertex
 fn vs_main(
@@ -100,38 +102,41 @@ fn vs_main(
     @location(3) joint_indices: vec4<f32>,
     @location(4) joint_weights: vec4<f32>,
     @location(5) tangent: vec4<f32>,
+    instance: InstanceInput,
 ) -> VertexOutput {
     var output: VertexOutput;
 
-    var skin_matrix = mat4x4<f32>(
-        joint_weights.x * model.joint_matrices[i32(joint_indices.x)] +
-        joint_weights.y * model.joint_matrices[i32(joint_indices.y)] +
-        joint_weights.z * model.joint_matrices[i32(joint_indices.z)] +
-        joint_weights.w * model.joint_matrices[i32(joint_indices.w)]
+    // Reconstruct model matrix from instance data
+    let model_matrix = mat4x4<f32>(
+        instance.model_matrix_0,
+        instance.model_matrix_1,
+        instance.model_matrix_2,
+        instance.model_matrix_3,
     );
 
-    let skinned_position = skin_matrix * position;
-    let local_pos = select(position.xyz, skinned_position.xyz, bool(model.apply_skinning));
+    // Note: Skinning removed for instanced rendering
+    // If skinning is needed, it must be handled differently
+    let local_pos = position.xyz;
     let local_normal = normal;
 
     // Extract world position from model matrix translation (column 4)
-    let mesh_pos = model.model_transform_matrix[3].xyz;
+    let mesh_pos = model_matrix[3].xyz;
     
     // Apply billboarding if enabled
-    if (model.billboardAxis != 0u) {
-        let axisVec = get_billboard_axis(model.billboardAxis);
+    if (instance.billboard_axis != 0u) {
+        let axisVec = get_billboard_axis(instance.billboard_axis);
         let billboard_matrix = compute_billboard_orientation(mesh_pos, axisVec);
         
         let billboarded_pos = billboard_matrix * local_pos;
         let billboarded_normal = billboard_matrix * local_normal;
         output.world_position = mesh_pos + billboarded_pos;
-        output.world_normal = (model.model_transform_matrix * vec4<f32>(billboarded_normal, 0.0)).xyz;
-        output.world_tangent = (model.model_transform_matrix * vec4<f32>(billboarded_normal, 0.0));
+        output.world_normal = (model_matrix * vec4<f32>(billboarded_normal, 0.0)).xyz;
+        output.world_tangent = (model_matrix * vec4<f32>(billboarded_normal, 0.0));
     } else {
-        let world_position = model.model_transform_matrix * vec4<f32>(local_pos, 1.0);
+        let world_position = model_matrix * vec4<f32>(local_pos, 1.0);
         output.world_position = world_position.xyz;
-        output.world_normal = (model.model_transform_matrix * vec4<f32>(local_normal, 0.0)).xyz;
-        output.world_tangent = (model.model_transform_matrix * vec4<f32>(tangent.xyz, 0.0));
+        output.world_normal = (model_matrix * vec4<f32>(local_normal, 0.0)).xyz;
+        output.world_tangent = (model_matrix * vec4<f32>(tangent.xyz, 0.0));
     }
     
     output.uv_coords = uv;
