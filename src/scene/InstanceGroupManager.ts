@@ -18,30 +18,10 @@ export class InstanceGroupManager {
   ): InstanceGroup[] {
     this.groups.clear();
 
-    // Debug logging for first few meshes
-    let debugCount = 0;
-    const maxDebugLogs = 3;
-
     for (const mesh of meshes) {
       if (!mesh.material) continue;
 
       const key = this.getGroupKey(mesh);
-
-      // Log details for first few meshes to debug batching
-      if (debugCount < maxDebugLogs) {
-        const geomId = this.getGeometryId(mesh.geometry);
-        const matId = this.getMaterialId(mesh.material);
-        console.log(
-          `[Instancing Debug] Mesh "${mesh.name}":`,
-          `instanceGroupId="${mesh.instanceGroupId || "none"}"`,
-          `geomId=${geomId}`,
-          `matId=${matId}`,
-          `key="${key}"`,
-          `geomObject=${mesh.geometry}`,
-          `matObject=${mesh.material}`,
-        );
-        debugCount++;
-      }
 
       if (!this.groups.has(key)) {
         const group = new InstanceGroup(key, mesh.geometry, mesh.material);
@@ -64,9 +44,6 @@ export class InstanceGroupManager {
     for (const group of this.groups.values()) {
       this.updateInstanceBuffer(device, group);
     }
-
-    // Log instance group statistics
-    this.logInstanceStats();
 
     return Array.from(this.groups.values());
   }
@@ -91,24 +68,6 @@ export class InstanceGroupManager {
       // Sort descending (furthest first = back-to-front for alpha blending)
       return distSqB - distSqA;
     });
-  }
-
-  private logInstanceStats(): void {
-    const groups = Array.from(this.groups.values());
-    const totalMeshes = groups.reduce((sum, g) => sum + g.meshes.length, 0);
-    const largeGroups = groups.filter((g) => g.meshes.length >= 100);
-    const sortedGroups = groups.filter((g) => g.sortByDepth);
-
-    if (largeGroups.length > 0) {
-      console.log(
-        `[Instancing] ${groups.length} groups, ${totalMeshes} meshes total | ${largeGroups.length} groups with 100+ instances | ${sortedGroups.length} sorted`,
-      );
-    } else if (groups.length > 0) {
-      const maxInstances = Math.max(...groups.map((g) => g.meshes.length));
-      console.log(
-        `[Instancing] ${groups.length} groups, ${totalMeshes} meshes total | Largest: ${maxInstances} instances | ${sortedGroups.length} sorted`,
-      );
-    }
   }
 
   private getGroupKey(mesh: Mesh): string {
