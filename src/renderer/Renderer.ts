@@ -9,6 +9,8 @@ import { OutputPass } from "./passes/OutputPass";
 import { ForwardPass } from "./passes/ForwardPass";
 import { ShadowPassDirectionalLight } from "./passes/ShadowPassDirectionalLight";
 import { ShadowPassSpotLight } from "./passes/ShadowPassSpotLight";
+import { OcclusionPassDirectionalLight } from "./passes/OcclusionPassDirectionalLight";
+import { OcclusionPassSpotLight } from "./passes/OcclusionPassSpotLight";
 import { SkyboxPass } from "./passes/SkyboxPass";
 import { PostPass, PostPassContext } from "./passes/PostPass";
 import { MaterialManager } from "../materials";
@@ -81,6 +83,8 @@ export class Renderer {
   private outputPass: OutputPass;
   private shadowPassDirectionalLight: ShadowPassDirectionalLight;
   private shadowPassSpotLight: ShadowPassSpotLight;
+  private occlusionPassDirectionalLight: OcclusionPassDirectionalLight;
+  private occlusionPassSpotLight: OcclusionPassSpotLight;
   private particlesPass: ParticlesPass;
   private forwardPass: ForwardPass;
   private skyboxPass: SkyboxPass;
@@ -125,6 +129,9 @@ export class Renderer {
     this.shadowPassDirectionalLight =
       null as unknown as ShadowPassDirectionalLight;
     this.shadowPassSpotLight = null as unknown as ShadowPassSpotLight;
+    this.occlusionPassDirectionalLight =
+      null as unknown as OcclusionPassDirectionalLight;
+    this.occlusionPassSpotLight = null as unknown as OcclusionPassSpotLight;
     this.particlesPass = null as unknown as ParticlesPass;
     this.forwardPass = null as unknown as ForwardPass;
     this.skyboxPass = null as unknown as SkyboxPass;
@@ -238,6 +245,20 @@ export class Renderer {
       this.materialManager,
       this.maxSpotLights,
       shadowMapSize,
+    );
+
+    this.occlusionPassDirectionalLight = new OcclusionPassDirectionalLight(
+      this.device,
+      this.materialManager,
+      this.maxDirectionalLights,
+      512, // default occlusion resolution
+    );
+
+    this.occlusionPassSpotLight = new OcclusionPassSpotLight(
+      this.device,
+      this.materialManager,
+      this.maxSpotLights,
+      512,
     );
 
     this.particlesPass = new ParticlesPass(
@@ -422,6 +443,47 @@ export class Renderer {
 
       this.lightManager.setSpotShadowTexture(
         this.shadowPassSpotLight.getShadowTextureView(),
+      );
+    }
+
+    // Occlusion Pass - Directional Lights
+    const occlusionEnabledDirectionalLights = directionalLights.filter(
+      (l) => l.occlusionEnabled,
+    );
+    if (occlusionEnabledDirectionalLights.length > 0) {
+      // Update occlusion matrices
+      for (const light of occlusionEnabledDirectionalLights) {
+        light.updateOcclusionMatrix(camera.position, camera.getForward());
+      }
+
+      // Render occlusion depth maps
+      this.occlusionPassDirectionalLight.render(
+        this.device,
+        occlusionEnabledDirectionalLights,
+        opaqueMeshes,
+        [...alphaTestMeshes, ...ditherMeshes],
+        blendMeshes,
+        camera,
+      );
+
+      // Restore shadow matrices to shadow buffer (occlusion overwrote them)
+      for (const light of occlusionEnabledDirectionalLights) {
+        light.updateShadowBuffer();
+      }
+    }
+
+    // Occlusion Pass - Spot Lights
+    const occlusionEnabledSpotLights = spotLights.filter(
+      (l) => l.occlusionEnabled,
+    );
+    if (occlusionEnabledSpotLights.length > 0) {
+      this.occlusionPassSpotLight.render(
+        this.device,
+        occlusionEnabledSpotLights,
+        opaqueMeshes,
+        [...alphaTestMeshes, ...ditherMeshes],
+        blendMeshes,
+        camera,
       );
     }
 
@@ -699,5 +761,17 @@ export class Renderer {
       }
     }
     return emitters;
+  }
+
+  public getDirectionalLightOcclusionView(
+    lightIndex: number,
+  ): GPUTextureView | null {
+    return this.occlusionPassDirectionalLight.getOcclusionTextureView(
+      lightIndex,
+    );
+  }
+
+  public getSpotLightOcclusionView(lightIndex: number): GPUTextureView | null {
+    return this.occlusionPassSpotLight.getOcclusionTextureView(lightIndex);
   }
 }

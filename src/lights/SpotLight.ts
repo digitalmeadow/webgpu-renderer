@@ -15,6 +15,10 @@ export class SpotLight extends Light {
   public far: number = 50;
   public lightIndex: number = 0;
 
+  // Occlusion configuration
+  public occlusionEnabled: boolean = false;
+  public occlusionResolution: number = 512;
+
   public viewMatrix: Mat4 = Mat4.create();
   public projectionMatrix: Mat4 = Mat4.create();
   public viewProjectionMatrix: Mat4 = Mat4.create();

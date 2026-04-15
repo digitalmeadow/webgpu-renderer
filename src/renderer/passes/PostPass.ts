@@ -7,6 +7,7 @@ export interface PostPassContext {
   sceneBindGroup: GPUBindGroup;
   width: number;
   height: number;
+  occlusionView?: GPUTextureView;
 }
 
 export abstract class PostPass {

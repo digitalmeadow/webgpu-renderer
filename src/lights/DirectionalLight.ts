@@ -19,6 +19,14 @@ export class DirectionalLight extends Light {
   public cascadeSplits: number[] = [...DEFAULT_SHADOW_CASCADE_SPLITS];
   public cascadeActualDepths: number[] = [];
 
+  // Occlusion configuration
+  public occlusionEnabled: boolean = false;
+  public occlusionResolution: number = 512;
+  public occlusionWorldSize: number = 200.0; // Orthographic bounds in world units
+
+  // Occlusion matrix (will overwrite view_projection_matrices[0] during occlusion pass)
+  public occlusionViewProjectionMatrix: Mat4 = Mat4.create();
+
   public shadowBuffer: GPUBuffer | null = null;
   public shadowBindGroup: GPUBindGroup | null = null;
   private shadowBindGroupLayout: GPUBindGroupLayout | null = null;
@@ -314,11 +322,59 @@ export class DirectionalLight extends Light {
     this.updateShadowBuffer();
   }
 
+  public updateOcclusionMatrix(
+    cameraPosition: Vec3,
+    cameraDirection: Vec3,
+  ): void {
+    if (!this.shadowBuffer || !this._device) {
+      return;
+    }
+
+    const lightDir = Vec3.normalize(this.direction);
+
+    // Light's up vector
+    const upCandidate = Vec3.create(0, 1, 0);
+    const dot = Math.abs(Vec3.dot(lightDir, upCandidate));
+    const up = dot > 0.9 ? Vec3.create(1, 0, 0) : upCandidate;
+
+    // Center on camera position
+    const center = Vec3.copy(cameraPosition, Vec3.create());
+
+    // Eye position: push back along light direction
+    const eyeDistance = this.occlusionWorldSize;
+    const eye = Vec3.create();
+    Vec3.copy(center, eye);
+    Vec3.addScaled(eye, lightDir, eyeDistance, eye);
+
+    // Create view matrix
+    const viewMatrix = Mat4.lookAt(eye, center, up);
+
+    // Orthographic projection: square area centered on camera
+    const halfSize = this.occlusionWorldSize / 2;
+    const projMatrix = Mat4.ortho(
+      -halfSize, // left
+      halfSize, // right
+      -halfSize, // bottom
+      halfSize, // top
+      0.1, // near
+      this.occlusionWorldSize * 2, // far (cover full depth range)
+    );
+
+    // Store as view-projection matrix
+    Mat4.multiply(projMatrix, viewMatrix, this.occlusionViewProjectionMatrix);
+
+    // Temporarily overwrite view_projection_matrices[0] in shadow buffer
+    // This will be used during occlusion rendering
+    const data = new Float32Array(16);
+    data.set(this.occlusionViewProjectionMatrix.data, 0);
+    this._device.queue.writeBuffer(this.shadowBuffer, 0, data); // Offset 0 = first matrix
+  }
+
   private lerp(a: number, b: number, t: number): number {
     return a + (b - a) * t;
   }
 
-  private updateShadowBuffer(): void {
+  public updateShadowBuffer(): void {
     if (!this.shadowBuffer || !this._device) return;
 
     const data = new Float32Array(64); // 256 bytes
