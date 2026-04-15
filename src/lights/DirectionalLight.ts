@@ -103,39 +103,7 @@ export class DirectionalLight extends Light {
       return;
     }
 
-    console.log(`[ShadowCascade] ===== FRAME START =====`);
-    console.log(
-      `[ShadowCascade] Camera: pos=(${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)})`,
-    );
-    console.log(
-      `[ShadowCascade] Camera: dir=(${cameraDirection.x.toFixed(2)}, ${cameraDirection.y.toFixed(2)}, ${cameraDirection.z.toFixed(2)})`,
-    );
-    console.log(
-      `[ShadowCascade] Camera: near=${cameraNear}, far=${cameraFar}, fov=${((cameraFov * 180) / Math.PI).toFixed(1)}deg, aspect=${cameraAspect.toFixed(2)}`,
-    );
-    console.log(
-      `[ShadowCascade] Light dir: (${this.direction.x.toFixed(3)}, ${this.direction.y.toFixed(3)}, ${this.direction.z.toFixed(3)})`,
-    );
-    console.log(
-      `[ShadowCascade] Splits: ${this.cascadeSplits.map((s) => s.toFixed(4)).join(", ")}`,
-    );
-
     const lightDir = Vec3.normalize(this.direction);
-    console.log(
-      `[ShadowCascade] Light dir (normalized): (${lightDir.x.toFixed(3)}, ${lightDir.y.toFixed(3)}, ${lightDir.z.toFixed(3)})`,
-    );
-
-    // Validate camera direction is normalized
-    const dirLength = Vec3.len(cameraDirection);
-    if (Math.abs(dirLength - 1.0) > 0.01) {
-      console.warn(
-        `[ShadowCascade] Camera direction not normalized! Length: ${dirLength.toFixed(3)} (expected 1.000)`,
-      );
-    } else {
-      console.log(
-        `[ShadowCascade] Camera direction validated: length=${dirLength.toFixed(6)}`,
-      );
-    }
 
     // Light's up vector: avoid gimbal lock if light is nearly vertical
     const upCandidate = Vec3.create(0, 1, 0);
@@ -209,37 +177,21 @@ export class DirectionalLight extends Light {
       // Build 4 corners at splitFar
       addCornersAtDistance(splitFar, halfWidthFar, halfHeightFar);
 
-      console.log(`[ShadowCascade] === Cascade ${cascadeIndex} ===`);
-      console.log(
-        `[ShadowCascade]   splitNear=${splitNear.toFixed(2)}, splitFar=${splitFar.toFixed(2)}`,
-      );
-      console.log(
-        `[ShadowCascade]   halfWidthNear=${halfWidthNear.toFixed(2)}, halfHeightNear=${halfHeightNear.toFixed(2)}`,
-      );
-      console.log(
-        `[ShadowCascade]   halfWidthFar=${halfWidthFar.toFixed(2)}, halfHeightFar=${halfHeightFar.toFixed(2)}`,
-      );
-      console.log(`[ShadowCascade]   corners (8 total):`);
-      for (let ci = 0; ci < corners.length; ci++) {
-        console.log(
-          `[ShadowCascade]     corner[${ci}]: (${corners[ci].x.toFixed(2)}, ${corners[ci].y.toFixed(2)}, ${corners[ci].z.toFixed(2)})`,
-        );
-      }
-
       // Compute center as midpoint of the frustum slice
       const midDist = (splitNear + splitFar) / 2;
       const center = Vec3.create();
       Vec3.copy(cameraPosition, center);
       Vec3.addScaled(center, forward, midDist, center);
 
-      console.log(
-        `[ShadowCascade]   midDist=${midDist.toFixed(2)}, center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
-      );
+      // === TWO-PASS APPROACH FOR TEXEL SNAPPING ===
+      // Pass 1: Create temporary view matrix to calculate actual light-space bounds
+      // Pass 2: Calculate correct texel size and snap world-space center before final view matrix
+
+      const shadowMapSize = 2048;
 
       // Compute AABB of all 8 corners in world space
       let min = Vec3.create(Infinity, Infinity, Infinity);
       let max = Vec3.create(-Infinity, -Infinity, -Infinity);
-
       for (const corner of corners) {
         min.data[0] = Math.min(min.data[0], corner.x);
         min.data[1] = Math.min(min.data[1], corner.y);
@@ -249,41 +201,26 @@ export class DirectionalLight extends Light {
         max.data[2] = Math.max(max.data[2], corner.z);
       }
 
-      console.log(
-        `[ShadowCascade]   world AABB: min=(${min.x.toFixed(2)}, ${min.y.toFixed(2)}, ${min.z.toFixed(2)}), max=(${max.x.toFixed(2)}, ${max.y.toFixed(2)}, ${max.z.toFixed(2)})`,
-      );
-      console.log(
-        `[ShadowCascade]   world AABB size: (${(max.x - min.x).toFixed(2)}, ${(max.y - min.y).toFixed(2)}, ${(max.z - min.z).toFixed(2)})`,
-      );
+      // Build orthonormal basis for the light direction (used for snapping)
+      const lightRight = Vec3.create();
+      const lightUp = Vec3.create();
+      Vec3.cross(up, lightDir, lightRight);
+      Vec3.normalize(lightRight, lightRight);
+      Vec3.cross(lightDir, lightRight, lightUp);
+      Vec3.normalize(lightUp, lightUp);
 
-      // Position shadow camera to look down the light direction
-      // Mat4.lookAt() builds a view matrix where the Z-axis points FROM center TO eye (backward)
-      // So to make the camera look along lightDir, we position the eye at center + eyeDistance * lightDir
-      // This way, the -Z axis (forward) will point along -lightDir (the direction light travels)
+      // PASS 1: Create temporary unsnapped view matrix to get light-space bounds
       const eyeDistance = max.z - min.z;
-      const eye = Vec3.create();
-      Vec3.copy(center, eye);
-      Vec3.addScaled(eye, lightDir, eyeDistance, eye); // eye = center + eyeDistance * lightDir
+      const tempEye = Vec3.create();
+      Vec3.copy(center, tempEye);
+      Vec3.addScaled(tempEye, lightDir, eyeDistance, tempEye);
+      const tempViewMatrix = Mat4.lookAt(tempEye, center, up);
 
-      console.log(
-        `[ShadowCascade]   eyeDistance=${eyeDistance.toFixed(2)}, eye=(${eye.x.toFixed(2)}, ${eye.y.toFixed(2)}, ${eye.z.toFixed(2)})`,
-      );
-      console.log(
-        `[ShadowCascade]   lightDir = (${lightDir.x.toFixed(3)}, ${lightDir.y.toFixed(3)}, ${lightDir.z.toFixed(3)})`,
-      );
-      console.log(
-        `[ShadowCascade]   up = (${up.x.toFixed(3)}, ${up.y.toFixed(3)}, ${up.z.toFixed(3)})`,
-      );
-
-      // Create view matrix first
-      const viewMatrix = Mat4.lookAt(eye, center, up);
-
-      // Transform all 8 corners to light-space and compute AABB
-      // Using 8 corners ensures proper depth even when camera aligns with light
+      // Transform corners to light-space to get actual AABB
       let viewMin = Vec3.create(Infinity, Infinity, Infinity);
       let viewMax = Vec3.create(-Infinity, -Infinity, -Infinity);
       for (const corner of corners) {
-        const lc = Vec3.transformMat4(corner, viewMatrix);
+        const lc = Vec3.transformMat4(corner, tempViewMatrix);
         viewMin.data[0] = Math.min(viewMin.data[0], lc.x);
         viewMin.data[1] = Math.min(viewMin.data[1], lc.y);
         viewMin.data[2] = Math.min(viewMin.data[2], lc.z);
@@ -292,94 +229,87 @@ export class DirectionalLight extends Light {
         viewMax.data[2] = Math.max(viewMax.data[2], lc.z);
       }
 
-      console.log(
-        `[ShadowCascade]   light-space AABB: viewMin=(${viewMin.x.toFixed(2)}, ${viewMin.y.toFixed(2)}, ${viewMin.z.toFixed(2)}), viewMax=(${viewMax.x.toFixed(2)}, ${viewMax.y.toFixed(2)}, ${viewMax.z.toFixed(2)})`,
-      );
-
-      // Use light-space AABB for ortho bounds (consistent with view matrix)
+      // Calculate ACTUAL texel size from light-space bounds
       const width = viewMax.x - viewMin.x;
       const height = viewMax.y - viewMin.y;
       const maxDim = Math.max(width, height);
-      // Apply cascadeOverlap to expand XY bounds (prevents edge gaps, captures shadow casters outside frustum)
       const halfDim = (maxDim / 2) * (1.0 + this.cascadeOverlap);
+      const actualTexelSize = (halfDim * 2.0) / shadowMapSize;
+
+      // PASS 2: Snap world-space center using CORRECT texel size
+      const centerProjectedX = Vec3.dot(center, lightRight);
+      const centerProjectedY = Vec3.dot(center, lightUp);
+
+      // Debug: Show pre-snap light-space coordinates
+      console.log(
+        `[Cascade ${cascadeIndex}] PRE-SNAP light-space: X=${centerProjectedX.toFixed(4)}, Y=${centerProjectedY.toFixed(4)}`,
+      );
+
+      const snappedProjectedX =
+        Math.floor(centerProjectedX / actualTexelSize) * actualTexelSize;
+      const snappedProjectedY =
+        Math.floor(centerProjectedY / actualTexelSize) * actualTexelSize;
+
+      // Debug: Show post-snap light-space coordinates and verify discrete jumps
+      console.log(
+        `[Cascade ${cascadeIndex}] POST-SNAP light-space: X=${snappedProjectedX.toFixed(4)}, Y=${snappedProjectedY.toFixed(4)}`,
+      );
+      console.log(
+        `[Cascade ${cascadeIndex}] SNAP-DELTA light-space: dX=${(snappedProjectedX - centerProjectedX).toFixed(4)}, dY=${(snappedProjectedY - centerProjectedY).toFixed(4)} (should be < texelSize)`,
+      );
+
+      // Verify snapping is working: delta should always be less than texelSize
+      const deltaX = Math.abs(snappedProjectedX - centerProjectedX);
+      const deltaY = Math.abs(snappedProjectedY - centerProjectedY);
+      if (deltaX >= actualTexelSize || deltaY >= actualTexelSize) {
+        console.warn(
+          `[Cascade ${cascadeIndex}] WARNING: Snap delta exceeds texelSize! dX=${deltaX.toFixed(4)}, dY=${deltaY.toFixed(4)}, texelSize=${actualTexelSize.toFixed(4)}`,
+        );
+      }
+
+      // Reconstruct snapped world-space center
+      const centerAlongLight = Vec3.dot(center, lightDir);
+      const snappedCenter = Vec3.create();
+      Vec3.addScaled(
+        snappedCenter,
+        lightRight,
+        snappedProjectedX,
+        snappedCenter,
+      );
+      Vec3.addScaled(snappedCenter, lightUp, snappedProjectedY, snappedCenter);
+      Vec3.addScaled(snappedCenter, lightDir, centerAlongLight, snappedCenter);
+
+      // Create FINAL view matrix with snapped center
+      const eye = Vec3.create();
+      Vec3.copy(snappedCenter, eye);
+      Vec3.addScaled(eye, lightDir, eyeDistance, eye);
+      const viewMatrix = Mat4.lookAt(eye, snappedCenter, up);
+
+      // Log essential snapping info
+      console.log(
+        `[Cascade ${cascadeIndex}] texelSize=${actualTexelSize.toFixed(4)}, worldShift=(${(snappedCenter.x - center.x).toFixed(4)}, ${(snappedCenter.y - center.y).toFixed(4)}, ${(snappedCenter.z - center.z).toFixed(4)})`,
+      );
+
+      // Calculate orthographic projection bounds from light-space center
       const centerX = (viewMin.x + viewMax.x) / 2;
       const centerY = (viewMin.y + viewMax.y) / 2;
-
-      console.log(
-        `[ShadowCascade]   width=${width.toFixed(2)}, height=${height.toFixed(2)}, maxDim=${maxDim.toFixed(2)}, halfDim=${halfDim.toFixed(2)}`,
-      );
-      console.log(
-        `[ShadowCascade]   cascadeOverlap=${this.cascadeOverlap.toFixed(2)} (applied to halfDim)`,
-      );
-      console.log(
-        `[ShadowCascade]   centerX=${centerX.toFixed(2)}, centerY=${centerY.toFixed(2)}`,
-      );
-
-      // Texel snapping: Snap orthographic projection bounds to texel increments
-      // This prevents shadow edge shimmering during camera movement
-      // Reference: Microsoft DirectX "Common Techniques to Improve Shadow Depth Maps"
-      // https://learn.microsoft.com/en-us/windows/win32/dxtecharts/common-techniques-to-improve-shadow-depth-maps
-      const shadowMapSize = 2048;
-
-      // Calculate world-space size of one texel
-      // Use the maximum dimension (halfDim * 2) as the cascade bound
-      const cascadeBound = halfDim * 2.0;
-      const worldUnitsPerTexel = cascadeBound / shadowMapSize;
-
-      // Calculate orthographic projection bounds
-      let orthoMinX = centerX - halfDim;
-      let orthoMaxX = centerX + halfDim;
-      let orthoMinY = centerY - halfDim;
-      let orthoMaxY = centerY + halfDim;
-
-      // Snap bounds to texel-sized increments using floor()
-      // This ensures shadow map texels align to a stable world-space grid
-      // Using floor() ensures bounds always expand outward, never inward
-      orthoMinX =
-        Math.floor(orthoMinX / worldUnitsPerTexel) * worldUnitsPerTexel;
-      orthoMaxX =
-        Math.floor(orthoMaxX / worldUnitsPerTexel) * worldUnitsPerTexel;
-      orthoMinY =
-        Math.floor(orthoMinY / worldUnitsPerTexel) * worldUnitsPerTexel;
-      orthoMaxY =
-        Math.floor(orthoMaxY / worldUnitsPerTexel) * worldUnitsPerTexel;
-
-      console.log(
-        `[ShadowCascade]   Texel snapping: worldUnitsPerTexel=${worldUnitsPerTexel.toFixed(4)}`,
-      );
-      console.log(
-        `[ShadowCascade]   Ortho bounds (pre-snap): X=[${(centerX - halfDim).toFixed(4)}, ${(centerX + halfDim).toFixed(4)}], Y=[${(centerY - halfDim).toFixed(4)}, ${(centerY + halfDim).toFixed(4)}]`,
-      );
-      console.log(
-        `[ShadowCascade]   Ortho bounds (snapped): X=[${orthoMinX.toFixed(4)}, ${orthoMaxX.toFixed(4)}], Y=[${orthoMinY.toFixed(4)}, ${orthoMaxY.toFixed(4)}]`,
-      );
+      const orthoMinX = centerX - halfDim;
+      const orthoMaxX = centerX + halfDim;
+      const orthoMinY = centerY - halfDim;
+      const orthoMaxY = centerY + halfDim;
 
       // Use light-space AABB Z extent for ortho bounds
-      // The ortho matrix maps: z_ndc = (z - near) / (far - near)
-      // We want: scene at viewZMin -> z_ndc = 0, scene at viewZMax -> z_ndc = 1
-      // So we need: near = viewZMin, far = viewZMax
       const viewZMin = viewMin.z;
       const viewZMax = viewMax.z;
-
-      // Ensure orthoNear < orthoFar for correct depth direction
-      // viewZMin should be closest to eye (most negative), viewZMax furthest (least negative)
-      // Apply offsetNear to push near plane backward (captures geometry behind mountains, etc.)
       let orthoNear = viewZMin - this.offsetNear;
       let orthoFar = viewZMax;
 
-      // If somehow reversed (shouldn't happen with proper eye placement), swap them
+      // Ensure orthoNear < orthoFar
       if (orthoNear >= orthoFar) {
         const temp = orthoNear;
         orthoNear = orthoFar;
         orthoFar = temp;
       }
-
-      console.log(
-        `[ShadowCascade]   ORTHO: near=${orthoNear.toFixed(2)}, far=${orthoFar.toFixed(2)}, depth=${(orthoFar - orthoNear).toFixed(2)}`,
-      );
-      console.log(
-        `[ShadowCascade]   offsetNear=${this.offsetNear.toFixed(2)} (applied to orthoNear)`,
-      );
 
       const projMatrix = Mat4.ortho(
         orthoMinX,
@@ -390,59 +320,15 @@ export class DirectionalLight extends Light {
         orthoFar,
       );
 
-      console.log(
-        `[ShadowCascade]   viewMatrix: eye=(${eye.x.toFixed(2)}, ${eye.y.toFixed(2)}, ${eye.z.toFixed(2)}), target=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
-      );
-
-      const preDet = Mat4.determinant(projMatrix);
-      console.log(
-        `[ShadowCascade]   projMatrix determinant: ${preDet.toFixed(6)}`,
-      );
-
-      // Create temporary VP - multiply in correct order: V * P
-      // This applies view first (world -> view), then projection (view -> clip)
-      const tempVP = Mat4.create();
-      Mat4.multiply(viewMatrix, projMatrix, tempVP);
-      const preMulVPDet = Mat4.determinant(tempVP);
-      console.log(
-        `[ShadowCascade]   VP pre-copy determinant: ${preMulVPDet.toFixed(6)}`,
-      );
-
-      if (Math.abs(preMulVPDet) < 0.000001) {
-        console.warn(
-          `[ShadowCascade]   WARNING: VP matrix has near-zero determinant (degenerate)!`,
-        );
-      }
-
-      // Correct order: P * V (projection then view, matching Camera.ts pattern)
+      // Create VP matrix: P * V
       Mat4.multiply(
         projMatrix,
         viewMatrix,
         this.viewProjectionMatrices[cascadeIndex],
       );
-
-      const vpDet = Mat4.determinant(this.viewProjectionMatrices[cascadeIndex]);
-      console.log(
-        `[ShadowCascade]   VP[${cascadeIndex}] determinant: ${vpDet.toFixed(6)}`,
-      );
-
-      if (Math.abs(vpDet) < 0.000001) {
-        console.warn(
-          `[ShadowCascade]   WARNING: Final VP matrix has near-zero determinant (degenerate)! This will cause shadow issues!`,
-        );
-      }
-      // Log first few values of VP matrix
-      const vpData = this.viewProjectionMatrices[cascadeIndex].data;
-      console.log(
-        `[ShadowCascade]   VP[${cascadeIndex}] first 8 values: ${vpData[0].toFixed(4)}, ${vpData[1].toFixed(4)}, ${vpData[2].toFixed(4)}, ${vpData[3].toFixed(4)}, ${vpData[4].toFixed(4)}, ${vpData[5].toFixed(4)}, ${vpData[6].toFixed(4)}, ${vpData[7].toFixed(4)}`,
-      );
     }
 
     this.cascadeActualDepths = actualSplits;
-    console.log(`[ShadowCascade] ===== FRAME END =====`);
-    console.log(
-      `[ShadowCascade] Uploading to buffer: cascadeActualDepths=${actualSplits.map((v) => v.toFixed(2)).join(", ")}`,
-    );
     this.updateShadowBuffer();
   }
 
