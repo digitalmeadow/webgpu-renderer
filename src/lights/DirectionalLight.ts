@@ -4,21 +4,15 @@ import { EntityType } from "../scene/Entity";
 
 export const SHADOW_MAP_CASCADES_COUNT = 3;
 export const DEFAULT_SHADOW_CASCADE_SPLITS = [0.0, 0.33, 0.66, 1.0];
-export const OFFSET = 0.0;
-export const SHADOW_XY_PADDING = 0;
-// Fixed ortho Z range - robust against camera position changes
-// These values cover ~3000 units of depth in light view space
-// Use positive values for WebGPU convention (near < far, both positive)
-export const SHADOW_ORTHO_NEAR = 500.0;
-export const SHADOW_ORTHO_FAR = 3500.0;
-export const CASCADE_OVERLAP_FACTOR = 0.0; // No overlap - tight fit for better precision
-export const MIN_DEPTH_RATIO = 1.0; // Ensure far is at least 30% deeper than near relative to actual depth
-export const MIN_DEPTH_LATERAL_RATIO = 1.0; // At least 10% of lateral size
 
 export class DirectionalLight extends Light {
   readonly type = EntityType.LightDirectional;
   public direction: Vec3 = new Vec3(0, -1, -0.5);
   public lightIndex: number = 0;
+
+  // Shadow configuration
+  public offsetNear: number = 0.0; // World-space units to push near plane back (toward light)
+  public cascadeOverlap: number = 0.0; // Percentage factor (0.0-1.0+) for XY overlap between cascades
 
   public viewProjectionMatrices: Mat4[] = [];
   public cascadeSplits: number[] = [...DEFAULT_SHADOW_CASCADE_SPLITS];
@@ -180,8 +174,7 @@ export class DirectionalLight extends Light {
 
       // Compute frustum corners at both splitNear and splitFar (8 corners total)
       // This ensures proper depth extent even when camera aligns with light direction
-      const effectiveSplitFar = splitFar * (1 + CASCADE_OVERLAP_FACTOR);
-      const halfHeightFar = effectiveSplitFar * tanHalfFov;
+      const halfHeightFar = splitFar * tanHalfFov;
       const halfWidthFar = halfHeightFar * cameraAspect;
 
       // Use splitNear for near plane extent (smaller frustum for closer cascade)
@@ -225,9 +218,6 @@ export class DirectionalLight extends Light {
       console.log(
         `[ShadowCascade]   halfWidthFar=${halfWidthFar.toFixed(2)}, halfHeightFar=${halfHeightFar.toFixed(2)}`,
       );
-      console.log(
-        `[ShadowCascade]   effectiveSplitFar=${effectiveSplitFar.toFixed(2)}`,
-      );
       console.log(`[ShadowCascade]   corners (8 total):`);
       for (let ci = 0; ci < corners.length; ci++) {
         console.log(
@@ -265,21 +255,11 @@ export class DirectionalLight extends Light {
         `[ShadowCascade]   world AABB size: (${(max.x - min.x).toFixed(2)}, ${(max.y - min.y).toFixed(2)}, ${(max.z - min.z).toFixed(2)})`,
       );
 
-      // Add padding for shadow casters near frustum edges
-      min.x -= SHADOW_XY_PADDING;
-      min.y -= SHADOW_XY_PADDING;
-      max.x += SHADOW_XY_PADDING;
-      max.y += SHADOW_XY_PADDING;
-
-      console.log(
-        `[ShadowCascade]   world AABB (padded): min=(${min.x.toFixed(2)}, ${min.y.toFixed(2)}, ${min.z.toFixed(2)}), max=(${max.x.toFixed(2)}, ${max.y.toFixed(2)}, ${max.z.toFixed(2)})`,
-      );
-
       // Position shadow camera to look down the light direction
       // Mat4.lookAt() builds a view matrix where the Z-axis points FROM center TO eye (backward)
       // So to make the camera look along lightDir, we position the eye at center + eyeDistance * lightDir
       // This way, the -Z axis (forward) will point along -lightDir (the direction light travels)
-      const eyeDistance = max.z - min.z + OFFSET;
+      const eyeDistance = max.z - min.z;
       const eye = Vec3.create();
       Vec3.copy(center, eye);
       Vec3.addScaled(eye, lightDir, eyeDistance, eye); // eye = center + eyeDistance * lightDir
@@ -319,12 +299,16 @@ export class DirectionalLight extends Light {
       const width = viewMax.x - viewMin.x;
       const height = viewMax.y - viewMin.y;
       const maxDim = Math.max(width, height);
-      const halfDim = maxDim / 2;
+      // Apply cascadeOverlap to expand XY bounds (prevents edge gaps, captures shadow casters outside frustum)
+      const halfDim = (maxDim / 2) * (1.0 + this.cascadeOverlap);
       const centerX = (viewMin.x + viewMax.x) / 2;
       const centerY = (viewMin.y + viewMax.y) / 2;
 
       console.log(
         `[ShadowCascade]   width=${width.toFixed(2)}, height=${height.toFixed(2)}, maxDim=${maxDim.toFixed(2)}, halfDim=${halfDim.toFixed(2)}`,
+      );
+      console.log(
+        `[ShadowCascade]   cascadeOverlap=${this.cascadeOverlap.toFixed(2)} (applied to halfDim)`,
       );
       console.log(
         `[ShadowCascade]   centerX=${centerX.toFixed(2)}, centerY=${centerY.toFixed(2)}`,
@@ -339,7 +323,8 @@ export class DirectionalLight extends Light {
 
       // Ensure orthoNear < orthoFar for correct depth direction
       // viewZMin should be closest to eye (most negative), viewZMax furthest (least negative)
-      let orthoNear = viewZMin;
+      // Apply offsetNear to push near plane backward (captures geometry behind mountains, etc.)
+      let orthoNear = viewZMin - this.offsetNear;
       let orthoFar = viewZMax;
 
       // If somehow reversed (shouldn't happen with proper eye placement), swap them
@@ -351,6 +336,9 @@ export class DirectionalLight extends Light {
 
       console.log(
         `[ShadowCascade]   ORTHO: near=${orthoNear.toFixed(2)}, far=${orthoFar.toFixed(2)}, depth=${(orthoFar - orthoNear).toFixed(2)}`,
+      );
+      console.log(
+        `[ShadowCascade]   offsetNear=${this.offsetNear.toFixed(2)} (applied to orthoNear)`,
       );
 
       const projMatrix = Mat4.ortho(
@@ -416,72 +404,6 @@ export class DirectionalLight extends Light {
       `[ShadowCascade] Uploading to buffer: cascadeActualDepths=${actualSplits.map((v) => v.toFixed(2)).join(", ")}`,
     );
     this.updateShadowBuffer();
-  }
-
-  private computeFallbackFrustumCorners(
-    cameraPosition: Vec3,
-    cameraDirection: Vec3,
-    cameraNear: number,
-    cameraFar: number,
-    cameraFov: number,
-    cameraAspect: number,
-  ): Vec3[] {
-    const corners: Vec3[] = [];
-    const forward = Vec3.normalize(cameraDirection.copy());
-    const right = Vec3.normalize(Vec3.cross(forward, Vec3.create(0, 1, 0)));
-    const up = Vec3.cross(right, forward);
-
-    const fov = cameraFov;
-    const aspect = cameraAspect;
-    const nearHeight = 2 * Math.tan(fov / 2) * cameraNear;
-    const nearWidth = nearHeight * aspect;
-    const farHeight = 2 * Math.tan(fov / 2) * cameraFar;
-    const farWidth = farHeight * aspect;
-
-    const nearCenter = Vec3.create(
-      cameraPosition.x + forward.x * cameraNear,
-      cameraPosition.y + forward.y * cameraNear,
-      cameraPosition.z + forward.z * cameraNear,
-    );
-    const farCenter = Vec3.create(
-      cameraPosition.x + forward.x * cameraFar,
-      cameraPosition.y + forward.y * cameraFar,
-      cameraPosition.z + forward.z * cameraFar,
-    );
-
-    const nearOffsets = [
-      Vec3.create(-nearWidth / 2, -nearHeight / 2, 0),
-      Vec3.create(nearWidth / 2, -nearHeight / 2, 0),
-      Vec3.create(-nearWidth / 2, nearHeight / 2, 0),
-      Vec3.create(nearWidth / 2, nearHeight / 2, 0),
-    ];
-
-    const farOffsets = [
-      Vec3.create(-farWidth / 2, -farHeight / 2, 0),
-      Vec3.create(farWidth / 2, -farHeight / 2, 0),
-      Vec3.create(-farWidth / 2, farHeight / 2, 0),
-      Vec3.create(farWidth / 2, farHeight / 2, 0),
-    ];
-
-    for (const offset of nearOffsets) {
-      const corner = Vec3.create();
-      Vec3.copy(nearCenter, corner);
-      Vec3.addScaled(corner, right, offset.x, corner);
-      Vec3.addScaled(corner, up, offset.y, corner);
-      Vec3.addScaled(corner, forward, offset.z, corner);
-      corners.push(corner);
-    }
-
-    for (const offset of farOffsets) {
-      const corner = Vec3.create();
-      Vec3.copy(farCenter, corner);
-      Vec3.addScaled(corner, right, offset.x, corner);
-      Vec3.addScaled(corner, up, offset.y, corner);
-      Vec3.addScaled(corner, forward, offset.z, corner);
-      corners.push(corner);
-    }
-
-    return corners;
   }
 
   private lerp(a: number, b: number, t: number): number {
