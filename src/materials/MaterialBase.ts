@@ -1,4 +1,4 @@
-export type AlphaMode = "opaque" | "blend" | "mask";
+export type AlphaMode = "opaque" | "blend" | "mask" | "dither";
 
 export const MaterialType = {
   Base: "materialBase",

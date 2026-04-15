@@ -353,19 +353,23 @@ export class Renderer {
     const alphaTestMeshes = meshes.filter(
       (m) => m.material?.alphaMode === "mask",
     );
+    const ditherMeshes = meshes.filter(
+      (m) => m.material?.alphaMode === "dither",
+    );
     const blendMeshes = meshes.filter((m) => m.material?.alphaMode === "blend");
 
     const lights = this.collectLights(world);
 
     const commandEncoder = this.device.createCommandEncoder();
 
-    // Geometry Pass
+    // Geometry Pass (includes opaque, mask, and dither)
+    const geometryPassMeshes = [...alphaTestMeshes, ...ditherMeshes];
     this.geometryPass.render(
       this.device,
       commandEncoder,
       this.geometryBuffer,
       opaqueMeshes,
-      alphaTestMeshes,
+      geometryPassMeshes,
       camera,
       this.materialManager,
     );
@@ -391,7 +395,7 @@ export class Renderer {
         this.device,
         directionalLights,
         opaqueMeshes,
-        alphaTestMeshes,
+        [...alphaTestMeshes, ...ditherMeshes],
         blendMeshes,
         camera,
       );
@@ -411,7 +415,7 @@ export class Renderer {
         this.device,
         spotLights,
         opaqueMeshes,
-        alphaTestMeshes,
+        [...alphaTestMeshes, ...ditherMeshes],
         blendMeshes,
         camera,
       );

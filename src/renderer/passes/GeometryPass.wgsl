@@ -1,11 +1,32 @@
 const MAX_JOINTS: u32 = 64u;
 
 struct MaterialUniforms {
-  color: vec4<f32>,
-  opacity: f32,
-  emissive: vec4<f32>,
-  alpha_cutoff: f32,
+  color: vec4<f32>,           // offset 0-15
+  opacity: f32,               // offset 16-19
+  // padding: 3 floats          offset 20-31 (implicit, for emissive alignment)
+  @align(16) emissive: vec4<f32>,  // offset 32-47
+  alpha_cutoff: f32,          // offset 48-51
+  use_dithering: f32,         // offset 52-55
+  // padding: 2 floats          offset 56-63 (implicit)
 };
+
+// Bayer 8x8 dithering matrix (values 0-63, normalized to 0.0-1.0)
+const BAYER_MATRIX = array<array<f32, 8>, 8>(
+  array<f32, 8>(0.0/64.0,  32.0/64.0, 8.0/64.0,  40.0/64.0, 2.0/64.0,  34.0/64.0, 10.0/64.0, 42.0/64.0),
+  array<f32, 8>(48.0/64.0, 16.0/64.0, 56.0/64.0, 24.0/64.0, 50.0/64.0, 18.0/64.0, 58.0/64.0, 26.0/64.0),
+  array<f32, 8>(12.0/64.0, 44.0/64.0, 4.0/64.0,  36.0/64.0, 14.0/64.0, 46.0/64.0, 6.0/64.0,  38.0/64.0),
+  array<f32, 8>(60.0/64.0, 28.0/64.0, 52.0/64.0, 20.0/64.0, 62.0/64.0, 30.0/64.0, 54.0/64.0, 22.0/64.0),
+  array<f32, 8>(3.0/64.0,  35.0/64.0, 11.0/64.0, 43.0/64.0, 1.0/64.0,  33.0/64.0, 9.0/64.0,  41.0/64.0),
+  array<f32, 8>(51.0/64.0, 19.0/64.0, 59.0/64.0, 27.0/64.0, 49.0/64.0, 17.0/64.0, 57.0/64.0, 25.0/64.0),
+  array<f32, 8>(15.0/64.0, 47.0/64.0, 7.0/64.0,  39.0/64.0, 13.0/64.0, 45.0/64.0, 5.0/64.0,  37.0/64.0),
+  array<f32, 8>(63.0/64.0, 31.0/64.0, 55.0/64.0, 23.0/64.0, 61.0/64.0, 29.0/64.0, 53.0/64.0, 21.0/64.0)
+);
+
+fn get_dither_threshold(screen_pos: vec2<f32>) -> f32 {
+  let x = i32(screen_pos.x) % 8;
+  let y = i32(screen_pos.y) % 8;
+  return BAYER_MATRIX[y][x];
+}
 
 //--HOOK_PLACEHOLDER_UNIFORMS--//
 
@@ -62,7 +83,7 @@ fn get_billboard_axis(axis: u32) -> vec3<f32> {
 }
 
 fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat3x3<f32> {
-    let forward = normalize(mesh_pos - camera.position.xyz);
+    let forward = normalize(camera.position.xyz - mesh_pos);
 
     let forwardDotAxis = dot(forward, axisVec);
     let is_edge_case = abs(forwardDotAxis) > 0.995;
@@ -129,9 +150,15 @@ fn vs_main(
         
         let billboarded_pos = billboard_matrix * local_pos;
         let billboarded_normal = billboard_matrix * local_normal;
+        let billboarded_tangent = billboard_matrix * tangent.xyz;
+        
+        // World position = mesh translation + billboard-rotated local offset
         output.world_position = mesh_pos + billboarded_pos;
-        output.world_normal = (model_matrix * vec4<f32>(billboarded_normal, 0.0)).xyz;
-        output.world_tangent = (model_matrix * vec4<f32>(billboarded_normal, 0.0));
+        
+        // Billboard normals and tangents are already in world space - 
+        // do NOT apply model matrix again, that would re-apply rotation/scale
+        output.world_normal = billboarded_normal;
+        output.world_tangent = vec4<f32>(billboarded_tangent, tangent.w);
     } else {
         let world_position = model_matrix * vec4<f32>(local_pos, 1.0);
         output.world_position = world_position.xyz;
@@ -163,13 +190,21 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     let base_albedo = albedo_tex.rgb * material.color.rgb;
     let final_alpha = albedo_tex.a * material.opacity;
 
-    // Alpha discard for alpha-tested materials (mask mode)
-    if (material.alpha_cutoff > 0.0 && final_alpha < material.alpha_cutoff) {
-      discard;
+    // Dithered alpha: use Bayer matrix threshold
+    if (material.use_dithering > 0.5) {
+        let dither_threshold = get_dither_threshold(in.position.xy);
+        if (final_alpha < dither_threshold) {
+            discard;
+        }
+    }
+    // Alpha cutoff for mask mode
+    else if (material.alpha_cutoff > 0.0 && final_alpha < material.alpha_cutoff) {
+        discard;
     } 
 
+    // Discard fully transparent pixels
     if (albedo_tex.a <= 0.0) {
-      discard;
+        discard;
     }
 
     let N_map = textureSample(normalTexture, defaultSampler, in.uv_coords).rgb;

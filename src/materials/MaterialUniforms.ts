@@ -9,7 +9,7 @@ export class MaterialUniforms {
   constructor(device: GPUDevice, material: MaterialBase) {
     this.device = device;
     this.buffer = device.createBuffer({
-      size: 64, // 16 floats: color (r,g,b,a) + opacity + padding + emissive (r,g,b) + intensity + alpha_cutoff + padding
+      size: 64, // 16 floats: color (r,g,b,a) + opacity + emissive (r,g,b,a) + alpha_cutoff + use_dithering + padding
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       label: `MaterialUniformsBuffer: ${material.name}`,
     });
@@ -41,15 +41,15 @@ export class MaterialUniforms {
     this.data[2] = color[2];
     this.data[3] = color[3];
     this.data[4] = material.opacity;
-    this.data[5] = emissive[0];
-    this.data[6] = emissive[1];
-    this.data[7] = emissive[2];
-    this.data[8] = emissiveIntensity;
-    this.data[9] = material.alphaCutoff;
-    this.data[10] = 0; // padding
-    this.data[11] = 0; // padding
-    this.data[12] = 0; // padding
-    this.data[13] = 0; // padding
+    this.data[5] = 0; // padding for vec4 alignment
+    this.data[6] = 0; // padding for vec4 alignment
+    this.data[7] = 0; // padding for vec4 alignment
+    this.data[8] = emissive[0];
+    this.data[9] = emissive[1];
+    this.data[10] = emissive[2];
+    this.data[11] = emissiveIntensity;
+    this.data[12] = material.alphaCutoff;
+    this.data[13] = material.alphaMode === "dither" ? 1.0 : 0.0; // use_dithering flag
     this.data[14] = 0; // padding
     this.data[15] = 0; // padding
     this.device.queue.writeBuffer(this.buffer, 0, this.data.buffer);
