@@ -315,6 +315,45 @@ export class DirectionalLight extends Light {
         `[ShadowCascade]   centerX=${centerX.toFixed(2)}, centerY=${centerY.toFixed(2)}`,
       );
 
+      // Texel snapping: Snap orthographic projection bounds to texel increments
+      // This prevents shadow edge shimmering during camera movement
+      // Reference: Microsoft DirectX "Common Techniques to Improve Shadow Depth Maps"
+      // https://learn.microsoft.com/en-us/windows/win32/dxtecharts/common-techniques-to-improve-shadow-depth-maps
+      const shadowMapSize = 2048;
+
+      // Calculate world-space size of one texel
+      // Use the maximum dimension (halfDim * 2) as the cascade bound
+      const cascadeBound = halfDim * 2.0;
+      const worldUnitsPerTexel = cascadeBound / shadowMapSize;
+
+      // Calculate orthographic projection bounds
+      let orthoMinX = centerX - halfDim;
+      let orthoMaxX = centerX + halfDim;
+      let orthoMinY = centerY - halfDim;
+      let orthoMaxY = centerY + halfDim;
+
+      // Snap bounds to texel-sized increments using floor()
+      // This ensures shadow map texels align to a stable world-space grid
+      // Using floor() ensures bounds always expand outward, never inward
+      orthoMinX =
+        Math.floor(orthoMinX / worldUnitsPerTexel) * worldUnitsPerTexel;
+      orthoMaxX =
+        Math.floor(orthoMaxX / worldUnitsPerTexel) * worldUnitsPerTexel;
+      orthoMinY =
+        Math.floor(orthoMinY / worldUnitsPerTexel) * worldUnitsPerTexel;
+      orthoMaxY =
+        Math.floor(orthoMaxY / worldUnitsPerTexel) * worldUnitsPerTexel;
+
+      console.log(
+        `[ShadowCascade]   Texel snapping: worldUnitsPerTexel=${worldUnitsPerTexel.toFixed(4)}`,
+      );
+      console.log(
+        `[ShadowCascade]   Ortho bounds (pre-snap): X=[${(centerX - halfDim).toFixed(4)}, ${(centerX + halfDim).toFixed(4)}], Y=[${(centerY - halfDim).toFixed(4)}, ${(centerY + halfDim).toFixed(4)}]`,
+      );
+      console.log(
+        `[ShadowCascade]   Ortho bounds (snapped): X=[${orthoMinX.toFixed(4)}, ${orthoMaxX.toFixed(4)}], Y=[${orthoMinY.toFixed(4)}, ${orthoMaxY.toFixed(4)}]`,
+      );
+
       // Use light-space AABB Z extent for ortho bounds
       // The ortho matrix maps: z_ndc = (z - near) / (far - near)
       // We want: scene at viewZMin -> z_ndc = 0, scene at viewZMax -> z_ndc = 1
@@ -343,10 +382,10 @@ export class DirectionalLight extends Light {
       );
 
       const projMatrix = Mat4.ortho(
-        centerX - halfDim,
-        centerX + halfDim,
-        centerY - halfDim,
-        centerY + halfDim,
+        orthoMinX,
+        orthoMaxX,
+        orthoMinY,
+        orthoMaxY,
         orthoNear,
         orthoFar,
       );

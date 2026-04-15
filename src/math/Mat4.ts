@@ -669,6 +669,30 @@ export class Mat4 {
     return out;
   }
 
+  static getRight(m: Mat4, out?: Vec3): Vec3 {
+    out ??= new Vec3();
+    out.data[0] = m.data[0];
+    out.data[1] = m.data[4];
+    out.data[2] = m.data[8];
+    return out;
+  }
+
+  static getUp(m: Mat4, out?: Vec3): Vec3 {
+    out ??= new Vec3();
+    out.data[0] = m.data[4];
+    out.data[1] = m.data[5];
+    out.data[2] = m.data[6];
+    return out;
+  }
+
+  static getForward(m: Mat4, out?: Vec3): Vec3 {
+    out ??= new Vec3();
+    out.data[0] = m.data[8];
+    out.data[1] = m.data[9];
+    out.data[2] = m.data[10];
+    return out;
+  }
+
   static perspective(
     fovY: number,
     aspect: number,
