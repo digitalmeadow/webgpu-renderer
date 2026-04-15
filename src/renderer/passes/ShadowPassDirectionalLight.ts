@@ -2,9 +2,10 @@ import shader from "./ShadowPassDirectionalLight.wgsl?raw";
 import { Mesh } from "../../mesh";
 import { DirectionalLight, SHADOW_MAP_CASCADES_COUNT } from "../../lights";
 import { Vertex } from "../../geometries";
-import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
+import { frustumPlanesFromMatrix, aabbInFrustum, Vec3 } from "../../math";
 import { MaterialManager } from "../../materials";
 import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
+import { Camera } from "../../camera";
 
 export class ShadowPassDirectionalLight {
   private device: GPUDevice;
@@ -157,19 +158,23 @@ export class ShadowPassDirectionalLight {
     opaqueMeshes: Mesh[],
     alphaTestMeshes: Mesh[] = [],
     transparentMeshes: Mesh[] = [],
+    camera: Camera,
   ): void {
     // Build instance groups for all mesh types
     const opaqueGroups = this.instanceGroupManager.buildGroups(
       device,
       opaqueMeshes,
+      camera.position,
     );
     const alphaTestGroups = this.instanceGroupManager.buildGroups(
       device,
       alphaTestMeshes,
+      camera.position,
     );
     const transparentGroups = this.instanceGroupManager.buildGroups(
       device,
       transparentMeshes,
+      camera.position,
     );
 
     for (

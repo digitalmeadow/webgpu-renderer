@@ -63,6 +63,7 @@ export class InstanceGroup {
   instanceBuffer: GPUBuffer | null = null;
   instanceBufferData: ArrayBuffer;
   instanceCount: number = 0;
+  sortByDepth: boolean = false;
 
   constructor(id: string, geometry: Geometry, material: MaterialBase) {
     this.id = id;

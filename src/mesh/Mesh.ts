@@ -17,6 +17,7 @@ export class Mesh extends Entity {
   public billboard: "x" | "y" | "z" | 0 = 0;
   public instanceGroupId: string | null = null;
   public instanceData: InstanceData = DEFAULT_INSTANCE_DATA;
+  public sortByDepth: boolean = false;
   private device: GPUDevice;
 
   constructor(

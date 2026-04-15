@@ -393,6 +393,7 @@ export class Renderer {
         opaqueMeshes,
         alphaTestMeshes,
         blendMeshes,
+        camera,
       );
 
       // Set shadow texture and update lighting bind group
@@ -412,6 +413,7 @@ export class Renderer {
         opaqueMeshes,
         alphaTestMeshes,
         blendMeshes,
+        camera,
       );
 
       this.lightManager.setSpotShadowTexture(

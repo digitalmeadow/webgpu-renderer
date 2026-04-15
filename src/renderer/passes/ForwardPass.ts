@@ -153,6 +153,7 @@ export class ForwardPass {
     const instanceGroups = this.instanceGroupManager.buildGroups(
       this.device,
       meshes,
+      camera.position,
     );
 
     const skyboxTexture = this.sceneUniforms.getSkyboxTexture();

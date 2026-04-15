@@ -2,6 +2,7 @@ import { Mesh } from "../mesh";
 import { InstanceGroup, INSTANCE_STRIDE } from "./InstanceGroup";
 import { Geometry } from "../geometries";
 import { MaterialBase } from "../materials";
+import { Vec3 } from "../math";
 
 export class InstanceGroupManager {
   private groups: Map<string, InstanceGroup> = new Map();
@@ -10,7 +11,11 @@ export class InstanceGroupManager {
   private nextGeometryId = 0;
   private nextMaterialId = 0;
 
-  buildGroups(device: GPUDevice, meshes: Mesh[]): InstanceGroup[] {
+  buildGroups(
+    device: GPUDevice,
+    meshes: Mesh[],
+    cameraPosition: Vec3,
+  ): InstanceGroup[] {
     this.groups.clear();
 
     // Debug logging for first few meshes
@@ -39,13 +44,20 @@ export class InstanceGroupManager {
       }
 
       if (!this.groups.has(key)) {
-        this.groups.set(
-          key,
-          new InstanceGroup(key, mesh.geometry, mesh.material),
-        );
+        const group = new InstanceGroup(key, mesh.geometry, mesh.material);
+        // Inherit sortByDepth from first mesh in group
+        group.sortByDepth = mesh.sortByDepth;
+        this.groups.set(key, group);
       }
 
       this.groups.get(key)!.addMesh(mesh);
+    }
+
+    // Sort groups that need depth sorting
+    for (const group of this.groups.values()) {
+      if (group.sortByDepth) {
+        this.sortInstancesByDepth(group, cameraPosition);
+      }
     }
 
     // Update all instance buffers
@@ -59,20 +71,42 @@ export class InstanceGroupManager {
     return Array.from(this.groups.values());
   }
 
+  private sortInstancesByDepth(
+    group: InstanceGroup,
+    cameraPosition: Vec3,
+  ): void {
+    group.meshes.sort((a, b) => {
+      // Get world positions from transforms
+      const posA = a.transform.getWorldMatrix();
+      const posB = b.transform.getWorldMatrix();
+
+      // Extract position from matrix (column 3: indices 12, 13, 14)
+      const worldPosA = new Vec3(posA.data[12], posA.data[13], posA.data[14]);
+      const worldPosB = new Vec3(posB.data[12], posB.data[13], posB.data[14]);
+
+      // Calculate squared distances (skip sqrt for performance)
+      const distSqA = Vec3.distanceSquared(cameraPosition, worldPosA);
+      const distSqB = Vec3.distanceSquared(cameraPosition, worldPosB);
+
+      // Sort descending (furthest first = back-to-front for alpha blending)
+      return distSqB - distSqA;
+    });
+  }
+
   private logInstanceStats(): void {
     const groups = Array.from(this.groups.values());
     const totalMeshes = groups.reduce((sum, g) => sum + g.meshes.length, 0);
     const largeGroups = groups.filter((g) => g.meshes.length >= 100);
+    const sortedGroups = groups.filter((g) => g.sortByDepth);
 
     if (largeGroups.length > 0) {
       console.log(
-        `[Instancing] ${groups.length} groups, ${totalMeshes} meshes total | ${largeGroups.length} groups with 100+ instances:`,
-        largeGroups.map((g) => `${g.meshes.length} instances`).join(", "),
+        `[Instancing] ${groups.length} groups, ${totalMeshes} meshes total | ${largeGroups.length} groups with 100+ instances | ${sortedGroups.length} sorted`,
       );
     } else if (groups.length > 0) {
       const maxInstances = Math.max(...groups.map((g) => g.meshes.length));
       console.log(
-        `[Instancing] ${groups.length} groups, ${totalMeshes} meshes total | Largest group: ${maxInstances} instances`,
+        `[Instancing] ${groups.length} groups, ${totalMeshes} meshes total | Largest: ${maxInstances} instances | ${sortedGroups.length} sorted`,
       );
     }
   }

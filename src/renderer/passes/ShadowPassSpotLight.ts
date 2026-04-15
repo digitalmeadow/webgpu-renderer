@@ -3,8 +3,9 @@ import { Mesh } from "../../mesh";
 import { SpotLight } from "../../lights";
 import { Vertex } from "../../geometries";
 import { MaterialManager } from "../../materials";
-import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
+import { frustumPlanesFromMatrix, aabbInFrustum, Vec3 } from "../../math";
 import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
+import { Camera } from "../../camera";
 
 export class ShadowPassSpotLight {
   private device: GPUDevice;
@@ -138,6 +139,7 @@ export class ShadowPassSpotLight {
     opaqueMeshes: Mesh[],
     alphaTestMeshes: Mesh[] = [],
     transparentMeshes: Mesh[] = [],
+    camera: Camera,
   ): void {
     for (let lightIndex = 0; lightIndex < spotLights.length; lightIndex++) {
       const light = spotLights[lightIndex];
@@ -164,14 +166,17 @@ export class ShadowPassSpotLight {
       const opaqueGroups = this.instanceGroupManager.buildGroups(
         device,
         visibleOpaqueMeshes,
+        camera.position,
       );
       const alphaTestGroups = this.instanceGroupManager.buildGroups(
         device,
         visibleAlphaTestMeshes,
+        camera.position,
       );
       const transparentGroups = this.instanceGroupManager.buildGroups(
         device,
         visibleTransparentMeshes,
+        camera.position,
       );
 
       const encoder = device.createCommandEncoder({

@@ -87,6 +87,7 @@ export class GeometryPass {
     const instanceGroups = this.instanceGroupManager.buildGroups(
       device,
       allMeshes,
+      camera.position,
     );
 
     const passEncoder = encoder.beginRenderPass({
