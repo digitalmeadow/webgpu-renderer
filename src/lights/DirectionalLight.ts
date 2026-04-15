@@ -13,6 +13,7 @@ export class DirectionalLight extends Light {
   // Shadow configuration
   public offsetNear: number = 0.0; // World-space units to push near plane back (toward light)
   public cascadeOverlap: number = 0.0; // Percentage factor (0.0-1.0+) for XY overlap between cascades
+  public cascadeBlendWidth: number = 0.1; // Blend zone size as fraction of cascade range (0.1 = 10%)
 
   public viewProjectionMatrices: Mat4[] = [];
   public cascadeSplits: number[] = [...DEFAULT_SHADOW_CASCADE_SPLITS];

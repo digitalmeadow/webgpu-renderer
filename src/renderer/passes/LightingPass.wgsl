@@ -206,6 +206,69 @@ fn fetch_light_directional_shadow(light_index: u32, cascade_id: u32, homogeneous
     return sum / f32(VOGEL_SAMPLES);
 }
 
+// Fetch directional shadow with cascade blending
+// Blends between adjacent cascades in transition zones to eliminate hard edges
+fn fetch_light_directional_shadow_blended(
+    light_index: u32, 
+    light_uniforms: LightDirectionalUniforms,
+    world_pos: vec3<f32>, 
+    view_space_z: f32,
+    frag_coord: vec2<f32>
+) -> f32 {
+    const BLEND_WIDTH: f32 = 0.3; // 10% blend zone at cascade boundaries
+    
+    // Convert negative view-space Z to positive depth distance
+    let depth = abs(view_space_z);
+    let splits = light_uniforms.cascade_splits;
+    
+    // Determine primary cascade and check for blend zone
+    var cascade0: u32;
+    var cascade1: u32;
+    var blend_factor: f32 = 0.0;
+    var in_blend_zone = false;
+    
+    if depth < splits.y {
+        cascade0 = 0u;
+        // Check if we're near the boundary with cascade 1
+        let range = splits.y - splits.x;
+        let blend_start = splits.y - range * BLEND_WIDTH;
+        if depth > blend_start {
+            cascade1 = 1u;
+            blend_factor = smoothstep(blend_start, splits.y, depth);
+            in_blend_zone = true;
+        }
+    } else if depth < splits.z {
+        cascade0 = 1u;
+        // Check if we're near the boundary with cascade 2
+        let range = splits.z - splits.y;
+        let blend_start = splits.z - range * BLEND_WIDTH;
+        if depth > blend_start {
+            cascade1 = 2u;
+            blend_factor = smoothstep(blend_start, splits.z, depth);
+            in_blend_zone = true;
+        }
+    } else {
+        cascade0 = 2u;
+        // Last cascade, no blending needed
+    }
+    
+    // Sample primary cascade
+    let shadow_matrix0 = light_uniforms.view_projection_matrices[cascade0];
+    let shadow_coords0 = shadow_matrix0 * vec4<f32>(world_pos, 1.0);
+    let shadow0 = fetch_light_directional_shadow(light_index, cascade0, shadow_coords0, frag_coord);
+    
+    // If in blend zone, sample next cascade and blend
+    if in_blend_zone {
+        let shadow_matrix1 = light_uniforms.view_projection_matrices[cascade1];
+        let shadow_coords1 = shadow_matrix1 * vec4<f32>(world_pos, 1.0);
+        let shadow1 = fetch_light_directional_shadow(light_index, cascade1, shadow_coords1, frag_coord);
+        
+        return mix(shadow0, shadow1, blend_factor);
+    }
+    
+    return shadow0;
+}
+
 // Fetch spot shadow
 fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: mat4x4<f32>, homogeneous_coords: vec4<f32>, frag_coord: vec2<f32>) -> f32 {
     // Transform world position to light view space to check if behind the light
@@ -331,14 +394,9 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let light_dir = normalize(-light_uniforms.direction.xyz);
             let diffuse = max(0.0, dot(world_normal, light_dir));
 
-            // Directional light with cascade shadow
+            // Directional light with cascade shadow and blending
             let view_space_z = view_pos.z;
-            let cascade = select_cascade(view_space_z, light_uniforms.cascade_splits);
-
-            let shadow_matrix = light_uniforms.view_projection_matrices[cascade];
-            let shadow_coords = shadow_matrix * vec4<f32>(world_pos, 1.0);
-
-            let shadow = fetch_light_directional_shadow(i, cascade, shadow_coords, in.position.xy);
+            let shadow = fetch_light_directional_shadow_blended(i, light_uniforms, world_pos, view_space_z, in.position.xy);
 
             color += diffuse_albedo * light_uniforms.color.rgb * light_uniforms.color.a * shadow * diffuse;
         }
