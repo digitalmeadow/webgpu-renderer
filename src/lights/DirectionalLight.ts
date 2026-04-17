@@ -22,7 +22,9 @@ export class DirectionalLight extends Light {
   // Occlusion configuration
   public occlusionEnabled: boolean = false;
   public occlusionResolution: number = 512;
-  public occlusionWorldSize: number = 200.0; // Orthographic bounds in world units
+  public occlusionWorldSize: number = 200.0; // Orthographic bounds in world units (deprecated - use frustum-based)
+  public occlusionFrustumPercentage: number = 0.2; // Percentage of camera frustum depth to cover (0.0-1.0)
+  public occlusionSmoothness: number = 0.01; // Smoothness range for occlusion gradient (in depth space)
 
   // Occlusion matrix (will overwrite view_projection_matrices[0] during occlusion pass)
   public occlusionViewProjectionMatrix: Mat4 = Mat4.create();
@@ -322,6 +324,9 @@ export class DirectionalLight extends Light {
     this.updateShadowBuffer();
   }
 
+  /**
+   * @deprecated Use updateOcclusionMatrixFromFrustum instead for better frustum coverage
+   */
   public updateOcclusionMatrix(
     cameraPosition: Vec3,
     cameraDirection: Vec3,
@@ -358,6 +363,152 @@ export class DirectionalLight extends Light {
       halfSize, // top
       0.1, // near
       this.occlusionWorldSize * 2, // far (cover full depth range)
+    );
+
+    // Store as view-projection matrix
+    Mat4.multiply(projMatrix, viewMatrix, this.occlusionViewProjectionMatrix);
+
+    // Temporarily overwrite view_projection_matrices[0] in shadow buffer
+    // This will be used during occlusion rendering
+    const data = new Float32Array(16);
+    data.set(this.occlusionViewProjectionMatrix.data, 0);
+    this._device.queue.writeBuffer(this.shadowBuffer, 0, data); // Offset 0 = first matrix
+  }
+
+  /**
+   * Update occlusion matrix to cover a percentage of the camera frustum.
+   * This provides much better coverage than the fixed world-space box approach.
+   * Uses the same frustum-fitting logic as shadow cascades.
+   */
+  public updateOcclusionMatrixFromFrustum(
+    cameraPosition: Vec3,
+    cameraDirection: Vec3,
+    cameraNear: number,
+    cameraFar: number,
+    cameraFov: number,
+    cameraAspect: number,
+  ): void {
+    if (!this.shadowBuffer || !this._device) {
+      return;
+    }
+
+    const lightDir = Vec3.normalize(this.direction);
+
+    // Light's up vector: avoid gimbal lock if light is nearly vertical
+    const upCandidate = Vec3.create(0, 1, 0);
+    const dot = Math.abs(Vec3.dot(lightDir, upCandidate));
+    const up = dot > 0.9 ? Vec3.create(1, 0, 0) : upCandidate;
+
+    // Camera's local coordinate system
+    const forward = Vec3.normalize(cameraDirection.copy());
+    const tempRight = Vec3.cross(forward, Vec3.create(0, 1, 0));
+    const len = Vec3.len(tempRight);
+    const right =
+      len > 0.0001
+        ? Vec3.normalize(tempRight)
+        : Vec3.normalize(Vec3.cross(forward, Vec3.create(1, 0, 0)));
+    const cameraUp = Vec3.cross(right, forward);
+
+    const tanHalfFov = Math.tan(cameraFov / 2);
+
+    // Calculate frustum extent based on percentage of camera far plane
+    const occlusionNear = cameraNear;
+    const occlusionFar =
+      cameraNear + (cameraFar - cameraNear) * this.occlusionFrustumPercentage;
+
+    // Compute frustum corners at both occlusionNear and occlusionFar (8 corners total)
+    const halfHeightFar = occlusionFar * tanHalfFov;
+    const halfWidthFar = halfHeightFar * cameraAspect;
+
+    const halfHeightNear = occlusionNear * tanHalfFov;
+    const halfWidthNear = halfHeightNear * cameraAspect;
+
+    const corners: Vec3[] = [];
+
+    // Helper to compute corners at a given distance
+    const addCornersAtDistance = (
+      dist: number,
+      halfW: number,
+      halfH: number,
+    ) => {
+      const halfHeights = [halfH, -halfH];
+      const halfWidths = [-halfW, halfW];
+      for (const h of halfHeights) {
+        for (const w of halfWidths) {
+          const corner = Vec3.create();
+          Vec3.copy(cameraPosition, corner);
+          Vec3.addScaled(corner, forward, dist, corner);
+          Vec3.addScaled(corner, right, w, corner);
+          Vec3.addScaled(corner, cameraUp, h, corner);
+          corners.push(corner);
+        }
+      }
+    };
+
+    // Build 4 corners at occlusionNear
+    addCornersAtDistance(occlusionNear, halfWidthNear, halfHeightNear);
+    // Build 4 corners at occlusionFar
+    addCornersAtDistance(occlusionFar, halfWidthFar, halfHeightFar);
+
+    // Compute center as midpoint of the frustum slice
+    const midDist = (occlusionNear + occlusionFar) / 2;
+    const center = Vec3.create();
+    Vec3.copy(cameraPosition, center);
+    Vec3.addScaled(center, forward, midDist, center);
+
+    // Create view matrix (no texel snapping needed for occlusion)
+    const eyeDistance = Math.max(occlusionFar - occlusionNear, 100); // Ensure enough depth
+    const eye = Vec3.create();
+    Vec3.copy(center, eye);
+    Vec3.addScaled(eye, lightDir, eyeDistance, eye);
+    const viewMatrix = Mat4.lookAt(eye, center, up);
+
+    // Transform corners to light space to get AABB
+    let viewMin = Vec3.create(Infinity, Infinity, Infinity);
+    let viewMax = Vec3.create(-Infinity, -Infinity, -Infinity);
+    for (const corner of corners) {
+      const lc = Vec3.transformMat4(corner, viewMatrix);
+      viewMin.data[0] = Math.min(viewMin.data[0], lc.x);
+      viewMin.data[1] = Math.min(viewMin.data[1], lc.y);
+      viewMin.data[2] = Math.min(viewMin.data[2], lc.z);
+      viewMax.data[0] = Math.max(viewMax.data[0], lc.x);
+      viewMax.data[1] = Math.max(viewMax.data[1], lc.y);
+      viewMax.data[2] = Math.max(viewMax.data[2], lc.z);
+    }
+
+    // Calculate orthographic projection bounds from light-space AABB
+    const width = viewMax.x - viewMin.x;
+    const height = viewMax.y - viewMin.y;
+    const maxDim = Math.max(width, height);
+    const halfDim = maxDim / 2;
+
+    const centerX = (viewMin.x + viewMax.x) / 2;
+    const centerY = (viewMin.y + viewMax.y) / 2;
+    const orthoMinX = centerX - halfDim;
+    const orthoMaxX = centerX + halfDim;
+    const orthoMinY = centerY - halfDim;
+    const orthoMaxY = centerY + halfDim;
+
+    // Use light-space AABB Z extent for ortho bounds
+    const viewZMin = viewMin.z;
+    const viewZMax = viewMax.z;
+    let orthoNear = viewZMin - 100; // Add padding to ensure coverage
+    let orthoFar = viewZMax + 100;
+
+    // Ensure orthoNear < orthoFar
+    if (orthoNear >= orthoFar) {
+      const temp = orthoNear;
+      orthoNear = orthoFar;
+      orthoFar = temp;
+    }
+
+    const projMatrix = Mat4.ortho(
+      orthoMinX,
+      orthoMaxX,
+      orthoMinY,
+      orthoMaxY,
+      orthoNear,
+      orthoFar,
     );
 
     // Store as view-projection matrix

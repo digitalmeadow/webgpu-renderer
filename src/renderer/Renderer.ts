@@ -451,9 +451,16 @@ export class Renderer {
       (l) => l.occlusionEnabled,
     );
     if (occlusionEnabledDirectionalLights.length > 0) {
-      // Update occlusion matrices
+      // Update occlusion matrices using frustum-based coverage
       for (const light of occlusionEnabledDirectionalLights) {
-        light.updateOcclusionMatrix(camera.position, camera.getForward());
+        light.updateOcclusionMatrixFromFrustum(
+          camera.position,
+          camera.getForward(),
+          camera.near,
+          camera.far,
+          camera.fov,
+          camera.aspect,
+        );
       }
 
       // Render occlusion depth maps

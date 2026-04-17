@@ -2,17 +2,12 @@
 --- Visuals ---
 
 Debug why front headlights with a white emissive texture value, are rendering yellow when emissive is turned up to 1, 1, 1
-Debug why opaque meshes billboard isn't working
-
-Set up instancing to render thousands of trees and foliage
 
 Not in order:
   Anti Aliasing
   (SSA done, need MMSA next)
 
   Godrays
-
-  Mipmaps
 
   Animate trees with movement
 
@@ -24,5 +19,6 @@ Not in order:
 
 --- Features ----
 
-- Projection mapping, e.g. casting complex shadows (via video as a projection onto the scene)
-  - Complex lights, like with complex shadows, blender uses these screens which you put in front of sceen lights
+CubeProbe - renders a CubeTexture from a point, with optional mesh culling and bounds
+- Use case: Perfect vehicle reflections
+- Additional dev task: Allow opt-in CubeTexture to be passed into the lighting/forward pass to render perfect reflections for certain meshes.
