@@ -5,4 +5,5 @@ export * from "./passes/GeometryPass";
 export * from "./passes/LightingPass";
 export * from "./passes/OutputPass";
 export * from "./passes/PostPass";
+export * from "./passes/ReflectionProbePass";
 export type { TextureSettings } from "./Renderer";

@@ -398,11 +398,22 @@ export class MaterialManager {
           this.createTextureResources(texture);
         }
       }
-      if (
-        pbrMaterial.environmentTexture &&
-        !pbrMaterial.environmentTexture.loaded
-      ) {
-        await pbrMaterial.environmentTexture.load();
+      if (pbrMaterial.environmentTexture) {
+        // CubeRenderTarget doesn't need loading (it's already a GPU resource)
+        // Only load CubeTexture
+        if (
+          "loaded" in pbrMaterial.environmentTexture &&
+          !pbrMaterial.environmentTexture.loaded
+        ) {
+          console.log(
+            `[MaterialManager] Loading CubeTexture for material "${material.name}"`,
+          );
+          await pbrMaterial.environmentTexture.load();
+        } else if (!("loaded" in pbrMaterial.environmentTexture)) {
+          console.log(
+            `[MaterialManager] Material "${material.name}" has CubeRenderTarget (no loading needed)`,
+          );
+        }
       }
       this.bindGroupCache.delete(material);
     }
@@ -640,6 +651,16 @@ export class MaterialManager {
       const envSampler =
         pbrMaterial.environmentTexture?.gpuSampler ??
         this.placeholderEnvSampler;
+
+      const usingCustomEnv = !!pbrMaterial.environmentTexture;
+      console.log(
+        `[MaterialManager] Creating bind group for material "${material.name}":`,
+        {
+          hasCustomEnvironment: usingCustomEnv,
+          usingPlaceholder: !usingCustomEnv,
+          environmentType: pbrMaterial.environmentTexture?.constructor.name,
+        },
+      );
 
       const emissiveTexture =
         pbrMaterial.emissiveTexture &&

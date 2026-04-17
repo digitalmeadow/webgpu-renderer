@@ -1,5 +1,5 @@
 import { MaterialBase, MaterialType, AlphaMode } from "./MaterialBase";
-import { Texture, CubeTexture } from "../textures";
+import { Texture, CubeTexture, CubeRenderTarget } from "../textures";
 import { MaterialUniforms } from "./MaterialUniforms";
 
 export interface ShaderHooks {
@@ -14,7 +14,7 @@ interface MaterialPBROptions {
   albedoTexture?: Texture | null;
   normalTexture?: Texture | null;
   metalnessRoughnessTexture?: Texture | null;
-  environmentTexture?: CubeTexture | null;
+  environmentTexture?: CubeTexture | CubeRenderTarget | null;
   alphaMode?: AlphaMode;
   alphaCutoff?: number;
   doubleSided?: boolean;
@@ -29,7 +29,7 @@ export class MaterialPBR extends MaterialBase {
   albedoTexture: Texture | null = null;
   normalTexture: Texture | null = null;
   metalnessRoughnessTexture: Texture | null = null;
-  environmentTexture: CubeTexture | null = null;
+  environmentTexture: CubeTexture | CubeRenderTarget | null = null;
   hooks: ShaderHooks = {};
   public uniforms: MaterialUniforms;
   baseColorFactor: [number, number, number, number] = [1, 1, 1, 1];

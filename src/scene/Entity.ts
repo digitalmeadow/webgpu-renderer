@@ -7,6 +7,7 @@ export const EntityType = {
   LightDirectional: "lightDirectional",
   LightSpot: "lightSpot",
   LightPoint: "lightPoint",
+  ReflectionProbe: "reflectionProbe",
 } as const;
 export type EntityType = (typeof EntityType)[keyof typeof EntityType];
 

@@ -115,6 +115,9 @@ struct MaterialUniforms {
 @group(2) @binding(2) var normal_texture: texture_2d<f32>;
 @group(2) @binding(3) var metalness_roughness_texture: texture_2d<f32>;
 @group(2) @binding(4) var<uniform> material_uniforms: MaterialUniforms;
+@group(2) @binding(5) var material_environment_texture: texture_cube<f32>;
+@group(2) @binding(6) var material_environment_sampler: sampler;
+@group(2) @binding(7) var emissive_texture: texture_2d<f32>;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -381,10 +384,12 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
     return sum / f32(VOGEL_SAMPLES);
 }
 
-// IBL (Image-Based Lighting) - sample skybox based on normal direction
+// IBL (Image-Based Lighting) - sample environment texture based on normal direction
+// Uses material's environment texture if available, otherwise falls back to global skybox
 fn sample_ibl(normal: vec3<f32>) -> vec3<f32> {
     let max_mip = 2.0;
-    return textureSampleLevel(skyboxTexture, skyboxSampler, normal, max_mip).rgb;
+    // Use material environment texture (per-material reflection probe or environment map)
+    return textureSampleLevel(material_environment_texture, material_environment_sampler, normal, max_mip).rgb;
 }
 
 // Specular IBL - environment reflection with Schlick fresnel
@@ -398,7 +403,8 @@ fn sample_specular_ibl(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness:
 
     // Roughness-based mip selection
     let mip = roughness * MAX_ENV_MIP_LEVELS;
-    let env_color = textureSampleLevel(skyboxTexture, skyboxSampler, R, mip).rgb;
+    // Use material environment texture (per-material reflection probe or environment map)
+    let env_color = textureSampleLevel(material_environment_texture, material_environment_sampler, R, mip).rgb;
 
     // F0: dielectric uses 0.04, metals use albedo color
     let dielectric_F0 = vec3<f32>(0.15);
@@ -458,8 +464,8 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let diffuse_albedo = albedo.rgb * (1.0 - metalness);
     var color = diffuse_albedo * ambient;
 
-    // Specular IBL
-    let specular = sample_specular_ibl(in.world_position, world_normal, roughness, metalness, albedo.rgb) * scene_uniforms.ibl_intensity;
+    // Specular IBL - metallic reflections should always be visible regardless of IBL intensity
+    let specular = sample_specular_ibl(in.world_position, world_normal, roughness, metalness, albedo.rgb);
 
     // Directional lights
     for (var i: u32 = 0u; i < light_directional_uniforms.light_count; i++) {

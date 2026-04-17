@@ -382,8 +382,8 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let diffuse_albedo = albedo * (1.0 - metalness);
     var color = diffuse_albedo * ambient;
 
-    // Specular IBL (environment reflection)
-    let specular = sample_specular_ibl(world_pos, world_normal, roughness, metalness, albedo) * scene_uniforms.ibl_intensity;
+    // Specular IBL (environment reflection) - metallic reflections should always be visible regardless of IBL intensity
+    let specular = sample_specular_ibl(world_pos, world_normal, roughness, metalness, albedo);
 
     for (var i: u32 = 0u; i < light_directional_uniforms.light_count; i++) {
         let light_uniforms = light_directional_uniforms.lights[i];

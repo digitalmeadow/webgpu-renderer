@@ -13,6 +13,7 @@ import { OcclusionPassDirectionalLight } from "./passes/OcclusionPassDirectional
 import { OcclusionPassSpotLight } from "./passes/OcclusionPassSpotLight";
 import { SkyboxPass } from "./passes/SkyboxPass";
 import { PostPass, PostPassContext } from "./passes/PostPass";
+import { ReflectionProbePass } from "./passes/ReflectionProbePass";
 import { MaterialManager } from "../materials";
 import { ParticleEmitter } from "../particles";
 import { Mesh } from "../mesh";
@@ -21,6 +22,8 @@ import { SceneUniforms } from "../uniforms";
 import { Light, DirectionalLight, SpotLight } from "../lights";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../math";
 import { CubeTexture } from "../textures/CubeTexture";
+import { ReflectionProbe } from "../scene/ReflectionProbe";
+import { CubeRenderTarget } from "../textures/CubeRenderTarget";
 
 export interface TextureSettings {
   mipmapEnabled?: boolean;
@@ -88,6 +91,7 @@ export class Renderer {
   private particlesPass: ParticlesPass;
   private forwardPass: ForwardPass;
   private skyboxPass: SkyboxPass;
+  private reflectionProbePass: ReflectionProbePass;
   private materialManager: MaterialManager;
   private lightManager: LightManager;
   private sceneUniforms: SceneUniforms;
@@ -97,6 +101,7 @@ export class Renderer {
   private postPassTextureB: GPUTexture | null = null;
   private postPassViewA: GPUTextureView | null = null;
   private postPassViewB: GPUTextureView | null = null;
+  private currentFrame: number = 0;
 
   constructor(canvas: HTMLCanvasElement, options: RendererOptions = {}) {
     this.canvas = canvas;
@@ -135,6 +140,7 @@ export class Renderer {
     this.particlesPass = null as unknown as ParticlesPass;
     this.forwardPass = null as unknown as ForwardPass;
     this.skyboxPass = null as unknown as SkyboxPass;
+    this.reflectionProbePass = null as unknown as ReflectionProbePass;
     this.materialManager = null as unknown as MaterialManager;
     this.lightManager = null as unknown as LightManager;
     this.sceneUniforms = null as unknown as SceneUniforms;
@@ -279,6 +285,17 @@ export class Renderer {
       this.cameraBindGroupLayout,
       this.geometryBuffer,
     );
+
+    this.reflectionProbePass = new ReflectionProbePass(
+      this.device,
+      this.geometryPass,
+      this.lightingPass,
+      this.forwardPass,
+      this.materialManager,
+      this.lightManager,
+      this.sceneUniforms,
+      this.cameraBindGroupLayout,
+    );
   }
 
   resize(width: number, height: number): void {
@@ -368,16 +385,82 @@ export class Renderer {
       }
     }
 
-    const opaqueMeshes = meshes.filter(
+    // Collect and render reflection probes BEFORE main scene rendering
+    const reflectionProbes = this.collectReflectionProbes(world);
+    console.log(
+      `[Renderer] Collected ${reflectionProbes.length} reflection probes from world`,
+    );
+
+    const probesToUpdate = reflectionProbes.filter((probe) =>
+      probe.shouldUpdate(this.currentFrame),
+    );
+    console.log(
+      `[Renderer] ${probesToUpdate.length} probes need updating this frame (currentFrame: ${this.currentFrame})`,
+    );
+
+    for (const probe of probesToUpdate) {
+      console.log(`[Renderer] Rendering probe "${probe.name}":`, {
+        resolution: probe.resolution,
+        position: probe.transform.getWorldPosition(),
+        hasCubeRenderTarget: !!probe.cubeRenderTarget,
+        updateFrequency: probe.updateFrequency,
+      });
+
+      // Update world matrices to ensure probe position is correct
+      world.updateWorldMatrices();
+
+      // Render probe
+      this.reflectionProbePass.render(probe, world);
+
+      // Mark probe as updated
+      probe.markUpdated(this.currentFrame);
+      console.log(
+        `[Renderer] ✅ Probe "${probe.name}" rendered and marked as updated`,
+      );
+    }
+
+    // Separate meshes: those with CubeRenderTarget environment textures should bypass GeometryPass
+    // and be rendered in ForwardPass instead (even if opaque)
+    const meshesWithProbeReflections = meshes.filter((m) => {
+      if (m.material?.type === "materialPBR") {
+        const pbrMaterial = m.material as any;
+        const hasProbeTexture =
+          pbrMaterial.environmentTexture instanceof CubeRenderTarget;
+        if (hasProbeTexture) {
+          console.log(
+            `[Renderer] Mesh "${m.name}" has CubeRenderTarget environment texture - routing to ForwardPass`,
+          );
+        }
+        return hasProbeTexture;
+      }
+      return false;
+    });
+    const normalMeshes = meshes.filter((m) => {
+      if (m.material?.type === "materialPBR") {
+        const pbrMaterial = m.material as any;
+        return !(pbrMaterial.environmentTexture instanceof CubeRenderTarget);
+      }
+      return true;
+    });
+
+    console.log(`[Renderer] Mesh routing:`, {
+      totalMeshes: meshes.length,
+      meshesWithProbeReflections: meshesWithProbeReflections.length,
+      normalMeshes: normalMeshes.length,
+    });
+
+    const opaqueMeshes = normalMeshes.filter(
       (m) => m.material?.alphaMode === "opaque",
     );
-    const alphaTestMeshes = meshes.filter(
+    const alphaTestMeshes = normalMeshes.filter(
       (m) => m.material?.alphaMode === "mask",
     );
-    const ditherMeshes = meshes.filter(
+    const ditherMeshes = normalMeshes.filter(
       (m) => m.material?.alphaMode === "dither",
     );
-    const blendMeshes = meshes.filter((m) => m.material?.alphaMode === "blend");
+    const blendMeshes = normalMeshes.filter(
+      (m) => m.material?.alphaMode === "blend",
+    );
 
     const lights = this.collectLights(world);
 
@@ -515,11 +598,12 @@ export class Renderer {
       );
     }
 
-    // Forward Pass (transparency)
-    if (this.forwardPass && blendMeshes.length > 0) {
+    // Forward Pass (transparency + probe-affected meshes)
+    const forwardPassMeshes = [...blendMeshes, ...meshesWithProbeReflections];
+    if (this.forwardPass && forwardPassMeshes.length > 0) {
       this.forwardPass.render(
         commandEncoder,
-        blendMeshes,
+        forwardPassMeshes,
         camera,
         this.lightingPass.outputView,
         this.geometryBuffer.depthView,
@@ -583,6 +667,9 @@ export class Renderer {
     );
 
     this.device.queue.submit([commandEncoder.finish()]);
+
+    // Increment frame counter for reflection probe update frequency
+    this.currentFrame++;
   }
 
   public getDevice(): GPUDevice {
@@ -608,6 +695,7 @@ export class Renderer {
   public setSkyboxTexture(texture: CubeTexture | null): void {
     this.skyboxTexture = texture;
     this.sceneUniforms.setSkyboxTexture(texture);
+    this.reflectionProbePass.setSkyboxTexture(texture);
   }
 
   public addPostPass(pass: PostPass): void {
@@ -768,6 +856,18 @@ export class Renderer {
       }
     }
     return emitters;
+  }
+
+  private collectReflectionProbes(world: World): ReflectionProbe[] {
+    const probes: ReflectionProbe[] = [];
+    for (const scene of world.scenes) {
+      for (const entity of scene.entities) {
+        if (entity.type === EntityType.ReflectionProbe) {
+          probes.push(entity as ReflectionProbe);
+        }
+      }
+    }
+    return probes;
   }
 
   public getDirectionalLightOcclusionView(
