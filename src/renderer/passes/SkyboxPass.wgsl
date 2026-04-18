@@ -33,7 +33,7 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     
     let ndc_pos = vec4<f32>(pos, 1.0, 1.0);
     let view_pos = camera.projection_matrix_inverse * ndc_pos;
-    let view_dir = vec4<f32>(view_pos.xy, -1.0, 0.0);
+    let view_dir = vec4<f32>(view_pos.xy, 1.0, 0.0);
     output.ray_dir = (camera.view_matrix_inverse * view_dir).xyz;
     
     output.position = vec4<f32>(pos, 1.0, 1.0);

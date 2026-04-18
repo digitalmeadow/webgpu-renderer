@@ -29,7 +29,7 @@ export class FlyControls {
   private updateFromCamera(): void {
     const forward = Vec3.sub(this.camera.target, this.camera.position);
     const len = Vec3.len(forward);
-    this.yaw = Math.atan2(forward.x, forward.z);
+    this.yaw = Math.atan2(-forward.x, forward.z);
     this.pitch = Math.asin(forward.y / len);
   }
 
@@ -69,7 +69,7 @@ export class FlyControls {
       const deltaX = e.clientX - this.lastMouseX;
       const deltaY = e.clientY - this.lastMouseY;
 
-      this.yaw -= deltaX * this.sensitivity;
+      this.yaw += deltaX * this.sensitivity;
       this.pitch -= deltaY * this.sensitivity;
       this.pitch = Math.max(
         -Math.PI / 2 + 0.01,
@@ -106,7 +106,6 @@ export class FlyControls {
     const actualSpeed = this.keys.has("shift") ? this.speed * 2 : this.speed;
     const moveSpeed = actualSpeed * deltaTime;
 
-    // Calculate movement using local vectors
     const movement = new Vec3(0, 0, 0);
 
     if (this.keys.has("w")) {
@@ -147,7 +146,7 @@ export class FlyControls {
 
     // Update target based on yaw/pitch
     const target = new Vec3(
-      this.camera.position.x + Math.sin(this.yaw) * Math.cos(this.pitch),
+      this.camera.position.x - Math.sin(this.yaw) * Math.cos(this.pitch),
       this.camera.position.y + Math.sin(this.pitch),
       this.camera.position.z + Math.cos(this.yaw) * Math.cos(this.pitch),
     );

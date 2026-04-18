@@ -1,5 +1,4 @@
 import { MaterialBase, MaterialType } from "./MaterialBase";
-import { Texture } from "../textures";
 
 export class MaterialUniforms {
   public readonly buffer: GPUBuffer;
@@ -21,6 +20,7 @@ export class MaterialUniforms {
     let color: [number, number, number, number] = [1, 1, 1, 1];
     let emissive: [number, number, number] = [0, 0, 0];
     let emissiveIntensity = 0;
+    let environmentTextureId = 0; // 0 = use global skybox by default
 
     if (material.type === MaterialType.PBR) {
       color = (material as any).baseColorFactor;
@@ -32,6 +32,8 @@ export class MaterialUniforms {
         pbrEmissive[1],
         pbrEmissive[2],
       );
+      // Get environment texture ID from material (will be set by MaterialManager)
+      environmentTextureId = (material as any).environmentTextureId ?? 0;
     } else if ("color" in material) {
       color = (material as any).color;
     }
@@ -41,7 +43,7 @@ export class MaterialUniforms {
     this.data[2] = color[2];
     this.data[3] = color[3];
     this.data[4] = material.opacity;
-    this.data[5] = 0; // padding for vec4 alignment
+    this.data[5] = environmentTextureId;
     this.data[6] = 0; // padding for vec4 alignment
     this.data[7] = 0; // padding for vec4 alignment
     this.data[8] = emissive[0];
@@ -52,6 +54,7 @@ export class MaterialUniforms {
     this.data[13] = material.alphaMode === "dither" ? 1.0 : 0.0; // use_dithering flag
     this.data[14] = 0; // padding
     this.data[15] = 0; // padding
+
     this.device.queue.writeBuffer(this.buffer, 0, this.data.buffer);
   }
 }

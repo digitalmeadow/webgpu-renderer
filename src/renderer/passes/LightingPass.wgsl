@@ -97,6 +97,8 @@ struct SceneUniforms {
 @group(3) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
 @group(3) @binding(1) var skyboxTexture: texture_cube<f32>;
 @group(3) @binding(2) var skyboxSampler: sampler;
+@group(3) @binding(3) var environmentTexture1: texture_cube<f32>;  // First custom environment map
+@group(3) @binding(4) var environmentSampler1: sampler;
 
 struct FragmentOutput {
     @location(0) color: vec4<f32>,
@@ -132,8 +134,8 @@ fn position_from_depth(uv: vec2<f32>, depth: f32) -> vec3<f32> {
 
 // Select cascade based on view-space depth
 fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
-    // Convert negative view-space Z to positive depth distance
-    // In right-handed view space, -Z is forward, so objects in front have negative Z
+    // Convert view-space Z to positive depth distance
+    // In left-handed view space, camera looks down +Z, so objects in front have positive Z
     let depth = abs(view_space_z);
     
     if depth < splits.y {
@@ -274,8 +276,8 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
     // Transform world position to light view space to check if behind the light
     let light_view_pos = view_matrix * vec4<f32>(world_pos, 1.0);
 
-    // In right-handed view space, -Z is forward. Points behind the light have Z >= 0
-    if light_view_pos.z >= 0.0 {
+    // In left-handed view space, camera looks down +Z. Points behind the light have Z <= 0
+    if light_view_pos.z <= 0.0 {
         return 0.0; // Behind the light - no contribution
     }
 
@@ -315,24 +317,43 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
     return sum / f32(VOGEL_SAMPLES);
 }
 
-// IBL (Image-Based Lighting) - sample skybox based on normal direction
-fn sample_ibl(normal: vec3<f32>) -> vec3<f32> {
+// IBL (Image-Based Lighting) - sample environment texture based on normal direction and material's environment ID
+fn sample_ibl(normal: vec3<f32>, env_id: f32) -> vec3<f32> {
     let max_mip = 2.0;
+    let env_id_int = u32(env_id);
+    
+    // Select environment texture based on ID
+    if (env_id_int == 1u) {
+        return textureSampleLevel(environmentTexture1, environmentSampler1, normal, max_mip).rgb;
+    }
+    
+    // Default: use global skybox (ID 0)
     return textureSampleLevel(skyboxTexture, skyboxSampler, normal, max_mip).rgb;
 }
 
 // Specular IBL - environment reflection with Schlick fresnel
 const MAX_ENV_MIP_LEVELS: f32 = 4.0;
 
-fn sample_specular_ibl(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness: f32, metalness: f32, albedo: vec3<f32>) -> vec3<f32> {
+fn sample_specular_ibl(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness: f32, metalness: f32, albedo: vec3<f32>, env_id: f32) -> vec3<f32> {
     let V = normalize(camera_uniforms.position.xyz - world_pos);
     let N = normalize(world_normal);
     let R = reflect(-V, N);
+    let R_flipped = vec3<f32>(-R.x, R.y, R.z);
     let NdotV = max(dot(N, V), 0.0);
 
     // Roughness-based mip selection
     let mip = roughness * MAX_ENV_MIP_LEVELS;
-    let env_color = textureSampleLevel(skyboxTexture, skyboxSampler, R, mip).rgb;
+    
+    // Select environment texture based on ID
+    let env_id_int = u32(env_id);
+    var env_color: vec3<f32>;
+    
+    if (env_id_int == 1u) {
+        env_color = textureSampleLevel(environmentTexture1, environmentSampler1, R_flipped, mip).rgb;
+    } else {
+        // Default: use global skybox (ID 0)
+        env_color = textureSampleLevel(skyboxTexture, skyboxSampler, R, mip).rgb;
+    }
 
     // F0: dielectric uses 0.04, metals use albedo color
     let dielectric_F0 = vec3<f32>(0.15);
@@ -357,6 +378,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let metal_rough = textureSample(gbuffer_metallic_roughness, sampler_linear, in.uv_coords);
     let metalness = metal_rough.b;
     let roughness = metal_rough.g;
+    let environment_id = metal_rough.a; // Read environment texture ID from alpha channel
     let emissive = textureSample(gbuffer_emissive, sampler_linear, in.uv_coords).rgb;
     let depth = textureLoad(gbuffer_depth, vec2<i32>(in.uv_coords * vec2<f32>(textureDimensions(gbuffer_depth))), 0);
 
@@ -375,7 +397,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     }
 
     // Diffuse IBL (sampled at high mip = blurry/omnidirectional)
-    let ibl_color = sample_ibl(world_normal) * scene_uniforms.ibl_intensity;
+    let ibl_color = sample_ibl(world_normal, environment_id) * scene_uniforms.ibl_intensity;
     let ambient = scene_uniforms.ambient_light_color.rgb + ibl_color;
 
     // Metals have no diffuse response; dielectrics lose energy to specular via fresnel
@@ -383,7 +405,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     var color = diffuse_albedo * ambient;
 
     // Specular IBL (environment reflection) - metallic reflections should always be visible regardless of IBL intensity
-    let specular = sample_specular_ibl(world_pos, world_normal, roughness, metalness, albedo);
+    let specular = sample_specular_ibl(world_pos, world_normal, roughness, metalness, albedo, environment_id);
 
     for (var i: u32 = 0u; i < light_directional_uniforms.light_count; i++) {
         let light_uniforms = light_directional_uniforms.lights[i];
@@ -505,6 +527,18 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         // This is: light that survived + light scattered in from fog
         color = color * extinction + fog_color * (vec3<f32>(1.0) - ins);
     }
+    
+    // ============================================================================
+    // DEBUG: Visualize environment texture ID
+    // ============================================================================
+    // Uncomment the line below to see which environment texture each pixel uses:
+    // - BLACK (0.0, 0.0, 0.0) = ID 0 (global skybox)
+    // - RED   (0.5, 0.0, 0.0) = ID 1 (reflection probe / CubeRenderTarget)
+    // - GREEN (0.0, 0.5, 0.0) = ID 2 (custom environment, e.g., tree CubeTexture)
+    // - BLUE  (0.0, 0.0, 0.5) = ID 3 (another custom environment)
+    // Expected: Reflective mesh should be RED if environment ID is being set correctly
+    // color = vec3<f32>(environment_id * 0.333, 0.0, 0.0); // DEBUG: Environment ID visualization
+    // ============================================================================
     
     output.color = vec4<f32>(color, 1.0);
     // output.color = vec4<f32>(world_normal * 0.5 + 0.5, 1.0); // Normalize to 0-1 range

@@ -4,7 +4,7 @@ import { MaterialBasic } from "./MaterialBasic";
 import { MaterialCustom } from "./MaterialCustom";
 import { Camera } from "../camera";
 import { Vertex } from "../geometries";
-import { Texture, CubeTexture } from "../textures";
+import { Texture, CubeTexture, CubeRenderTarget } from "../textures";
 import geometryPassShader from "../renderer/passes/GeometryPass.wgsl?raw";
 import forwardPassShader from "../renderer/passes/ForwardPass.wgsl?raw";
 import { TextureSettings } from "../renderer/Renderer";
@@ -31,6 +31,12 @@ export class MaterialManager {
   private placeholderEnvSampler: GPUSampler;
   public readonly fallbackBindGroup: GPUBindGroup;
   private textureSettings: ResolvedTextureSettings;
+
+  // Environment texture array management
+  private environmentTextures: Array<CubeTexture | CubeRenderTarget | null> =
+    []; // Index 0 reserved for global skybox
+  private environmentTextureMap: Map<CubeTexture | CubeRenderTarget, number> =
+    new Map(); // Maps texture to ID
 
   private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> =
     new Map();
@@ -405,14 +411,7 @@ export class MaterialManager {
           "loaded" in pbrMaterial.environmentTexture &&
           !pbrMaterial.environmentTexture.loaded
         ) {
-          console.log(
-            `[MaterialManager] Loading CubeTexture for material "${material.name}"`,
-          );
           await pbrMaterial.environmentTexture.load();
-        } else if (!("loaded" in pbrMaterial.environmentTexture)) {
-          console.log(
-            `[MaterialManager] Material "${material.name}" has CubeRenderTarget (no loading needed)`,
-          );
         }
       }
       this.bindGroupCache.delete(material);
@@ -643,6 +642,14 @@ export class MaterialManager {
         ? metalRoughnessTexture.createView()
         : this.placeholderMetalRoughnessTexture.createView();
 
+      // Assign environment texture ID
+      const envTextureId = this.getOrAssignEnvironmentTextureId(
+        pbrMaterial.environmentTexture,
+      );
+      pbrMaterial.environmentTextureId = envTextureId;
+
+      (window as any).DEBUG_MATERIAL = pbrMaterial;
+      (window as any).DEBUG_UNIFORMS = pbrMaterial.uniforms;
       pbrMaterial.uniforms.update(pbrMaterial);
 
       const envView =
@@ -653,14 +660,6 @@ export class MaterialManager {
         this.placeholderEnvSampler;
 
       const usingCustomEnv = !!pbrMaterial.environmentTexture;
-      console.log(
-        `[MaterialManager] Creating bind group for material "${material.name}":`,
-        {
-          hasCustomEnvironment: usingCustomEnv,
-          usingPlaceholder: !usingCustomEnv,
-          environmentType: pbrMaterial.environmentTexture?.constructor.name,
-        },
-      );
 
       const emissiveTexture =
         pbrMaterial.emissiveTexture &&
@@ -740,5 +739,71 @@ export class MaterialManager {
     }
 
     return this.fallbackBindGroup;
+  }
+
+  /**
+   * Assigns a unique environment texture ID to a material's environment texture.
+   * ID 0 is reserved for the global skybox.
+   * Returns the assigned ID.
+   */
+  private getOrAssignEnvironmentTextureId(
+    envTexture: CubeTexture | CubeRenderTarget | null,
+  ): number {
+    if (!envTexture) {
+      return 0; // Use global skybox
+    }
+
+    // Check if this texture already has an ID
+    const existingId = this.environmentTextureMap.get(envTexture);
+    if (existingId !== undefined) {
+      return existingId;
+    }
+
+    // Assign a new ID (starting from 1, since 0 is global skybox)
+    const newId = this.environmentTextures.length;
+    this.environmentTextures.push(envTexture);
+    this.environmentTextureMap.set(envTexture, newId);
+
+    return newId;
+  }
+
+  /**
+   * Returns the array of environment textures for use in the lighting pass.
+   * Index 0 is reserved for global skybox (set externally).
+   */
+  getEnvironmentTextures(): Array<CubeTexture | CubeRenderTarget | null> {
+    return this.environmentTextures;
+  }
+
+  /**
+   * Returns the array of environment texture views for use in the lighting pass.
+   * Index 0 is reserved for global skybox (set externally).
+   */
+  getEnvironmentTextureArray(): Array<GPUTextureView | null> {
+    return this.environmentTextures.map((tex) => {
+      if (!tex) return null;
+      return tex.gpuTextureView ?? null;
+    });
+  }
+
+  /**
+   * Returns the array of environment samplers for use in the lighting pass.
+   */
+  getEnvironmentSamplerArray(): Array<GPUSampler | null> {
+    return this.environmentTextures.map((tex) => {
+      if (!tex) return null;
+      return tex.gpuSampler ?? null;
+    });
+  }
+
+  /**
+   * Sets the global skybox texture at index 0 of the environment array.
+   */
+  setGlobalSkybox(skybox: CubeTexture | CubeRenderTarget | null): void {
+    if (this.environmentTextures.length === 0) {
+      this.environmentTextures.push(skybox);
+    } else {
+      this.environmentTextures[0] = skybox;
+    }
   }
 }

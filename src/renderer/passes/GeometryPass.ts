@@ -162,7 +162,9 @@ export class GeometryPass {
 
       // Material bind group moved to group 1 (was group 2)
       const materialBindGroup = materialManager.getBindGroup(group.material);
-      if (!materialBindGroup) continue;
+      if (!materialBindGroup) {
+        continue;
+      }
 
       passEncoder.setBindGroup(1, materialBindGroup);
 

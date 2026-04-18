@@ -3,7 +3,8 @@ const MAX_JOINTS: u32 = 64u;
 struct MaterialUniforms {
   color: vec4<f32>,           // offset 0-15
   opacity: f32,               // offset 16-19
-  // padding: 3 floats          offset 20-31 (implicit, for emissive alignment)
+  environment_texture_id: f32,  // offset 20-23 (environment texture index, 0 = skybox, 1+ = custom env maps)
+  // padding: 2 floats          offset 24-31 (implicit, for emissive alignment)
   @align(16) emissive: vec4<f32>,  // offset 32-47
   alpha_cutoff: f32,          // offset 48-51
   use_dithering: f32,         // offset 52-55
@@ -177,7 +178,7 @@ fn vs_main(
 struct GBufferOutput {
     @location(0) albedo: vec4<f32>,
     @location(1) normal: vec4<f32>,
-    @location(2) metal_rough: vec4<f32>,
+    @location(2) metal_rough: vec4<f32>,  // r: metalness, g: roughness, b: emissive intensity, a: environment texture ID
     @location(3) emissive: vec4<f32>,
 };
 
@@ -222,7 +223,8 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     let roughness = metal_rough.g;
     let metalness = metal_rough.b;
     let emissive = get_emissive(in.uv_coords);
-    output.metal_rough = vec4<f32>(metalness, roughness, 0.0, emissive.a);
+    // Store environment texture ID in alpha channel
+    output.metal_rough = vec4<f32>(metalness, roughness, 0.0, material.environment_texture_id);
     output.emissive = emissive;
 
     output.albedo = vec4<f32>(base_albedo, albedo_tex.a * material.opacity);

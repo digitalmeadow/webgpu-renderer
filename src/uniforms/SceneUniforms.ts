@@ -1,5 +1,5 @@
 import { Vec3 } from "../math";
-import { CubeTexture } from "../textures";
+import { CubeTexture, CubeRenderTarget } from "../textures";
 
 const FOG_COLOR_BASE_DEFAULT = new Vec3(72 / 255, 73 / 255, 75 / 255);
 const FOG_COLOR_SUN_DEFAULT = new Vec3(252 / 255, 199 / 255, 122 / 255);
@@ -26,6 +26,9 @@ export class SceneUniforms {
   private skyboxTexture: CubeTexture | null = null;
   private placeholderTextureView: GPUTextureView;
   private placeholderSampler: GPUSampler;
+  private environmentTextures: Array<CubeTexture | CubeRenderTarget | null> =
+    []; // Environment texture array for per-material environments
+  private probeBindGroup: GPUBindGroup | null = null; // Cached bind group for probe rendering
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -79,6 +82,20 @@ export class SceneUniforms {
             type: "filtering",
           },
         },
+        {
+          binding: 3,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: {
+            viewDimension: "cube",
+          },
+        },
+        {
+          binding: 4,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: {
+            type: "filtering",
+          },
+        },
       ],
     });
 
@@ -89,6 +106,8 @@ export class SceneUniforms {
         { binding: 0, resource: { buffer: this.buffer } },
         { binding: 1, resource: this.placeholderTextureView },
         { binding: 2, resource: this.placeholderSampler },
+        { binding: 3, resource: this.placeholderTextureView },
+        { binding: 4, resource: this.placeholderSampler },
       ],
     });
 
@@ -140,6 +159,12 @@ export class SceneUniforms {
     const skyboxView = this.skyboxTexture?.gpuTextureView;
     const skyboxSampler = this.skyboxTexture?.gpuSampler;
 
+    // Get environment texture 1 (first custom environment map)
+    const env1 =
+      this.environmentTextures.length > 1 ? this.environmentTextures[1] : null;
+    const env1View = env1?.gpuTextureView;
+    const env1Sampler = env1?.gpuSampler;
+
     const entries: GPUBindGroupEntry[] = [
       {
         binding: 0,
@@ -155,6 +180,14 @@ export class SceneUniforms {
         binding: 2,
         resource: skyboxSampler ?? this.placeholderSampler!,
       },
+      {
+        binding: 3,
+        resource: env1View ?? this.placeholderTextureView!,
+      },
+      {
+        binding: 4,
+        resource: env1Sampler ?? this.placeholderSampler!,
+      },
     ];
 
     this.bindGroup = this.device.createBindGroup({
@@ -166,6 +199,14 @@ export class SceneUniforms {
 
   setSkyboxTexture(texture: CubeTexture | null): void {
     this.skyboxTexture = texture;
+    this.probeBindGroup = null; // Invalidate cached probe bind group
+    this.updateBindGroup();
+  }
+
+  setEnvironmentTextures(
+    textures: Array<CubeTexture | CubeRenderTarget | null>,
+  ): void {
+    this.environmentTextures = textures;
     this.updateBindGroup();
   }
 
@@ -179,5 +220,45 @@ export class SceneUniforms {
 
   getPlaceholderSampler(): GPUSampler {
     return this.placeholderSampler;
+  }
+
+  /**
+   * Creates a bind group for reflection probe rendering that excludes custom environment textures
+   * to prevent texture usage conflicts. Only includes the global skybox at bindings 1-2 and 3-4.
+   *
+   * This ensures that when a probe renders the scene to its cube texture, that same cube texture
+   * isn't simultaneously bound as a texture binding (which would cause a WebGPU synchronization error).
+   */
+  private createProbeRenderingBindGroup(): GPUBindGroup {
+    // Use the global skybox texture for both binding slots (1-2 and 3-4)
+    // This ensures probes only reflect the skybox, not other custom environments
+    const skyboxView =
+      this.skyboxTexture?.gpuTextureView ?? this.placeholderTextureView;
+    const skyboxSampler =
+      this.skyboxTexture?.gpuSampler ?? this.placeholderSampler;
+
+    return this.device.createBindGroup({
+      label: "Scene Uniforms Bind Group (Probe Rendering)",
+      layout: this.bindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.buffer } },
+        { binding: 1, resource: skyboxView },
+        { binding: 2, resource: skyboxSampler },
+        { binding: 3, resource: skyboxView }, // Use skybox instead of custom env to avoid conflicts
+        { binding: 4, resource: skyboxSampler },
+      ],
+    });
+  }
+
+  /**
+   * Gets the bind group for reflection probe rendering.
+   * This bind group only includes the skybox (not custom environment textures) to prevent
+   * texture usage synchronization errors when the probe's cube texture is being rendered to.
+   */
+  getProbeBindGroup(): GPUBindGroup {
+    if (!this.probeBindGroup) {
+      this.probeBindGroup = this.createProbeRenderingBindGroup();
+    }
+    return this.probeBindGroup;
   }
 }

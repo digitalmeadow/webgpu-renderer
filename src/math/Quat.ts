@@ -225,7 +225,7 @@ export class Quat {
     const sz = Math.sin(hz),
       cz = Math.cos(hz);
 
-    // Column-major RH, "XYZ" intrinsic rotation (X first, then Y, then Z)
+    // Column-major, "XYZ" intrinsic rotation (X first, then Y, then Z)
     out.data[0] = sx * cy * cz + cx * sy * sz;
     out.data[1] = cx * sy * cz - sx * cy * sz;
     out.data[2] = cx * cy * sz + sx * sy * cz;

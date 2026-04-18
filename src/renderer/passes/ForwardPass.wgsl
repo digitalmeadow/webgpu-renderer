@@ -221,8 +221,8 @@ fn vogel_offset(i: u32, n: u32, rotation: f32) -> vec2<f32> {
 
 // Select cascade based on view-space depth
 fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
-    // Convert negative view-space Z to positive depth distance
-    // In right-handed view space, -Z is forward, so objects in front have negative Z
+    // Convert view-space Z to positive depth distance
+    // In left-handed view space, camera looks down +Z, so objects in front have positive Z
     let depth = abs(view_space_z);
     
     if depth < splits.y {
@@ -343,8 +343,8 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
     // Transform world position to light view space to check if behind the light
     let light_view_pos = view_matrix * vec4<f32>(world_pos, 1.0);
 
-    // In right-handed view space, -Z is forward. Points behind the light have Z >= 0
-    if light_view_pos.z >= 0.0 {
+    // In left-handed view space, camera looks down +Z. Points behind the light have Z <= 0
+    if light_view_pos.z <= 0.0 {
         return 0.0; // Behind the light - no contribution
     }
 

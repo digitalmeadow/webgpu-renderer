@@ -149,16 +149,12 @@ export class ForwardPass {
     outputView: GPUTextureView,
     depthView: GPUTextureView,
   ): void {
-    console.log(`[ForwardPass] Rendering ${meshes.length} meshes`);
-
     // Build instance groups
     const instanceGroups = this.instanceGroupManager.buildGroups(
       this.device,
       meshes,
       camera.position,
     );
-
-    console.log(`[ForwardPass] Built ${instanceGroups.length} instance groups`);
 
     const skyboxTexture = this.sceneUniforms.getSkyboxTexture();
     const skyboxTextureView = skyboxTexture?.gpuTextureView;

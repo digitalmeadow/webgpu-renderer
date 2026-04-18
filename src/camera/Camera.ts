@@ -90,7 +90,7 @@ export class Camera {
 
   constructor(
     device: GPUDevice,
-    position: Vec3 = Vec3.create(0, 0, 5),
+    position: Vec3 = Vec3.create(0, 0, -5),
     target: Vec3 = Vec3.create(0, 0, 0),
     up: Vec3 = Vec3.create(0, 1, 0),
     fov: number = Math.PI / 4,

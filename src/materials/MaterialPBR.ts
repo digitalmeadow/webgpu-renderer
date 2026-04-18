@@ -30,6 +30,7 @@ export class MaterialPBR extends MaterialBase {
   normalTexture: Texture | null = null;
   metalnessRoughnessTexture: Texture | null = null;
   environmentTexture: CubeTexture | CubeRenderTarget | null = null;
+  environmentTextureId: number = 0; // 0 = global skybox, 1+ = custom environment maps
   hooks: ShaderHooks = {};
   public uniforms: MaterialUniforms;
   baseColorFactor: [number, number, number, number] = [1, 1, 1, 1];

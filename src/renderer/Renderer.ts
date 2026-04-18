@@ -387,25 +387,11 @@ export class Renderer {
 
     // Collect and render reflection probes BEFORE main scene rendering
     const reflectionProbes = this.collectReflectionProbes(world);
-    console.log(
-      `[Renderer] Collected ${reflectionProbes.length} reflection probes from world`,
-    );
-
     const probesToUpdate = reflectionProbes.filter((probe) =>
       probe.shouldUpdate(this.currentFrame),
     );
-    console.log(
-      `[Renderer] ${probesToUpdate.length} probes need updating this frame (currentFrame: ${this.currentFrame})`,
-    );
 
     for (const probe of probesToUpdate) {
-      console.log(`[Renderer] Rendering probe "${probe.name}":`, {
-        resolution: probe.resolution,
-        position: probe.transform.getWorldPosition(),
-        hasCubeRenderTarget: !!probe.cubeRenderTarget,
-        updateFrequency: probe.updateFrequency,
-      });
-
       // Update world matrices to ensure probe position is correct
       world.updateWorldMatrices();
 
@@ -414,53 +400,37 @@ export class Renderer {
 
       // Mark probe as updated
       probe.markUpdated(this.currentFrame);
-      console.log(
-        `[Renderer] ✅ Probe "${probe.name}" rendered and marked as updated`,
-      );
     }
 
-    // Separate meshes: those with CubeRenderTarget environment textures should bypass GeometryPass
-    // and be rendered in ForwardPass instead (even if opaque)
-    const meshesWithProbeReflections = meshes.filter((m) => {
+    // Separate meshes by alpha mode
+    // Opaque probe-affected meshes can use GeometryPass (proper back-face culling)
+    // Transparent probe-affected meshes must use ForwardPass (for blending)
+    const opaqueMeshes = meshes.filter(
+      (m) => m.material?.alphaMode === "opaque",
+    );
+    const alphaTestMeshes = meshes.filter(
+      (m) => m.material?.alphaMode === "mask",
+    );
+    const ditherMeshes = meshes.filter(
+      (m) => m.material?.alphaMode === "dither",
+    );
+    const blendMeshes = meshes.filter((m) => m.material?.alphaMode === "blend");
+
+    // Only transparent meshes with probe reflections need ForwardPass
+    const transparentProbeAffectedMeshes = [...blendMeshes].filter((m) => {
       if (m.material?.type === "materialPBR") {
         const pbrMaterial = m.material as any;
-        const hasProbeTexture =
-          pbrMaterial.environmentTexture instanceof CubeRenderTarget;
-        if (hasProbeTexture) {
-          console.log(
-            `[Renderer] Mesh "${m.name}" has CubeRenderTarget environment texture - routing to ForwardPass`,
-          );
-        }
-        return hasProbeTexture;
+        return pbrMaterial.environmentTexture instanceof CubeRenderTarget;
       }
       return false;
     });
-    const normalMeshes = meshes.filter((m) => {
+    const normalBlendMeshes = blendMeshes.filter((m) => {
       if (m.material?.type === "materialPBR") {
         const pbrMaterial = m.material as any;
         return !(pbrMaterial.environmentTexture instanceof CubeRenderTarget);
       }
       return true;
     });
-
-    console.log(`[Renderer] Mesh routing:`, {
-      totalMeshes: meshes.length,
-      meshesWithProbeReflections: meshesWithProbeReflections.length,
-      normalMeshes: normalMeshes.length,
-    });
-
-    const opaqueMeshes = normalMeshes.filter(
-      (m) => m.material?.alphaMode === "opaque",
-    );
-    const alphaTestMeshes = normalMeshes.filter(
-      (m) => m.material?.alphaMode === "mask",
-    );
-    const ditherMeshes = normalMeshes.filter(
-      (m) => m.material?.alphaMode === "dither",
-    );
-    const blendMeshes = normalMeshes.filter(
-      (m) => m.material?.alphaMode === "blend",
-    );
 
     const lights = this.collectLights(world);
 
@@ -579,6 +549,10 @@ export class Renderer {
 
     this.lightManager.updateLightingBindGroup(directionalLights, spotLights);
 
+    // Update environment texture array for per-material environment maps
+    const envTextures = this.materialManager.getEnvironmentTextures();
+    this.sceneUniforms.setEnvironmentTextures(envTextures);
+
     // Lighting Pass
     this.lightingPass.render(
       commandEncoder,
@@ -598,8 +572,11 @@ export class Renderer {
       );
     }
 
-    // Forward Pass (transparency + probe-affected meshes)
-    const forwardPassMeshes = [...blendMeshes, ...meshesWithProbeReflections];
+    // Forward Pass (transparent meshes, including transparent probe-affected meshes)
+    const forwardPassMeshes = [
+      ...normalBlendMeshes,
+      ...transparentProbeAffectedMeshes,
+    ];
     if (this.forwardPass && forwardPassMeshes.length > 0) {
       this.forwardPass.render(
         commandEncoder,
@@ -696,6 +673,8 @@ export class Renderer {
     this.skyboxTexture = texture;
     this.sceneUniforms.setSkyboxTexture(texture);
     this.reflectionProbePass.setSkyboxTexture(texture);
+    // Reserve environment texture ID 0 for the global skybox
+    this.materialManager.setGlobalSkybox(texture);
   }
 
   public addPostPass(pass: PostPass): void {

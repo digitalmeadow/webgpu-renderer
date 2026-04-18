@@ -672,8 +672,8 @@ export class Mat4 {
   static getRight(m: Mat4, out?: Vec3): Vec3 {
     out ??= new Vec3();
     out.data[0] = m.data[0];
-    out.data[1] = m.data[4];
-    out.data[2] = m.data[8];
+    out.data[1] = m.data[1];
+    out.data[2] = m.data[2];
     return out;
   }
 
@@ -702,8 +702,7 @@ export class Mat4 {
   ): Mat4 {
     out ??= new Mat4();
     const f = 1 / Math.tan(fovY / 2);
-    // WebGPU convention: use (far - near), not (near - far)
-    const nf = 1 / (near - far);
+    const rangeInv = 1 / (far - near);
 
     out.data[0] = f / aspect;
     out.data[1] = 0;
@@ -717,13 +716,12 @@ export class Mat4 {
 
     out.data[8] = 0;
     out.data[9] = 0;
-    // WebGPU: produces NDC Z in [0,1] range
-    out.data[10] = far * nf;
-    out.data[11] = -1; // WebGPU uses 1 (OpenGL uses -1)
+    out.data[10] = far * rangeInv;
+    out.data[11] = 1;
 
     out.data[12] = 0;
     out.data[13] = 0;
-    out.data[14] = far * near * nf;
+    out.data[14] = -(near * far) * rangeInv;
     out.data[15] = 0;
 
     return out;
@@ -775,9 +773,9 @@ export class Mat4 {
       upy = up.data[1],
       upz = up.data[2];
 
-    let z0 = eyex - centerx;
-    let z1 = eyey - centery;
-    let z2 = eyez - centerz;
+    let z0 = centerx - eyex;
+    let z1 = centery - eyey;
+    let z2 = centerz - eyez;
     let len = z0 * z0 + z1 * z1 + z2 * z2;
     if (len > 0) {
       len = 1 / Math.sqrt(len);
@@ -786,9 +784,9 @@ export class Mat4 {
       z2 *= len;
     }
 
-    let x0 = upy * z2 - upz * z1;
-    let x1 = upz * z0 - upx * z2;
-    let x2 = upx * z1 - upy * z0;
+    let x0 = z1 * upz - z2 * upy;
+    let x1 = z2 * upx - z0 * upz;
+    let x2 = z0 * upy - z1 * upx;
     len = x0 * x0 + x1 * x1 + x2 * x2;
     if (len > 0) {
       len = 1 / Math.sqrt(len);
@@ -797,9 +795,9 @@ export class Mat4 {
       x2 *= len;
     }
 
-    const y0 = z1 * x2 - z2 * x1;
-    const y1 = z2 * x0 - z0 * x2;
-    const y2 = z0 * x1 - z1 * x0;
+    const y0 = x1 * z2 - x2 * z1;
+    const y1 = x2 * z0 - x0 * z2;
+    const y2 = x0 * z1 - x1 * z0;
 
     out.data[0] = x0;
     out.data[1] = y0;
