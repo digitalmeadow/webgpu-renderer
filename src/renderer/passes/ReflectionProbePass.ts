@@ -40,12 +40,12 @@ import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
  */
 const CUBE_FACE_CONFIGS = [
   {
-    target: Vec3.create(-1, 0, 0),
+    target: Vec3.create(1, 0, 0),
     up: Vec3.create(0, 1, 0),
     name: "+X (right, yellow)",
   }, // +X (right)
   {
-    target: Vec3.create(1, 0, 0),
+    target: Vec3.create(-1, 0, 0),
     up: Vec3.create(0, 1, 0),
     name: "-X (left, pink)",
   }, // -X (left)

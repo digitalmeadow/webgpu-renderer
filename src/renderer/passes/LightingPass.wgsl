@@ -338,7 +338,6 @@ fn sample_specular_ibl(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness:
     let V = normalize(camera_uniforms.position.xyz - world_pos);
     let N = normalize(world_normal);
     let R = reflect(-V, N);
-    let R_flipped = vec3<f32>(-R.x, R.y, R.z);
     let NdotV = max(dot(N, V), 0.0);
 
     // Roughness-based mip selection
@@ -349,7 +348,7 @@ fn sample_specular_ibl(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness:
     var env_color: vec3<f32>;
     
     if (env_id_int == 1u) {
-        env_color = textureSampleLevel(environmentTexture1, environmentSampler1, R_flipped, mip).rgb;
+        env_color = textureSampleLevel(environmentTexture1, environmentSampler1, R, mip).rgb;
     } else {
         // Default: use global skybox (ID 0)
         env_color = textureSampleLevel(skyboxTexture, skyboxSampler, R, mip).rgb;
