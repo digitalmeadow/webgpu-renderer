@@ -206,14 +206,6 @@ export class ReflectionProbePass {
         this.materialManager,
       );
 
-      // 3. Lighting Pass - composite lit geometry to cube face
-      // Reads from G-buffer, writes to cube face texture
-      if (faceIndex === 0) {
-        console.log(
-          `[ReflectionProbePass] Using probe bind group for lighting pass (excludes custom environments)`,
-        );
-      }
-
       const lightingPassEncoder = encoder.beginRenderPass({
         label: `Probe Face ${faceIndex} Lighting`,
         colorAttachments: [
@@ -349,18 +341,8 @@ export class ReflectionProbePass {
       // Skip meshes that use THIS probe's render target as their environment texture
       // This prevents self-reflection artifacts
       if (mesh.material && mesh.material.type === MaterialType.PBR) {
-        console.log(`Checking mesh "${mesh.name}" for self-reflection:`, mesh);
         const pbrMaterial = mesh.material as MaterialPBR;
 
-        console.log(
-          `Mesh "${mesh.name}" environment texture:`,
-          pbrMaterial.environmentTexture,
-        );
-
-        console.log(
-          `Probe "${probe.name}" cube render target:`,
-          probe.cubeRenderTarget,
-        );
         if (pbrMaterial.environmentTexture === probe.cubeRenderTarget) {
           continue;
         }
@@ -370,19 +352,11 @@ export class ReflectionProbePass {
       // Since the probe is parented to the mesh, we need to check if the mesh
       // is the parent of the probe (not if the mesh is a child of the probe)
       if (this.isMeshParentOfProbe(mesh, probe)) {
-        console.log(
-          `Skipping mesh "${mesh.name}" because it is the parent of the probe (avoiding self-reflection)`,
-          mesh,
-        );
         continue;
       }
 
       // Frustum culling
       if (aabbInFrustum(mesh.geometry.aabb, frustumPlanes)) {
-        console.log(
-          `Mesh "${mesh.name}" is visible in probe view and will be rendered`,
-          mesh,
-        );
         visibleMeshes.push(mesh);
       }
     }

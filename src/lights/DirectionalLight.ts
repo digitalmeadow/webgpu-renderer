@@ -223,7 +223,7 @@ export class DirectionalLight extends Light {
       const eyeDistance = max.z - min.z;
       const tempEye = Vec3.create();
       Vec3.copy(center, tempEye);
-      Vec3.addScaled(tempEye, lightDir, eyeDistance, tempEye);
+      Vec3.addScaled(tempEye, lightDir, -eyeDistance, tempEye);
       const tempViewMatrix = Mat4.lookAt(tempEye, center, up);
 
       // Transform corners to light-space to get actual AABB
@@ -279,7 +279,7 @@ export class DirectionalLight extends Light {
       // Create FINAL view matrix with snapped center
       const eye = Vec3.create();
       Vec3.copy(snappedCenter, eye);
-      Vec3.addScaled(eye, lightDir, eyeDistance, eye);
+      Vec3.addScaled(eye, lightDir, -eyeDistance, eye);
       const viewMatrix = Mat4.lookAt(eye, snappedCenter, up);
 
       // Calculate orthographic projection bounds from light-space center
@@ -349,7 +349,7 @@ export class DirectionalLight extends Light {
     const eyeDistance = this.occlusionWorldSize;
     const eye = Vec3.create();
     Vec3.copy(center, eye);
-    Vec3.addScaled(eye, lightDir, eyeDistance, eye);
+    Vec3.addScaled(eye, lightDir, -eyeDistance, eye);
 
     // Create view matrix
     const viewMatrix = Mat4.lookAt(eye, center, up);
@@ -460,7 +460,7 @@ export class DirectionalLight extends Light {
     const eyeDistance = Math.max(occlusionFar - occlusionNear, 100); // Ensure enough depth
     const eye = Vec3.create();
     Vec3.copy(center, eye);
-    Vec3.addScaled(eye, lightDir, eyeDistance, eye);
+    Vec3.addScaled(eye, lightDir, -eyeDistance, eye);
     const viewMatrix = Mat4.lookAt(eye, center, up);
 
     // Transform corners to light space to get AABB

@@ -317,6 +317,35 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
     return sum / f32(VOGEL_SAMPLES);
 }
 
+// Helper: Determine which cube face axis is dominant
+// Returns 0 for X-dominant, 1 for Y-dominant, 2 for Z-dominant
+fn get_dominant_axis(direction: vec3<f32>) -> u32 {
+    let abs_dir = abs(direction);
+    if (abs_dir.x >= abs_dir.y && abs_dir.x >= abs_dir.z) {
+        return 0u; // X-dominant
+    } else if (abs_dir.y >= abs_dir.z) {
+        return 1u; // Y-dominant
+    }
+    return 2u; // Z-dominant
+}
+
+// Helper: Apply per-face mirror transformation for reflection probes
+// Mirrors the direction vector based on which cube face will be sampled
+fn apply_reflection_mirror(direction: vec3<f32>) -> vec3<f32> {
+    let dominant = get_dominant_axis(direction);
+    
+    if (dominant == 0u) {
+        // X-dominant (±X faces): flip Z axis
+        return vec3<f32>(direction.x, direction.y, -direction.z);
+    } else if (dominant == 1u) {
+        // Y-dominant (±Y faces): flip X axis
+        return vec3<f32>(-direction.x, direction.y, direction.z);
+    } else {
+        // Z-dominant (±Z faces): flip X axis
+        return vec3<f32>(-direction.x, direction.y, direction.z);
+    }
+}
+
 // IBL (Image-Based Lighting) - sample environment texture based on normal direction and material's environment ID
 fn sample_ibl(normal: vec3<f32>, env_id: f32) -> vec3<f32> {
     let max_mip = 2.0;
@@ -324,10 +353,12 @@ fn sample_ibl(normal: vec3<f32>, env_id: f32) -> vec3<f32> {
     
     // Select environment texture based on ID
     if (env_id_int == 1u) {
-        return textureSampleLevel(environmentTexture1, environmentSampler1, normal, max_mip).rgb;
+        // Reflection probe: apply mirror transformation
+        let mirrored_normal = apply_reflection_mirror(normal);
+        return textureSampleLevel(environmentTexture1, environmentSampler1, mirrored_normal, max_mip).rgb;
     }
     
-    // Default: use global skybox (ID 0)
+    // Default: use global skybox (ID 0) - no mirroring
     return textureSampleLevel(skyboxTexture, skyboxSampler, normal, max_mip).rgb;
 }
 
@@ -348,9 +379,11 @@ fn sample_specular_ibl(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness:
     var env_color: vec3<f32>;
     
     if (env_id_int == 1u) {
-        env_color = textureSampleLevel(environmentTexture1, environmentSampler1, R, mip).rgb;
+        // Reflection probe: apply mirror transformation
+        let mirrored_R = apply_reflection_mirror(R);
+        env_color = textureSampleLevel(environmentTexture1, environmentSampler1, mirrored_R, mip).rgb;
     } else {
-        // Default: use global skybox (ID 0)
+        // Default: use global skybox (ID 0) - no mirroring
         env_color = textureSampleLevel(skyboxTexture, skyboxSampler, R, mip).rgb;
     }
 
