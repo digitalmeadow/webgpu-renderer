@@ -38,8 +38,10 @@ fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
 fn get_emissive(uv: vec2<f32>) -> vec4<f32> {
     let emissive_tex = textureSample(emissiveTexture, defaultSampler, uv);
     let emissive_color = emissive_tex.rgb * material.emissive.rgb;
-    let intensity = max(max(emissive_color.r, emissive_color.g), emissive_color.b);
-    return vec4<f32>(emissive_color, intensity);
+    let intensity_multiplier = material.emissive.a;
+    let final_emissive = emissive_color * intensity_multiplier;
+    let bloom_intensity = max(max(final_emissive.r, final_emissive.g), final_emissive.b);
+    return vec4<f32>(final_emissive, bloom_intensity);
 }
 
 //--HOOK_PLACEHOLDER_ALBEDO--//

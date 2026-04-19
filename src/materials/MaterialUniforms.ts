@@ -18,20 +18,16 @@ export class MaterialUniforms {
 
   update(material: MaterialBase) {
     let color: [number, number, number, number] = [1, 1, 1, 1];
-    let emissive: [number, number, number] = [0, 0, 0];
-    let emissiveIntensity = 0;
+    let emissive: [number, number, number] = [1, 1, 1];
+    let emissiveIntensity = 1.0;
     let environmentTextureId = 0; // 0 = use global skybox by default
 
     if (material.type === MaterialType.PBR) {
       color = (material as any).baseColorFactor;
-      const pbrEmissive = (material as any).emissiveFactor ?? [0, 0, 0];
+      const pbrEmissive = (material as any).emissiveFactor ?? [1, 1, 1];
       emissive = pbrEmissive;
-      // Calculate intensity: max of RGB channels, or 0 if all zero
-      emissiveIntensity = Math.max(
-        pbrEmissive[0],
-        pbrEmissive[1],
-        pbrEmissive[2],
-      );
+      // Get explicit intensity value from material
+      emissiveIntensity = (material as any).emissiveIntensity ?? 1.0;
       // Get environment texture ID from material (will be set by MaterialManager)
       environmentTextureId = (material as any).environmentTextureId ?? 0;
     } else if ("color" in material) {

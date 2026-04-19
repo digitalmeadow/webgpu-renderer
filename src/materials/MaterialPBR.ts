@@ -22,6 +22,7 @@ interface MaterialPBROptions {
   hooks?: ShaderHooks;
   emissiveTexture?: Texture | null;
   emissiveFactor?: [number, number, number];
+  emissiveIntensity?: number;
 }
 
 export class MaterialPBR extends MaterialBase {
@@ -35,7 +36,8 @@ export class MaterialPBR extends MaterialBase {
   public uniforms: MaterialUniforms;
   baseColorFactor: [number, number, number, number] = [1, 1, 1, 1];
   emissiveTexture: Texture | null = null;
-  emissiveFactor: [number, number, number] = [0, 0, 0];
+  emissiveFactor: [number, number, number] = [1, 1, 1];
+  emissiveIntensity: number = 1.0;
 
   constructor(
     device: GPUDevice,
@@ -49,7 +51,8 @@ export class MaterialPBR extends MaterialBase {
     this.environmentTexture = options.environmentTexture ?? null;
     this.hooks = options.hooks ?? {};
     this.emissiveTexture = options.emissiveTexture ?? null;
-    this.emissiveFactor = options.emissiveFactor ?? [0, 0, 0];
+    this.emissiveFactor = options.emissiveFactor ?? [1, 1, 1];
+    this.emissiveIntensity = options.emissiveIntensity ?? 1.0;
     this.uniforms = new MaterialUniforms(device, this);
   }
 }
