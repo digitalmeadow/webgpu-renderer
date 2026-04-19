@@ -107,7 +107,7 @@ export class ShadowPassDirectionalLight {
         depthWriteEnabled: true,
         depthCompare: "less-equal",
         format: "depth32float",
-        depthBias: 5000,
+        depthBias: 18000,
         depthBiasSlopeScale: 1.5,
         depthBiasClamp: 0,
       },
