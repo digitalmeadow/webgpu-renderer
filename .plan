@@ -1,24 +1,12 @@
 
 --- Visuals ---
 
-Debug why front headlights with a white emissive texture value, are rendering yellow when emissive is turned up to 1, 1, 1
-
-Not in order:
   Anti Aliasing
   (SSA done, need MMSA next)
-
-  Godrays
 
   Animate trees with movement
 
   Shadows
   Softer when further away from contact point (complex, expensive)
 
-- Ambient occlusion
-
-
---- Features ----
-
-CubeProbe - renders a CubeTexture from a point, with optional mesh culling and bounds
-- Use case: Perfect vehicle reflections
-- Additional dev task: Allow opt-in CubeTexture to be passed into the lighting/forward pass to render perfect reflections for certain meshes.
+  Ambient occlusion

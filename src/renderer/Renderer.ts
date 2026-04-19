@@ -101,6 +101,11 @@ export class Renderer {
   private postPassTextureB: GPUTexture | null = null;
   private postPassViewA: GPUTextureView | null = null;
   private postPassViewB: GPUTextureView | null = null;
+  private highResPostPasses: PostPass[] = [];
+  private highResTextureA: GPUTexture | null = null;
+  private highResTextureB: GPUTexture | null = null;
+  private highResViewA: GPUTextureView | null = null;
+  private highResViewB: GPUTextureView | null = null;
   private currentFrame: number = 0;
 
   constructor(canvas: HTMLCanvasElement, options: RendererOptions = {}) {
@@ -602,7 +607,7 @@ export class Renderer {
       );
     }
 
-    // Post Passes
+    // Post Passes (Low-Res)
     let lastOutputView = this.lightingPass.outputView;
     if (this.postPasses.length > 0) {
       this.createPostPassTextures();
@@ -625,6 +630,31 @@ export class Renderer {
         const writeView =
           i % 2 === 0 ? this.postPassViewB! : this.postPassViewA!;
         this.postPasses[i].render(readView, writeView, postContext);
+        readView = writeView;
+      }
+
+      lastOutputView = readView;
+    }
+
+    // Post Passes (High-Res - Canvas Resolution)
+    if (this.highResPostPasses.length > 0) {
+      this.createHighResTextures();
+
+      const highResContext: PostPassContext = {
+        geometryBuffer: this.geometryBuffer,
+        cameraBindGroup: camera.uniforms.bindGroup,
+        lightingBindGroup: this.lightManager.lightingBindGroup,
+        sceneBindGroup: this.sceneUniforms.bindGroup,
+        width: this.canvas.width,
+        height: this.canvas.height,
+      };
+
+      // Start with the output from low-res post-processing
+      let readView: GPUTextureView = lastOutputView;
+
+      for (let i = 0; i < this.highResPostPasses.length; i++) {
+        const writeView = i % 2 === 0 ? this.highResViewB! : this.highResViewA!;
+        this.highResPostPasses[i].render(readView, writeView, highResContext);
         readView = writeView;
       }
 
@@ -681,8 +711,16 @@ export class Renderer {
     this.postPasses.push(pass);
   }
 
+  public addHighResPostPass(pass: PostPass): void {
+    this.highResPostPasses.push(pass);
+  }
+
   public clearPostPasses(): void {
     this.postPasses = [];
+  }
+
+  public clearHighResPostPasses(): void {
+    this.highResPostPasses = [];
   }
 
   private createPostPassTextures(): void {
@@ -718,6 +756,44 @@ export class Renderer {
     this.postPassTextureB = createTexture("Post Pass Texture B");
     this.postPassViewA = this.postPassTextureA.createView();
     this.postPassViewB = this.postPassTextureB.createView();
+  }
+
+  private createHighResTextures(): void {
+    const canvasWidth = this.canvas.width;
+    const canvasHeight = this.canvas.height;
+
+    if (
+      this.highResTextureA &&
+      this.highResTextureA.width === canvasWidth &&
+      this.highResTextureA.height === canvasHeight &&
+      this.highResTextureA.format === "rgba16float"
+    ) {
+      return;
+    }
+
+    if (this.highResTextureA) {
+      this.highResTextureA.destroy();
+    }
+    if (this.highResTextureB) {
+      this.highResTextureB.destroy();
+    }
+
+    const createTexture = (label: string) =>
+      this.device.createTexture({
+        label,
+        size: [canvasWidth, canvasHeight],
+        format: "rgba16float",
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.RENDER_ATTACHMENT |
+          GPUTextureUsage.COPY_SRC |
+          GPUTextureUsage.COPY_DST,
+      });
+
+    this.highResTextureA = createTexture("High Res Post Pass Texture A");
+    this.highResTextureB = createTexture("High Res Post Pass Texture B");
+    this.highResViewA = this.highResTextureA.createView();
+    this.highResViewB = this.highResTextureB.createView();
   }
 
   public setRenderResolution(width: number, height: number): void {
@@ -771,6 +847,35 @@ export class Renderer {
 
     for (const pass of this.postPasses) {
       pass.resize(this.renderWidth, this.renderHeight);
+    }
+
+    if (this.highResTextureA) {
+      this.highResTextureA.destroy();
+      this.highResTextureB?.destroy();
+
+      const canvasWidth = this.canvas.width;
+      const canvasHeight = this.canvas.height;
+
+      const createTexture = (label: string) =>
+        this.device.createTexture({
+          label,
+          size: [canvasWidth, canvasHeight],
+          format: "rgba16float",
+          usage:
+            GPUTextureUsage.TEXTURE_BINDING |
+            GPUTextureUsage.RENDER_ATTACHMENT |
+            GPUTextureUsage.COPY_SRC |
+            GPUTextureUsage.COPY_DST,
+        });
+
+      this.highResTextureA = createTexture("High Res Post Pass Texture A");
+      this.highResTextureB = createTexture("High Res Post Pass Texture B");
+      this.highResViewA = this.highResTextureA.createView();
+      this.highResViewB = this.highResTextureB.createView();
+    }
+
+    for (const pass of this.highResPostPasses) {
+      pass.resize(this.canvas.width, this.canvas.height);
     }
 
     const shadowMapSize = this.calculateShadowMapSize();
