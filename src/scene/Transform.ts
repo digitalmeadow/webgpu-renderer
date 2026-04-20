@@ -6,6 +6,8 @@ export class Transform {
   scale: Vec3;
   localMatrix: Mat4;
   worldMatrix: Mat4;
+  needsUpdate: boolean = true;
+  private _worldMatrixVersion: number = 0;
 
   parent: Transform | null = null;
   children: Transform[] = [];
@@ -22,25 +24,37 @@ export class Transform {
   setPosition(x: number, y: number, z: number): this {
     this.translation.set(x, y, z);
     this.updateLocalMatrix();
+    this.markNeedsUpdate();
     return this;
   }
 
   setRotation(x: number, y: number, z: number): this {
     this.rotation = Quat.fromEuler(x, y, z);
     this.updateLocalMatrix();
+    this.markNeedsUpdate();
     return this;
   }
 
   setRotationQuat(x: number, y: number, z: number, w: number): this {
     this.rotation.set(x, y, z, w);
     this.updateLocalMatrix();
+    this.markNeedsUpdate();
     return this;
   }
 
   setScale(x: number, y: number, z: number): this {
     this.scale.set(x, y, z);
     this.updateLocalMatrix();
+    this.markNeedsUpdate();
     return this;
+  }
+
+  markNeedsUpdate(): void {
+    this.needsUpdate = true;
+    // Mark all children as needing update since parent changed
+    for (const child of this.children) {
+      child.markNeedsUpdate();
+    }
   }
 
   addChild(child: Transform): void {
@@ -66,15 +80,25 @@ export class Transform {
   }
 
   updateWorldMatrix(parentWorldMatrix?: Mat4): void {
-    if (parentWorldMatrix) {
-      Mat4.multiply(parentWorldMatrix, this.localMatrix, this.worldMatrix);
-    } else {
-      Mat4.copy(this.localMatrix, this.worldMatrix);
+    // Only update if this transform or any ancestor needs update
+    if (this.needsUpdate) {
+      if (parentWorldMatrix) {
+        Mat4.multiply(parentWorldMatrix, this.localMatrix, this.worldMatrix);
+      } else {
+        Mat4.copy(this.localMatrix, this.worldMatrix);
+      }
+      this.needsUpdate = false;
+      this._worldMatrixVersion++; // Increment version when world matrix changes
     }
 
+    // Always traverse children to propagate updates
     for (const child of this.children) {
       child.updateWorldMatrix(this.worldMatrix);
     }
+  }
+
+  get worldMatrixVersion(): number {
+    return this._worldMatrixVersion;
   }
 
   public getForward(): Vec3 {
@@ -140,6 +164,7 @@ export class Transform {
 
     this.rotation = Mat4.getRotation(rotMatrix, this.rotation);
     this.updateLocalMatrix();
+    this.markNeedsUpdate();
     return this;
   }
 

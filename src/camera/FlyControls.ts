@@ -78,6 +78,9 @@ export class FlyControls {
 
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
+
+      // Mark camera as needing update when mouse moves
+      this.camera.markNeedsUpdate();
     });
 
     document.addEventListener("mouseup", () => {
@@ -90,6 +93,8 @@ export class FlyControls {
   }
 
   update(deltaTime: number): void {
+    let hasMoved = false;
+
     // Calculate forward direction from camera orientation
     let forward = Vec3.sub(this.camera.target, this.camera.position);
     Vec3.normalize(forward, forward);
@@ -112,31 +117,37 @@ export class FlyControls {
       movement.x += forward.x * moveSpeed;
       movement.y += forward.y * moveSpeed;
       movement.z += forward.z * moveSpeed;
+      hasMoved = true;
     }
     if (this.keys.has("s")) {
       movement.x -= forward.x * moveSpeed;
       movement.y -= forward.y * moveSpeed;
       movement.z -= forward.z * moveSpeed;
+      hasMoved = true;
     }
     if (this.keys.has("a")) {
       movement.x -= right.x * moveSpeed;
       movement.y -= right.y * moveSpeed;
       movement.z -= right.z * moveSpeed;
+      hasMoved = true;
     }
     if (this.keys.has("d")) {
       movement.x += right.x * moveSpeed;
       movement.y += right.y * moveSpeed;
       movement.z += right.z * moveSpeed;
+      hasMoved = true;
     }
     if (this.keys.has("q")) {
       movement.x -= localUp.x * moveSpeed;
       movement.y -= localUp.y * moveSpeed;
       movement.z -= localUp.z * moveSpeed;
+      hasMoved = true;
     }
     if (this.keys.has("e")) {
       movement.x += localUp.x * moveSpeed;
       movement.y += localUp.y * moveSpeed;
       movement.z += localUp.z * moveSpeed;
+      hasMoved = true;
     }
 
     // Apply movement
@@ -153,6 +164,11 @@ export class FlyControls {
 
     this.camera.target.set(target.x, target.y, target.z);
     this.camera.updateView();
+
+    // Mark camera as needing update only if moved
+    if (hasMoved) {
+      this.camera.markNeedsUpdate();
+    }
   }
 
   getSpeed(): number {

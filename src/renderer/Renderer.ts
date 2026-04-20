@@ -107,6 +107,14 @@ export class Renderer {
   private highResViewA: GPUTextureView | null = null;
   private highResViewB: GPUTextureView | null = null;
   private currentFrame: number = 0;
+  private renderLogCount: number = 0;
+
+  // Scene collection cache
+  private cachedMeshes: Mesh[] = [];
+  private cachedLights: Light[] = [];
+  private cachedEmitters: ParticleEmitter[] = [];
+  private cachedReflectionProbes: ReflectionProbe[] = [];
+  private lastSceneVersion: number = -1;
 
   constructor(canvas: HTMLCanvasElement, options: RendererOptions = {}) {
     this.canvas = canvas;
@@ -380,9 +388,24 @@ export class Renderer {
     this.cameras.add(camera);
 
     world.update(time.delta);
+
+    // Only update world matrices if any transform changed
+    if (world.needsMatrixUpdate) {
+      if (this.renderLogCount < 5)
+        console.log("[Renderer.render] Updating world matrices");
+      world.updateWorldMatrices();
+    }
+
     camera.update(this.device);
 
     const meshes = this.collectVisibleMeshes(world, camera);
+    if (this.renderLogCount < 5) {
+      console.log(
+        `[Renderer.render] Frame ${this.renderLogCount}: Collected ${meshes.length} visible meshes:`,
+        meshes.map((m) => m.name),
+      );
+      this.renderLogCount++;
+    }
 
     for (const mesh of meshes) {
       if (mesh.skinData) {
@@ -397,9 +420,6 @@ export class Renderer {
     );
 
     for (const probe of probesToUpdate) {
-      // Update world matrices to ensure probe position is correct
-      world.updateWorldMatrices();
-
       // Render probe
       this.reflectionProbePass.render(probe, world);
 
@@ -464,9 +484,6 @@ export class Renderer {
     if (spotLights.length > 0) {
       this.lightManager.updateSpotLights(spotLights);
     }
-
-    // Update all world matrices before shadow pass (handles parented lights)
-    world.updateWorldMatrices();
 
     // Shadow Pass - Directional Lights
     if (directionalLights.length > 0) {
@@ -883,16 +900,48 @@ export class Renderer {
     this.shadowPassSpotLight.resize(shadowMapSize);
   }
 
-  private collectMeshes(world: World): Mesh[] {
-    const meshes: Mesh[] = [];
-    for (const scene of world.scenes) {
-      for (const entity of scene.entities) {
-        if (entity.type === EntityType.Mesh) {
-          meshes.push(entity as Mesh);
+  // Update all scene caches atomically when scene version changes
+  private updateSceneCaches(world: World): void {
+    if (world.sceneVersion !== this.lastSceneVersion) {
+      console.log(
+        `[Renderer.updateSceneCaches] Scene version changed: ${this.lastSceneVersion} -> ${world.sceneVersion}`,
+      );
+
+      // Clear all caches
+      this.cachedMeshes = [];
+      this.cachedLights = [];
+      this.cachedEmitters = [];
+      this.cachedReflectionProbes = [];
+
+      // Rebuild all caches together
+      for (const scene of world.scenes) {
+        // Collect lights from scene.lights array
+        this.cachedLights.push(...scene.lights);
+
+        // Collect other entities
+        for (const entity of scene.entities) {
+          if (entity.type === EntityType.Mesh) {
+            this.cachedMeshes.push(entity as Mesh);
+          } else if (entity.type === EntityType.ParticleEmitter) {
+            this.cachedEmitters.push(entity as ParticleEmitter);
+          } else if (entity.type === EntityType.ReflectionProbe) {
+            this.cachedReflectionProbes.push(entity as ReflectionProbe);
+          }
         }
       }
+
+      console.log(
+        `[Renderer.updateSceneCaches] Rebuilt caches - Meshes: ${this.cachedMeshes.length}, Lights: ${this.cachedLights.length}, Emitters: ${this.cachedEmitters.length}, Probes: ${this.cachedReflectionProbes.length}`,
+      );
+
+      // Update version ONCE after all caches are rebuilt
+      this.lastSceneVersion = world.sceneVersion;
     }
-    return meshes;
+  }
+
+  private collectMeshes(world: World): Mesh[] {
+    this.updateSceneCaches(world);
+    return this.cachedMeshes;
   }
 
   private collectVisibleMeshes(world: World, camera: Camera): Mesh[] {
@@ -902,9 +951,11 @@ export class Renderer {
       return allMeshes;
     }
 
-    // Update world AABBs for all meshes first
+    // Update AABBs for meshes whose world matrices changed
     for (const mesh of allMeshes) {
-      mesh.updateWorldAABB();
+      if (mesh.needsAABBUpdate()) {
+        mesh.updateWorldAABB();
+      }
     }
 
     // Get camera frustum planes
@@ -923,35 +974,18 @@ export class Renderer {
   }
 
   private collectLights(world: World): Light[] {
-    const lights: Light[] = [];
-    for (const scene of world.scenes) {
-      lights.push(...scene.lights);
-    }
-    return lights;
+    this.updateSceneCaches(world);
+    return this.cachedLights;
   }
 
   private collectParticleEmitters(world: World): ParticleEmitter[] {
-    const emitters: ParticleEmitter[] = [];
-    for (const scene of world.scenes) {
-      for (const entity of scene.entities) {
-        if (entity.type === EntityType.ParticleEmitter) {
-          emitters.push(entity as ParticleEmitter);
-        }
-      }
-    }
-    return emitters;
+    this.updateSceneCaches(world);
+    return this.cachedEmitters;
   }
 
   private collectReflectionProbes(world: World): ReflectionProbe[] {
-    const probes: ReflectionProbe[] = [];
-    for (const scene of world.scenes) {
-      for (const entity of scene.entities) {
-        if (entity.type === EntityType.ReflectionProbe) {
-          probes.push(entity as ReflectionProbe);
-        }
-      }
-    }
-    return probes;
+    this.updateSceneCaches(world);
+    return this.cachedReflectionProbes;
   }
 
   public getDirectionalLightOcclusionView(

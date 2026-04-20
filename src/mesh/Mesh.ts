@@ -19,6 +19,7 @@ export class Mesh extends Entity {
   public instanceData: InstanceData = DEFAULT_INSTANCE_DATA;
   public sortByDepth: boolean = false;
   private device: GPUDevice;
+  private _lastWorldMatrixVersion: number = -1;
 
   constructor(
     device: GPUDevice,
@@ -36,6 +37,11 @@ export class Mesh extends Entity {
   public updateWorldAABB(): void {
     const worldMatrix = this.transform.getWorldMatrix();
     this.geometry.aabb.updateWorldSpace(worldMatrix);
+    this._lastWorldMatrixVersion = this.transform.worldMatrixVersion;
+  }
+
+  public needsAABBUpdate(): boolean {
+    return this.transform.worldMatrixVersion !== this._lastWorldMatrixVersion;
   }
 
   public updateJointMatrices(): void {

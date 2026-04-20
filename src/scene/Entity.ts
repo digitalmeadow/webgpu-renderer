@@ -16,6 +16,7 @@ export abstract class Entity {
   name: string;
   transform: Transform;
   enabled: boolean = true;
+  requiresUpdate: boolean = false;
 
   constructor(name: string = "Entity") {
     this.name = name;

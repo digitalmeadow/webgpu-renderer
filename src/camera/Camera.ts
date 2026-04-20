@@ -88,6 +88,8 @@ export class Camera {
   target: Vec3;
   up: Vec3;
 
+  needsUpdate: boolean = true;
+
   constructor(
     device: GPUDevice,
     position: Vec3 = Vec3.create(0, 0, -5),
@@ -117,6 +119,10 @@ export class Camera {
   }
 
   update(device: GPUDevice): void {
+    if (!this.needsUpdate) {
+      return;
+    }
+
     this.updateProjection();
     this.updateView();
     this.uniforms.update(
@@ -128,6 +134,7 @@ export class Camera {
       this.near,
       this.far,
     );
+    this.needsUpdate = false;
   }
 
   updateProjection(): void {
@@ -147,12 +154,18 @@ export class Camera {
       this.viewMatrix,
       this.viewProjectionMatrix,
     );
+    this.needsUpdate = true;
   }
 
   resize(width: number, height: number): void {
     this.aspect = width / height;
     this.updateProjection();
     this.updateView();
+    this.needsUpdate = true;
+  }
+
+  markNeedsUpdate(): void {
+    this.needsUpdate = true;
   }
 
   getForward(): Vec3 {
