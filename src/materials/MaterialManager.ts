@@ -9,6 +9,11 @@ import geometryPassShader from "../renderer/passes/GeometryPass.wgsl?raw";
 import forwardPassShader from "../renderer/passes/ForwardPass.wgsl?raw";
 import { TextureSettings } from "../renderer/Renderer";
 
+enum TextureType {
+  COLOR = "color", // albedo, emissive - needs sRGB→linear conversion
+  DATA = "data", // normal, roughness, metalness - preserve raw data
+}
+
 interface ResolvedTextureSettings {
   mipmapEnabled: boolean;
   maxMipLevels: number | undefined;
@@ -392,18 +397,55 @@ export class MaterialManager {
   async loadMaterial(material: MaterialBase): Promise<void> {
     if (material.type === MaterialType.PBR) {
       const pbrMaterial = material as MaterialPBR;
-      const textures = [
-        pbrMaterial.albedoTexture,
-        pbrMaterial.normalTexture,
-        pbrMaterial.metalnessRoughnessTexture,
-        pbrMaterial.emissiveTexture,
-      ];
-      for (const texture of textures) {
-        if (texture && !this.textureCache.has(texture)) {
-          await texture.load();
-          this.createTextureResources(texture);
-        }
+
+      // Load albedo texture (COLOR type - needs sRGB→linear)
+      if (
+        pbrMaterial.albedoTexture &&
+        !this.textureCache.has(pbrMaterial.albedoTexture)
+      ) {
+        await pbrMaterial.albedoTexture.load();
+        this.createTextureResources(
+          pbrMaterial.albedoTexture,
+          TextureType.COLOR,
+        );
       }
+
+      // Load normal texture (DATA type - preserve raw tangent-space vectors)
+      if (
+        pbrMaterial.normalTexture &&
+        !this.textureCache.has(pbrMaterial.normalTexture)
+      ) {
+        await pbrMaterial.normalTexture.load();
+        this.createTextureResources(
+          pbrMaterial.normalTexture,
+          TextureType.DATA,
+        );
+      }
+
+      // Load metalness/roughness texture (DATA type - preserve raw data values)
+      if (
+        pbrMaterial.metalnessRoughnessTexture &&
+        !this.textureCache.has(pbrMaterial.metalnessRoughnessTexture)
+      ) {
+        await pbrMaterial.metalnessRoughnessTexture.load();
+        this.createTextureResources(
+          pbrMaterial.metalnessRoughnessTexture,
+          TextureType.DATA,
+        );
+      }
+
+      // Load emissive texture (COLOR type - needs sRGB→linear for HDR)
+      if (
+        pbrMaterial.emissiveTexture &&
+        !this.textureCache.has(pbrMaterial.emissiveTexture)
+      ) {
+        await pbrMaterial.emissiveTexture.load();
+        this.createTextureResources(
+          pbrMaterial.emissiveTexture,
+          TextureType.COLOR,
+        );
+      }
+
       if (pbrMaterial.environmentTexture) {
         // CubeRenderTarget doesn't need loading (it's already a GPU resource)
         // Only load CubeTexture
@@ -418,7 +460,10 @@ export class MaterialManager {
     }
   }
 
-  private createTextureResources(texture: Texture): void {
+  private createTextureResources(
+    texture: Texture,
+    textureType: TextureType,
+  ): void {
     if (!texture.bitmap) return;
 
     const width = texture.bitmap.width;
@@ -432,9 +477,15 @@ export class MaterialManager {
         : fullMips;
     }
 
+    // Use different formats based on texture type:
+    // COLOR (albedo, emissive): rgba8unorm - WebGPU converts sRGB→linear
+    // DATA (normal, roughness, metalness): rgba8unorm-srgb - preserves raw data
+    const format =
+      textureType === TextureType.COLOR ? "rgba8unorm" : "rgba8unorm-srgb";
+
     const gpuTexture = this.device.createTexture({
       size: [width, height],
-      format: "rgba8unorm",
+      format: format,
       mipLevelCount,
       usage:
         GPUTextureUsage.TEXTURE_BINDING |
@@ -449,7 +500,7 @@ export class MaterialManager {
     );
 
     if (mipLevelCount > 1) {
-      this.generateMipmaps(gpuTexture, width, height, mipLevelCount);
+      this.generateMipmaps(gpuTexture, width, height, mipLevelCount, format);
     }
 
     this.textureCache.set(texture, gpuTexture);
@@ -460,6 +511,7 @@ export class MaterialManager {
     baseWidth: number,
     baseHeight: number,
     mipLevelCount: number,
+    format: GPUTextureFormat,
   ): void {
     const mipmapShaderCode = `
       @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -536,7 +588,7 @@ export class MaterialManager {
       fragment: {
         module: shaderModule,
         entryPoint: "fragmentMain",
-        targets: [{ format: "rgba8unorm" }],
+        targets: [{ format: format }],
       },
       primitive: {
         topology: "triangle-list",

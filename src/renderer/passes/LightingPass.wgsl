@@ -388,16 +388,56 @@ fn sample_specular_ibl(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness:
     }
 
     // F0: dielectric uses 0.04, metals use albedo color
-    let dielectric_F0 = vec3<f32>(0.15);
+    let dielectric_F0 = vec3<f32>(0.04);
     let F0 = mix(vec3<f32>(dielectric_F0), albedo, metalness);
-    // Schlick fresnel approximation
-    let schlick = 1.5; // Typically 5 for PBR for 1 to boost angles
-    let fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, schlick);
+    
+    // Standard Fresnel-Schlick approximation (power of 5 for physically-accurate grazing angles)
+    let fresnel = fresnel_schlick(NdotV, F0);
 
-    // Reduce specular contribution at high roughness
-    let roughness_factor = 1.0 - roughness * roughness;
+    // Roughness is already handled by mip level selection (line 375)
+    // High roughness → high mip → blurry environment sample
+    return env_color * fresnel;
+}
 
-    return env_color * fresnel * roughness_factor;
+// ============================================================================
+// GGX Specular BRDF Functions for Direct Lights
+// ============================================================================
+
+// GGX Normal Distribution Function - controls specular highlight sharpness
+// Higher roughness = broader, softer highlights
+fn distribution_ggx(NdotH: f32, roughness: f32) -> f32 {
+    let a = roughness * roughness;
+    let a2 = a * a;
+    let NdotH2 = NdotH * NdotH;
+    let denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    let denom2 = denom * denom;
+    
+    // Epsilon protection prevents division by zero when NdotH ≈ 1.0 and roughness ≈ 0.0
+    let epsilon = 0.0001;
+    return a2 / (3.14159265359 * max(denom2, epsilon));
+}
+
+// Schlick-GGX Geometry function - prevents light leaking at grazing angles
+fn geometry_schlick_ggx(NdotV: f32, roughness: f32) -> f32 {
+    let r = roughness + 1.0;
+    let k = (r * r) / 8.0;
+    let denom = NdotV * (1.0 - k) + k;
+    
+    // Epsilon protection prevents division by near-zero
+    let epsilon = 0.0001;
+    return NdotV / max(denom, epsilon);
+}
+
+// Smith's method combines view and light geometry occlusion
+fn geometry_smith(NdotV: f32, NdotL: f32, roughness: f32) -> f32 {
+    let ggx1 = geometry_schlick_ggx(NdotV, roughness);
+    let ggx2 = geometry_schlick_ggx(NdotL, roughness);
+    return ggx1 * ggx2;
+}
+
+// Fresnel-Schlick - reflectivity increases at grazing angles (car paint effect!)
+fn fresnel_schlick(cosTheta: f32, F0: vec3<f32>) -> vec3<f32> {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
 @fragment
@@ -408,8 +448,10 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let albedo = textureSample(gbuffer_albedo, sampler_linear, in.uv_coords).rgb;
     let normal_sample = textureSample(gbuffer_normal, sampler_linear, in.uv_coords);
     let metal_rough = textureSample(gbuffer_metallic_roughness, sampler_linear, in.uv_coords);
-    let metalness = metal_rough.b;
-    let roughness = metal_rough.g;
+    let metalness = metal_rough.r;
+    // Clamp roughness to prevent mathematical instability in GGX functions
+    // Minimum 0.045 is reasonable (even polished chrome has some roughness)
+    let roughness = max(metal_rough.g, 0.045);
     let environment_id = metal_rough.a; // Read environment texture ID from alpha channel
     let emissive = textureSample(gbuffer_emissive, sampler_linear, in.uv_coords).rgb;
     let depth = textureLoad(gbuffer_depth, vec2<i32>(in.uv_coords * vec2<f32>(textureDimensions(gbuffer_depth))), 0);
@@ -439,6 +481,14 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     // Specular IBL (environment reflection) - metallic reflections should always be visible regardless of IBL intensity
     let specular = sample_specular_ibl(world_pos, world_normal, roughness, metalness, albedo, environment_id);
 
+    // Pre-calculate vectors needed for specular lighting
+    let V = normalize(camera_uniforms.position.xyz - world_pos);
+    let NdotV = max(dot(world_normal, V), 0.0);
+    
+    // F0: Base reflectivity at normal incidence
+    // Dielectrics (plastic, glass) use ~0.04, metals use their albedo color
+    let F0 = mix(vec3<f32>(0.04), albedo, metalness);
+
     for (var i: u32 = 0u; i < light_directional_uniforms.light_count; i++) {
         let light_uniforms = light_directional_uniforms.lights[i];
 
@@ -446,13 +496,33 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             // Light direction points where light is facing (light → scene)
             // For lighting, we need direction TO light (scene → light), so negate
             let light_dir = normalize(-light_uniforms.direction.xyz);
-            let diffuse = max(0.0, dot(world_normal, light_dir));
+            let H = normalize(V + light_dir);  // Halfway vector for specular
+            
+            let NdotL = max(dot(world_normal, light_dir), 0.0);
+            let NdotH = max(dot(world_normal, H), 0.0);
+            let HdotV = max(dot(H, V), 0.0);
 
             // Directional light with cascade shadow and blending
             let view_space_z = view_pos.z;
             let shadow = fetch_light_directional_shadow_blended(i, light_uniforms, world_pos, view_space_z, in.position.xy);
 
-            color += diffuse_albedo * light_uniforms.color.rgb * light_uniforms.color.a * shadow * diffuse;
+            // Diffuse contribution
+            color += diffuse_albedo * light_uniforms.color.rgb * light_uniforms.color.a * shadow * NdotL;
+            
+            // Specular contribution (Cook-Torrance GGX BRDF)
+            if (NdotL > 0.0) {
+                // Cook-Torrance BRDF: D * G * F / (4 * NdotV * NdotL)
+                let D = distribution_ggx(NdotH, roughness);
+                let G = geometry_smith(NdotV, NdotL, roughness);
+                let F = fresnel_schlick(HdotV, F0);
+                
+                let numerator = D * G * F;
+                let denominator = max(4.0 * NdotV * NdotL, 0.001);
+                let specular_brdf = numerator / denominator;
+                
+                // Add specular highlight
+                color += specular_brdf * light_uniforms.color.rgb * light_uniforms.color.a * shadow * NdotL;
+            }
         }
     }
 
@@ -560,24 +630,6 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         color = color * extinction + fog_color * (vec3<f32>(1.0) - ins);
     }
     
-    // ============================================================================
-    // DEBUG: Visualize environment texture ID
-    // ============================================================================
-    // Uncomment the line below to see which environment texture each pixel uses:
-    // - BLACK (0.0, 0.0, 0.0) = ID 0 (global skybox)
-    // - RED   (0.5, 0.0, 0.0) = ID 1 (reflection probe / CubeRenderTarget)
-    // - GREEN (0.0, 0.5, 0.0) = ID 2 (custom environment, e.g., tree CubeTexture)
-    // - BLUE  (0.0, 0.0, 0.5) = ID 3 (another custom environment)
-    // Expected: Reflective mesh should be RED if environment ID is being set correctly
-    // color = vec3<f32>(environment_id * 0.333, 0.0, 0.0); // DEBUG: Environment ID visualization
-    // ============================================================================
-    
     output.color = vec4<f32>(color, 1.0);
-    // output.color = vec4<f32>(world_normal * 0.5 + 0.5, 1.0); // Normalize to 0-1 range
-    // output.color = vec4<f32>(ibl_color, 1.0);
-    // let mag = length(world_normal);
-    // output.color = vec4<f32>(vec3(mag), 1.0);
-    // let NdotV = abs(dot(world_normal, normalize(camera_uniforms.position.xyz - world_pos)));
-    // output.color = vec4<f32>(vec3(NdotV), 1.0);
-        return output;
+    return output;
 }

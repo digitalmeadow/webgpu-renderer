@@ -211,7 +211,10 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     }
 
     let N_map = textureSample(normalTexture, defaultSampler, in.uv_coords).rgb;
-    let N_tangent = N_map * 2.0 - 1.0;
+    var N_tangent = N_map * 2.0 - 1.0;
+    // Convert OpenGL (Y-up) → WebGPU/DirectX (Y-down) coordinate system
+    // Blender exports glTF normal maps in OpenGL format, so we flip Y
+    N_tangent.y = -N_tangent.y;
     
     let N = normalize(in.world_normal);
     let T = normalize(in.world_tangent.xyz - dot(in.world_tangent.xyz, N) * N);
