@@ -1,6 +1,9 @@
 
 --- Visuals ---
 
+  Spot light shadows broken
+  alphaMode BLEND should somehow work with godrays pass
+
   Anti Aliasing
   (SSA done, need MMSA next)
 
