@@ -1,5 +1,14 @@
 const MAX_JOINTS: u32 = 64u;
 
+struct MaterialUniforms {
+  color: vec4<f32>,
+  opacity: f32,
+  environment_texture_id: f32,
+  @align(16) emissive: vec4<f32>,
+  alpha_cutoff: f32,
+  use_dithering: f32,
+};
+
 struct VertexInput {
     @location(0) position: vec4<f32>,
     @location(1) normal: vec4<f32>,
@@ -71,8 +80,15 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
     return mat3x3<f32>(right, up, billboard_forward);
 }
 
-@group(1) @binding(0) var defaultSampler: sampler;
+@group(1) @binding(0) var nearestSampler: sampler;
 @group(1) @binding(1) var albedoTexture: texture_2d<f32>;
+@group(1) @binding(2) var normalTexture: texture_2d<f32>;
+@group(1) @binding(3) var metalnessRoughnessTexture: texture_2d<f32>;
+@group(1) @binding(4) var<uniform> material: MaterialUniforms;
+@group(1) @binding(5) var environmentTexture: texture_cube<f32>;
+@group(1) @binding(6) var envSampler: sampler;
+@group(1) @binding(7) var emissiveTexture: texture_2d<f32>;
+@group(1) @binding(8) var linearSampler: sampler;
 
 @vertex
 fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
@@ -110,7 +126,7 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @builtin(frag_depth) f32 {
-    let albedo = textureSample(albedoTexture, defaultSampler, in.uv);
+    let albedo = textureSample(albedoTexture, nearestSampler, in.uv);
     if (albedo.a == 0.0) {
         discard;
     }

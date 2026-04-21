@@ -1,9 +1,9 @@
-const FACE_ORDER = ["px", "nx", "py", "ny", "pz", "nz"];
-const MIP_LEVELS = 4;
+import { generateCubeMipmaps, calculateMipLevelCount } from "./MipmapGenerator";
 
-interface LoadedMipLevel {
+const FACE_ORDER = ["px", "nx", "py", "ny", "pz", "nz"];
+
+interface LoadedFace {
   face: number;
-  mipLevel: number;
   bitmap: ImageBitmap;
 }
 
@@ -15,8 +15,7 @@ export class CubeTexture {
   gpuTexture: GPUTexture | null = null;
   gpuTextureView: GPUTextureView | null = null;
   gpuSampler: GPUSampler | null = null;
-
-  static readonly mipLevelCount = MIP_LEVELS;
+  mipLevelCount: number = 0;
 
   constructor(
     device: GPUDevice,
@@ -29,51 +28,70 @@ export class CubeTexture {
   }
 
   async load(): Promise<void> {
-    const loadPromises: Promise<LoadedMipLevel>[] = [];
+    // Load base faces only (px.jpg, nx.jpg, py.jpg, ny.jpg, pz.jpg, nz.jpg)
+    const loadPromises: Promise<LoadedFace>[] = [];
 
-    for (let mipLevel = 0; mipLevel < MIP_LEVELS; mipLevel++) {
-      for (let faceIndex = 0; faceIndex < FACE_ORDER.length; faceIndex++) {
-        const face = FACE_ORDER[faceIndex];
-        const filename = `${face}${mipLevel}${this.extension}`;
-        const url = `${this.folderPath}/${filename}`;
+    for (let faceIndex = 0; faceIndex < FACE_ORDER.length; faceIndex++) {
+      const face = FACE_ORDER[faceIndex];
+      const filename = `${face}${this.extension}`;
+      const url = `${this.folderPath}/${filename}`;
 
-        loadPromises.push(
-          (async () => {
-            const response = await fetch(url);
-            if (!response.ok) {
-              throw new Error(`Failed to load cubemap face: ${url}`);
-            }
-            const blob = await response.blob();
-            const bitmap = await createImageBitmap(blob, {
-              colorSpaceConversion: "none",
-            });
-            return { face: faceIndex, mipLevel, bitmap };
-          })(),
+      loadPromises.push(
+        (async () => {
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(
+              `Failed to load cubemap face: ${url} (status: ${response.status})`,
+            );
+          }
+          const blob = await response.blob();
+          const bitmap = await createImageBitmap(blob, {
+            colorSpaceConversion: "none",
+          });
+          return { face: faceIndex, bitmap };
+        })(),
+      );
+    }
+
+    const loadedFaces = await Promise.all(loadPromises);
+    this.createGpuResources(loadedFaces);
+    this.loaded = true;
+  }
+
+  private createGpuResources(loadedFaces: LoadedFace[]): void {
+    if (loadedFaces.length !== 6) {
+      throw new Error(
+        `CubeTexture requires 6 base face images, got ${loadedFaces.length}`,
+      );
+    }
+
+    const baseSize = loadedFaces[0].bitmap.width;
+    const baseHeight = loadedFaces[0].bitmap.height;
+
+    // Validate all faces are square and same size
+    if (baseSize !== baseHeight) {
+      throw new Error(
+        `CubeTexture faces must be square, got ${baseSize}x${baseHeight}`,
+      );
+    }
+
+    for (let i = 1; i < loadedFaces.length; i++) {
+      const face = loadedFaces[i];
+      if (face.bitmap.width !== baseSize || face.bitmap.height !== baseSize) {
+        throw new Error(
+          `All cubemap faces must be the same size. Face ${i} is ${face.bitmap.width}x${face.bitmap.height}, expected ${baseSize}x${baseSize}`,
         );
       }
     }
 
-    const loadedMips = await Promise.all(loadPromises);
-    this.createGpuResources(loadedMips);
-    this.loaded = true;
-  }
+    // Calculate full mip chain
+    this.mipLevelCount = calculateMipLevelCount(baseSize);
 
-  private createGpuResources(loadedMips: LoadedMipLevel[]): void {
-    if (loadedMips.length !== 24) {
-      throw new Error(
-        `CubeTexture requires ${24} images (6 faces × ${MIP_LEVELS} mip levels), got ${loadedMips.length}`,
-      );
-    }
-
-    const baseWidth = loadedMips.find((m) => m.mipLevel === 0 && m.face === 0)!
-      .bitmap.width;
-    const baseHeight = loadedMips.find((m) => m.mipLevel === 0 && m.face === 0)!
-      .bitmap.height;
-
+    // Create GPU texture with full mip chain and RENDER_ATTACHMENT for mipmap generation
     this.gpuTexture = this.device.createTexture({
       label: `CubeTexture: ${this.folderPath}`,
-      size: { width: baseWidth, height: baseHeight, depthOrArrayLayers: 6 },
-      mipLevelCount: MIP_LEVELS,
+      size: { width: baseSize, height: baseSize, depthOrArrayLayers: 6 },
+      mipLevelCount: this.mipLevelCount,
       sampleCount: 1,
       dimension: "2d",
       format: "rgba8unorm-srgb",
@@ -84,24 +102,31 @@ export class CubeTexture {
       viewFormats: [],
     });
 
-    for (let mipLevel = 0; mipLevel < MIP_LEVELS; mipLevel++) {
-      for (let faceIndex = 0; faceIndex < FACE_ORDER.length; faceIndex++) {
-        const loadedMip = loadedMips.find(
-          (m) => m.mipLevel === mipLevel && m.face === faceIndex,
-        )!;
+    // Upload base faces (mip level 0)
+    for (let faceIndex = 0; faceIndex < FACE_ORDER.length; faceIndex++) {
+      const loadedFace = loadedFaces.find((f) => f.face === faceIndex)!;
 
-        this.device.queue.copyExternalImageToTexture(
-          { source: loadedMip.bitmap },
-          {
-            texture: this.gpuTexture,
-            origin: { x: 0, y: 0, z: faceIndex },
-            mipLevel,
-          },
-          { width: loadedMip.bitmap.width, height: loadedMip.bitmap.height },
-        );
-      }
+      this.device.queue.copyExternalImageToTexture(
+        { source: loadedFace.bitmap },
+        {
+          texture: this.gpuTexture,
+          origin: { x: 0, y: 0, z: faceIndex },
+          mipLevel: 0,
+        },
+        { width: loadedFace.bitmap.width, height: loadedFace.bitmap.height },
+      );
     }
 
+    // Generate mipmaps on GPU
+    generateCubeMipmaps(
+      this.device,
+      this.gpuTexture,
+      baseSize,
+      this.mipLevelCount,
+      "rgba8unorm-srgb",
+    );
+
+    // Create texture view and sampler
     this.gpuTextureView = this.gpuTexture.createView({
       label: `CubeTextureView: ${this.folderPath}`,
       dimension: "cube",

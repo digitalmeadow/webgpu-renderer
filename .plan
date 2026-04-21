@@ -10,3 +10,8 @@
   Softer when further away from contact point (complex, expensive)
 
   Ambient occlusion
+  
+
+  High-Performance pipeline for reflection probe
+  Skip CPU sorting for transparent
+  Other common optimisations.

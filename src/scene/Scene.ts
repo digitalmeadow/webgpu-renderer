@@ -34,22 +34,12 @@ export class Scene {
     if (!wasAlreadyAdded) {
       this.entities.push(entity);
       this._version++;
-      console.log(
-        `[Scene.add] Added ${entity.type} "${entity.name}", version: ${this._version}, total entities: ${this.entities.length}`,
-      );
-    } else {
-      console.log(
-        `[Scene.add] Entity ${entity.type} "${entity.name}" already in scene`,
-      );
     }
     if (!entity.transform.parent) {
       this.root.addChild(entity.transform);
     }
     if (this.isLight(entity) && !this.lights.includes(entity as Light)) {
       this.lights.push(entity as Light);
-      console.log(
-        `[Scene.add] Added light to lights array, total lights: ${this.lights.length}`,
-      );
     }
   }
 

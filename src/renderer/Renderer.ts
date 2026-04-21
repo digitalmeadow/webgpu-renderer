@@ -107,7 +107,6 @@ export class Renderer {
   private highResViewA: GPUTextureView | null = null;
   private highResViewB: GPUTextureView | null = null;
   private currentFrame: number = 0;
-  private renderLogCount: number = 0;
 
   // Scene collection cache
   private cachedMeshes: Mesh[] = [];
@@ -391,21 +390,12 @@ export class Renderer {
 
     // Only update world matrices if any transform changed
     if (world.needsMatrixUpdate) {
-      if (this.renderLogCount < 5)
-        console.log("[Renderer.render] Updating world matrices");
       world.updateWorldMatrices();
     }
 
     camera.update(this.device);
 
     const meshes = this.collectVisibleMeshes(world, camera);
-    if (this.renderLogCount < 5) {
-      console.log(
-        `[Renderer.render] Frame ${this.renderLogCount}: Collected ${meshes.length} visible meshes:`,
-        meshes.map((m) => m.name),
-      );
-      this.renderLogCount++;
-    }
 
     for (const mesh of meshes) {
       if (mesh.skinData) {
@@ -903,10 +893,6 @@ export class Renderer {
   // Update all scene caches atomically when scene version changes
   private updateSceneCaches(world: World): void {
     if (world.sceneVersion !== this.lastSceneVersion) {
-      console.log(
-        `[Renderer.updateSceneCaches] Scene version changed: ${this.lastSceneVersion} -> ${world.sceneVersion}`,
-      );
-
       // Clear all caches
       this.cachedMeshes = [];
       this.cachedLights = [];
@@ -929,10 +915,6 @@ export class Renderer {
           }
         }
       }
-
-      console.log(
-        `[Renderer.updateSceneCaches] Rebuilt caches - Meshes: ${this.cachedMeshes.length}, Lights: ${this.cachedLights.length}, Emitters: ${this.cachedEmitters.length}, Probes: ${this.cachedReflectionProbes.length}`,
-      );
 
       // Update version ONCE after all caches are rebuilt
       this.lastSceneVersion = world.sceneVersion;

@@ -346,34 +346,62 @@ fn apply_reflection_mirror(direction: vec3<f32>) -> vec3<f32> {
     }
 }
 
-// IBL (Image-Based Lighting) - sample environment texture based on normal direction and material's environment ID
-fn sample_ibl(normal: vec3<f32>, env_id: f32) -> vec3<f32> {
-    let max_mip = 2.0;
+// Diffuse IBL (Image-Based Lighting) - sample environment texture based on normal direction
+// This provides omnidirectional ambient lighting tinted by the environment
+// Sample at high mip level for blurry/diffuse response (not view-dependent)
+fn sample_diffuse_ibl(normal: vec3<f32>, env_id: f32) -> vec3<f32> {
     let env_id_int = u32(env_id);
     
     // Select environment texture based on ID
     if (env_id_int == 1u) {
         // Reflection probe: apply mirror transformation
         let mirrored_normal = apply_reflection_mirror(normal);
-        return textureSampleLevel(environmentTexture1, environmentSampler1, mirrored_normal, max_mip).rgb;
+        // Sample at middle mip level for diffuse response
+        let num_mips = f32(textureNumLevels(environmentTexture1));
+        let diffuse_mip = clamp(num_mips * 0.4, 0.0, num_mips - 1.0);
+        return textureSampleLevel(environmentTexture1, environmentSampler1, mirrored_normal, diffuse_mip).rgb;
     }
     
     // Default: use global skybox (ID 0) - no mirroring
-    return textureSampleLevel(skyboxTexture, skyboxSampler, normal, max_mip).rgb;
+    // Sample at middle mip level for diffuse response
+    let num_mips = f32(textureNumLevels(skyboxTexture));
+    let diffuse_mip = clamp(num_mips * 0.4, 0.0, num_mips - 1.0);
+    return textureSampleLevel(skyboxTexture, skyboxSampler, normal, diffuse_mip).rgb;
 }
 
-// Specular IBL - environment reflection with Schlick fresnel
-const MAX_ENV_MIP_LEVELS: f32 = 4.0;
+// ============================================================================
+// Environment Reflection Functions (Specular Component)
+// ============================================================================
 
-fn sample_specular_ibl(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness: f32, metalness: f32, albedo: vec3<f32>, env_id: f32) -> vec3<f32> {
+// Lazanyi & Szirmay-Kalos 2019 - Improved BRDF approximation for rough surfaces
+// Provides better energy conservation and physical accuracy for high-roughness materials
+// This replaces the need for a pre-computed BRDF LUT texture
+fn environment_brdf_lazanyi(NdotV: f32, roughness: f32, F0: vec3<f32>) -> vec3<f32> {
+    let r2 = roughness * roughness;
+    let r4 = r2 * r2;
+    
+    // Improved polynomial fits designed for rough dielectrics
+    // Scale term: handles Fresnel with proper roughness attenuation
+    let scale = F0 + (max(vec3<f32>(1.0 - r2) - F0, vec3<f32>(0.0))) * 
+                pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0) * (1.0 - r4);
+    
+    // Bias term: minimal correction for rough surfaces
+    // Reduced coefficient (1.0 instead of 50.0) to prevent over-brightening dielectrics
+    // Primarily benefits metallic surfaces with higher F0 values
+    let bias = clamp(F0.g, 0.0, 1.0) * r2 * 0.1;
+    
+    return scale + bias;
+}
+
+// Sample environment map reflection with physically-based BRDF integration
+// This handles mirror-like reflections that vary by view angle (unlike diffuse IBL)
+// Roughness controls both blur (via mip level) and intensity (via BRDF)
+fn sample_environment_reflection(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness: f32, metalness: f32, albedo: vec3<f32>, env_id: f32) -> vec3<f32> {
     let V = normalize(camera_uniforms.position.xyz - world_pos);
     let N = normalize(world_normal);
     let R = reflect(-V, N);
     let NdotV = max(dot(N, V), 0.0);
 
-    // Roughness-based mip selection
-    let mip = roughness * MAX_ENV_MIP_LEVELS;
-    
     // Select environment texture based on ID
     let env_id_int = u32(env_id);
     var env_color: vec3<f32>;
@@ -381,22 +409,38 @@ fn sample_specular_ibl(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness:
     if (env_id_int == 1u) {
         // Reflection probe: apply mirror transformation
         let mirrored_R = apply_reflection_mirror(R);
+        // Roughness-based mip selection (rougher = blurrier reflection)
+        // Use roughness^2 for perceptually linear blur progression
+        let num_mips = f32(textureNumLevels(environmentTexture1));
+        let mip = roughness * roughness * (num_mips - 1.0);
         env_color = textureSampleLevel(environmentTexture1, environmentSampler1, mirrored_R, mip).rgb;
     } else {
         // Default: use global skybox (ID 0) - no mirroring
+        // Roughness-based mip selection (rougher = blurrier reflection)
+        // Use roughness^2 for perceptually linear blur progression
+        let num_mips = f32(textureNumLevels(skyboxTexture));
+        let mip = roughness * roughness * (num_mips - 1.0);
         env_color = textureSampleLevel(skyboxTexture, skyboxSampler, R, mip).rgb;
     }
 
-    // F0: dielectric uses 0.04, metals use albedo color
+    // F0: base reflectivity at normal incidence
+    // Dielectrics (plastic, glass) use 0.04, metals use their albedo color
     let dielectric_F0 = vec3<f32>(0.04);
-    let F0 = mix(vec3<f32>(dielectric_F0), albedo, metalness);
+    let F0 = mix(dielectric_F0, albedo, metalness);
     
-    // Standard Fresnel-Schlick approximation (power of 5 for physically-accurate grazing angles)
-    let fresnel = fresnel_schlick(NdotV, F0);
-
-    // Roughness is already handled by mip level selection (line 375)
-    // High roughness → high mip → blurry environment sample
-    return env_color * fresnel;
+    // Apply physically-based BRDF approximation (accounts for roughness and fresnel)
+    let brdf = environment_brdf_lazanyi(NdotV, roughness, F0);
+    
+    // Additional roughness-based attenuation to further reduce reflections on very rough surfaces
+    // Rough surfaces scatter light in many directions, reducing mirror-like reflections
+    let roughness_attenuation = 1.0 - (roughness * roughness * roughness);
+    
+    // Final reflection: environment color modulated by BRDF and roughness
+    // The Lazanyi approximation includes:
+    // - Fresnel (view angle dependent reflectivity)
+    // - Roughness attenuation (rough surfaces have much dimmer reflections)
+    // - Metalness (via F0 affecting the BRDF curve)
+    return env_color * brdf * roughness_attenuation;
 }
 
 // ============================================================================
@@ -471,15 +515,18 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     }
 
     // Diffuse IBL (sampled at high mip = blurry/omnidirectional)
-    let ibl_color = sample_ibl(world_normal, environment_id) * scene_uniforms.ibl_intensity;
-    let ambient = scene_uniforms.ambient_light_color.rgb + ibl_color;
+    // This provides ambient lighting tinted by the environment, based on surface normal
+    // IBL intensity of 1.0 = full tinting by skybox color in normal direction
+    let diffuse_ibl_color = sample_diffuse_ibl(world_normal, environment_id) * scene_uniforms.ibl_intensity;
+    let ambient = scene_uniforms.ambient_light_color.rgb + diffuse_ibl_color;
 
     // Metals have no diffuse response; dielectrics lose energy to specular via fresnel
     let diffuse_albedo = albedo * (1.0 - metalness);
     var color = diffuse_albedo * ambient;
 
-    // Specular IBL (environment reflection) - metallic reflections should always be visible regardless of IBL intensity
-    let specular = sample_specular_ibl(world_pos, world_normal, roughness, metalness, albedo, environment_id);
+    // Environment reflections (mirror-like, view-dependent, separate from IBL)
+    // These are always active and use physically-based BRDF (not affected by ibl_intensity)
+    let env_reflection = sample_environment_reflection(world_pos, world_normal, roughness, metalness, albedo, environment_id);
 
     // Pre-calculate vectors needed for specular lighting
     let V = normalize(camera_uniforms.position.xyz - world_pos);
@@ -537,8 +584,9 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             // Sample shadow map
             let shadow = fetch_light_spot_shadow(j, world_pos, light_spot.view_matrix, shadow_coords, in.position.xy);
 
-            // Calculate light direction (light → fragment)
+            // Calculate light direction (fragment → light)
             let light_dir = normalize(light_spot.position.xyz - world_pos);
+            let H = normalize(V + light_dir);  // Halfway vector for specular
 
             // Light forward direction (should already be light → forward)
             let forward = normalize(light_spot.forward.xyz);
@@ -575,16 +623,35 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let normalized_dist_from_light = clamp(light_distance / spot_far, 0.0, 1.0);
             let dist_falloff = (1.0 - normalized_dist_from_light) / (1.0 + normalized_dist_from_light * normalized_dist_from_light);
 
-            // Diffuse lighting
-            let diffuse = max(0.0, dot(world_normal, light_dir));
+            // Lighting angles
+            let NdotL = max(dot(world_normal, light_dir), 0.0);
+            let NdotH = max(dot(world_normal, H), 0.0);
+            let HdotV = max(dot(H, V), 0.0);
 
-            // Accumulate light contribution
-            color += diffuse_albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * diffuse * shadow * spot_factor * dist_falloff;
+            // Combined attenuation
+            let attenuation = shadow * spot_factor * dist_falloff;
+
+            // Diffuse contribution
+            color += diffuse_albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * NdotL * attenuation;
+            
+            // Specular contribution (Cook-Torrance GGX BRDF)
+            if (NdotL > 0.0) {
+                let D = distribution_ggx(NdotH, roughness);
+                let G = geometry_smith(NdotV, NdotL, roughness);
+                let F = fresnel_schlick(HdotV, F0);
+                
+                let numerator = D * G * F;
+                let denominator = max(4.0 * NdotV * NdotL, 0.001);
+                let specular_brdf = numerator / denominator;
+                
+                // Add specular highlight
+                color += specular_brdf * light_spot.color_intensity.rgb * light_spot.color_intensity.a * NdotL * attenuation;
+            }
         }
     }
 
-    // Add specular environment reflections and emissive (unaffected by shadow/lights)
-    color += specular;
+    // Add environment reflections and emissive (unaffected by shadow/lights)
+    color += env_reflection;
     color += emissive;
 
     // Fog: https://iquilezles.org/articles/fog/

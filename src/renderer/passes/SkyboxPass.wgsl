@@ -44,5 +44,5 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let ray_dir = normalize(in.ray_dir);
-    return textureSample(skyboxTexture, skyboxSampler, ray_dir);
+    return textureSampleLevel(skyboxTexture, skyboxSampler, ray_dir, 0.0);
 }

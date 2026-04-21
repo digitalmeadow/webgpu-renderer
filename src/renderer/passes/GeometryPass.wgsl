@@ -32,11 +32,11 @@ fn get_dither_threshold(screen_pos: vec2<f32>) -> f32 {
 //--HOOK_PLACEHOLDER_UNIFORMS--//
 
 fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
-    return textureSample(albedoTexture, defaultSampler, uv);
+    return textureSample(albedoTexture, nearestSampler, uv);
 }
 
 fn get_emissive(uv: vec2<f32>) -> vec4<f32> {
-    let emissive_tex = textureSample(emissiveTexture, defaultSampler, uv);
+    let emissive_tex = textureSample(emissiveTexture, linearSampler, uv);
     let emissive_color = emissive_tex.rgb * material.emissive.rgb;
     let intensity_multiplier = material.emissive.a;
     let final_emissive = emissive_color * intensity_multiplier;
@@ -109,7 +109,7 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
     return mat3x3<f32>(right, up, safe_forward);
 }
 
-@group(1) @binding(0) var defaultSampler: sampler;
+@group(1) @binding(0) var nearestSampler: sampler;
 @group(1) @binding(1) var albedoTexture: texture_2d<f32>;
 @group(1) @binding(2) var normalTexture: texture_2d<f32>;
 @group(1) @binding(3) var metalnessRoughnessTexture: texture_2d<f32>;
@@ -117,6 +117,7 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
 @group(1) @binding(5) var environmentTexture: texture_cube<f32>;
 @group(1) @binding(6) var envSampler: sampler;
 @group(1) @binding(7) var emissiveTexture: texture_2d<f32>;
+@group(1) @binding(8) var linearSampler: sampler;
 
 @vertex
 fn vs_main(
@@ -210,7 +211,7 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
         discard;
     }
 
-    let N_map = textureSample(normalTexture, defaultSampler, in.uv_coords).rgb;
+    let N_map = textureSample(normalTexture, nearestSampler, in.uv_coords).rgb;
     var N_tangent = N_map * 2.0 - 1.0;
     // Convert OpenGL (Y-up) → WebGPU/DirectX (Y-down) coordinate system
     // Blender exports glTF normal maps in OpenGL format, so we flip Y
@@ -224,7 +225,7 @@ fn fs_main(in: VertexOutput) -> GBufferOutput {
     let world_N = normalize(TBN * N_tangent);
     output.normal = vec4<f32>(world_N, 1.0);
 
-    let metal_rough = textureSample(metalnessRoughnessTexture, defaultSampler, in.uv_coords);
+    let metal_rough = textureSample(metalnessRoughnessTexture, nearestSampler, in.uv_coords);
     let roughness = metal_rough.g;
     let metalness = metal_rough.b;
     let emissive = get_emissive(in.uv_coords);

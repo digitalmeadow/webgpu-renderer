@@ -110,7 +110,7 @@ struct MaterialUniforms {
     opacity: f32,
 }
 
-@group(2) @binding(0) var material_sampler: sampler;
+@group(2) @binding(0) var nearestSampler: sampler;
 @group(2) @binding(1) var albedo_texture: texture_2d<f32>;
 @group(2) @binding(2) var normal_texture: texture_2d<f32>;
 @group(2) @binding(3) var metalness_roughness_texture: texture_2d<f32>;
@@ -118,6 +118,7 @@ struct MaterialUniforms {
 @group(2) @binding(5) var material_environment_texture: texture_cube<f32>;
 @group(2) @binding(6) var material_environment_sampler: sampler;
 @group(2) @binding(7) var emissive_texture: texture_2d<f32>;
+@group(2) @binding(8) var linearSampler: sampler;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -428,9 +429,9 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     var output: FragmentOutput;
 
     // Sample textures
-    let albedo_tex = textureSample(albedo_texture, material_sampler, in.uv_coords);
-    let normal_tex = textureSample(normal_texture, material_sampler, in.uv_coords);
-    let metal_rough = textureSample(metalness_roughness_texture, material_sampler, in.uv_coords);
+    let albedo_tex = textureSample(albedo_texture, nearestSampler, in.uv_coords);
+    let normal_tex = textureSample(normal_texture, nearestSampler, in.uv_coords);
+    let metal_rough = textureSample(metalness_roughness_texture, nearestSampler, in.uv_coords);
 
     let metalness = metal_rough.r;
     let roughness = metal_rough.g;

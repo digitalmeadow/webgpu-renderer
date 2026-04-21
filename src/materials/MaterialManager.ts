@@ -5,6 +5,7 @@ import { MaterialCustom } from "./MaterialCustom";
 import { Camera } from "../camera";
 import { Vertex } from "../geometries";
 import { Texture, CubeTexture, CubeRenderTarget } from "../textures";
+import { generate2DMipmaps } from "../textures/MipmapGenerator";
 import geometryPassShader from "../renderer/passes/GeometryPass.wgsl?raw";
 import forwardPassShader from "../renderer/passes/ForwardPass.wgsl?raw";
 import { TextureSettings } from "../renderer/Renderer";
@@ -24,7 +25,8 @@ export class MaterialManager {
   private device: GPUDevice;
   private textureCache: Map<Texture, GPUTexture> = new Map();
   private cubeTextureCache: Map<string, CubeTexture> = new Map();
-  private defaultSampler: GPUSampler;
+  private nearestSampler: GPUSampler;
+  private linearSampler: GPUSampler;
   private bindGroupCache: Map<MaterialBase, GPUBindGroup> = new Map();
   public readonly materialBindGroupLayout: GPUBindGroupLayout;
   private placeholderNormalTexture: GPUTexture;
@@ -61,9 +63,19 @@ export class MaterialManager {
       mipmapFilter: textureSettings?.mipmapFilter ?? "linear",
     };
 
-    this.defaultSampler = device.createSampler({
+    // Nearest sampler for pixelated albedo textures
+    this.nearestSampler = device.createSampler({
       magFilter: "nearest",
       minFilter: "nearest",
+      mipmapFilter: "nearest",
+      addressModeU: "repeat",
+      addressModeV: "repeat",
+    });
+
+    // Linear sampler for smooth data textures (normals, roughness, etc.)
+    this.linearSampler = device.createSampler({
+      magFilter: "linear",
+      minFilter: "linear",
       mipmapFilter: "linear",
       addressModeU: "repeat",
       addressModeV: "repeat",
@@ -156,6 +168,11 @@ export class MaterialManager {
           visibility: GPUShaderStage.FRAGMENT,
           texture: { sampleType: "float" },
         },
+        {
+          binding: 8,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "filtering" },
+        },
       ],
     });
 
@@ -163,7 +180,7 @@ export class MaterialManager {
       label: "Fallback Material Bind Group",
       layout: this.materialBindGroupLayout,
       entries: [
-        { binding: 0, resource: this.defaultSampler },
+        { binding: 0, resource: this.nearestSampler },
         { binding: 1, resource: this.placeholderAlbedoTexture.createView() },
         { binding: 2, resource: this.placeholderNormalTexture.createView() },
         {
@@ -180,6 +197,7 @@ export class MaterialManager {
           binding: 7,
           resource: this.placeholderEmissiveTexture.createView(),
         },
+        { binding: 8, resource: this.linearSampler },
       ],
     });
   }
@@ -481,7 +499,7 @@ export class MaterialManager {
     // COLOR (albedo, emissive): rgba8unorm - WebGPU converts sRGB→linear
     // DATA (normal, roughness, metalness): rgba8unorm-srgb - preserves raw data
     const format =
-      textureType === TextureType.COLOR ? "rgba8unorm" : "rgba8unorm-srgb";
+      textureType === TextureType.COLOR ? "rgba8unorm-srgb" : "rgba8unorm";
 
     const gpuTexture = this.device.createTexture({
       size: [width, height],
@@ -513,134 +531,14 @@ export class MaterialManager {
     mipLevelCount: number,
     format: GPUTextureFormat,
   ): void {
-    const mipmapShaderCode = `
-      @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-      @group(0) @binding(1) var inputSampler: sampler;
-
-      struct VertexOutput {
-        @builtin(position) position: vec4<f32>,
-        @location(0) uv: vec2<f32>,
-      }
-
-      @vertex
-      fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-        var positions = array<vec2<f32>, 6>(
-          vec2<f32>(-1.0, -1.0),
-          vec2<f32>(1.0, -1.0),
-          vec2<f32>(1.0, 1.0),
-          vec2<f32>(-1.0, -1.0),
-          vec2<f32>(1.0, 1.0),
-          vec2<f32>(-1.0, 1.0)
-        );
-        var uvs = array<vec2<f32>, 6>(
-          vec2<f32>(0.0, 1.0),
-          vec2<f32>(1.0, 1.0),
-          vec2<f32>(1.0, 0.0),
-          vec2<f32>(0.0, 1.0),
-          vec2<f32>(1.0, 0.0),
-          vec2<f32>(0.0, 0.0)
-        );
-        var output: VertexOutput;
-        output.position = vec4<f32>(positions[vertexIndex], 0.0, 1.0);
-        output.uv = uvs[vertexIndex];
-        return output;
-      }
-
-      @fragment
-      fn fragmentMain(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-        return textureSample(inputTexture, inputSampler, uv);
-      }
-    `;
-
-    const shaderModule = this.device.createShaderModule({
-      code: mipmapShaderCode,
-    });
-
-    const sampler = this.device.createSampler({
-      minFilter: "linear",
-      magFilter: "linear",
-      mipmapFilter: "linear",
-    });
-
-    const pipeline = this.device.createRenderPipeline({
-      layout: this.device.createPipelineLayout({
-        bindGroupLayouts: [
-          this.device.createBindGroupLayout({
-            entries: [
-              {
-                binding: 0,
-                visibility: GPUShaderStage.FRAGMENT,
-                texture: { sampleType: "float" },
-              },
-              {
-                binding: 1,
-                visibility: GPUShaderStage.FRAGMENT,
-                sampler: { type: "filtering" },
-              },
-            ],
-          }),
-        ],
-      }),
-      vertex: {
-        module: shaderModule,
-        entryPoint: "vertexMain",
-      },
-      fragment: {
-        module: shaderModule,
-        entryPoint: "fragmentMain",
-        targets: [{ format: format }],
-      },
-      primitive: {
-        topology: "triangle-list",
-      },
-    });
-
-    const encoder = this.device.createCommandEncoder({
-      label: "mipmap generation encoder",
-    });
-
-    let currentWidth = baseWidth;
-    let currentHeight = baseHeight;
-
-    for (let mipLevel = 1; mipLevel < mipLevelCount; mipLevel++) {
-      currentWidth = Math.max(1, Math.floor(currentWidth / 2));
-      currentHeight = Math.max(1, Math.floor(currentHeight / 2));
-
-      const bindGroup = this.device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
-        entries: [
-          {
-            binding: 0,
-            resource: texture.createView({
-              baseMipLevel: mipLevel - 1,
-              mipLevelCount: 1,
-            }),
-          },
-          { binding: 1, resource: sampler },
-        ],
-      });
-
-      const passEncoder = encoder.beginRenderPass({
-        colorAttachments: [
-          {
-            view: texture.createView({
-              baseMipLevel: mipLevel,
-              mipLevelCount: 1,
-            }),
-            loadOp: "clear",
-            storeOp: "store",
-            clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          },
-        ],
-      });
-
-      passEncoder.setPipeline(pipeline);
-      passEncoder.setBindGroup(0, bindGroup);
-      passEncoder.draw(6);
-      passEncoder.end();
-    }
-
-    this.device.queue.submit([encoder.finish()]);
+    generate2DMipmaps(
+      this.device,
+      texture,
+      baseWidth,
+      baseHeight,
+      mipLevelCount,
+      format,
+    );
   }
 
   getOrCreateCubeTexture(
@@ -723,7 +621,7 @@ export class MaterialManager {
       const bindGroup = this.device.createBindGroup({
         layout: this.materialBindGroupLayout,
         entries: [
-          { binding: 0, resource: this.defaultSampler },
+          { binding: 0, resource: this.nearestSampler },
           { binding: 1, resource: albedoView },
           { binding: 2, resource: normalView },
           { binding: 3, resource: metalRoughnessView },
@@ -731,6 +629,7 @@ export class MaterialManager {
           { binding: 5, resource: envView },
           { binding: 6, resource: envSampler },
           { binding: 7, resource: emissiveView },
+          { binding: 8, resource: this.linearSampler },
         ],
       });
 
@@ -743,7 +642,7 @@ export class MaterialManager {
       const bindGroup = this.device.createBindGroup({
         layout: this.materialBindGroupLayout,
         entries: [
-          { binding: 0, resource: this.defaultSampler },
+          { binding: 0, resource: this.nearestSampler },
           { binding: 1, resource: this.placeholderAlbedoTexture.createView() },
           { binding: 2, resource: this.placeholderNormalTexture.createView() },
           {
@@ -757,6 +656,7 @@ export class MaterialManager {
             binding: 7,
             resource: this.placeholderEmissiveTexture.createView(),
           },
+          { binding: 8, resource: this.linearSampler },
         ],
       });
 
@@ -769,7 +669,7 @@ export class MaterialManager {
       const bindGroup = this.device.createBindGroup({
         layout: this.materialBindGroupLayout,
         entries: [
-          { binding: 0, resource: this.defaultSampler },
+          { binding: 0, resource: this.nearestSampler },
           { binding: 1, resource: this.placeholderAlbedoTexture.createView() },
           { binding: 2, resource: this.placeholderNormalTexture.createView() },
           {
@@ -783,6 +683,7 @@ export class MaterialManager {
             binding: 7,
             resource: this.placeholderEmissiveTexture.createView(),
           },
+          { binding: 8, resource: this.linearSampler },
         ],
       });
 
