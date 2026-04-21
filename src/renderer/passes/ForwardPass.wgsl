@@ -7,6 +7,7 @@ struct VertexOutput {
     @location(0) world_position: vec3<f32>,
     @location(1) world_normal: vec3<f32>,
     @location(2) uv_coords: vec2<f32>,
+    @location(3) world_tangent: vec4<f32>,
 };
 
 // Camera uniforms (group 0)
@@ -124,6 +125,7 @@ struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) uv: vec2<f32>,
+    @location(5) tangent: vec4<f32>,
 };
 
 fn get_billboard_axis(axis: u32) -> vec3<f32> {
@@ -184,10 +186,13 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
         
         let billboarded_pos = billboard_matrix * in.position;
         let billboarded_normal = billboard_matrix * in.normal;
+        let billboarded_tangent = billboard_matrix * in.tangent.xyz;
+        
         out.position = camera_uniforms.view_projection_matrix * vec4<f32>(mesh_pos + billboarded_pos, 1.0);
         out.world_position = mesh_pos + billboarded_pos;
-        // Billboard normal is already in world space - don't apply model matrix
+        // Billboard normals and tangents are already in world space - don't apply model matrix
         out.world_normal = billboarded_normal;
+        out.world_tangent = vec4<f32>(billboarded_tangent, in.tangent.w);
         out.uv_coords = in.uv;
         return out;
     }
@@ -196,6 +201,7 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
     out.position = camera_uniforms.view_projection_matrix * world_position;
     out.world_position = world_position.xyz;
     out.world_normal = (model_matrix * vec4<f32>(local_normal, 0.0)).xyz;
+    out.world_tangent = (model_matrix * vec4<f32>(in.tangent.xyz, 0.0));
     out.uv_coords = in.uv;
     return out;
 }
@@ -388,22 +394,24 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
 // IBL (Image-Based Lighting) - sample environment texture based on normal direction
 // Uses material's environment texture if available, otherwise falls back to global skybox
 fn sample_ibl(normal: vec3<f32>) -> vec3<f32> {
-    let max_mip = 2.0;
+    // Sample at ~40% of mip chain for diffuse response (matching LightingPass)
+    let num_mips = f32(textureNumLevels(material_environment_texture));
+    let diffuse_mip = clamp(num_mips * 0.4, 0.0, num_mips - 1.0);
     // Use material environment texture (per-material reflection probe or environment map)
-    return textureSampleLevel(material_environment_texture, material_environment_sampler, normal, max_mip).rgb;
+    return textureSampleLevel(material_environment_texture, material_environment_sampler, normal, diffuse_mip).rgb;
 }
 
 // Specular IBL - environment reflection with Schlick fresnel
-const MAX_ENV_MIP_LEVELS: f32 = 4.0;
-
 fn sample_specular_ibl(world_pos: vec3<f32>, world_normal: vec3<f32>, roughness: f32, metalness: f32, albedo: vec3<f32>) -> vec3<f32> {
     let V = normalize(camera_uniforms.position.xyz - world_pos);
     let N = normalize(world_normal);
     let R = reflect(-V, N);
     let NdotV = max(dot(N, V), 0.0);
 
-    // Roughness-based mip selection
-    let mip = roughness * MAX_ENV_MIP_LEVELS;
+    // Roughness-based mip selection (dynamic, matching LightingPass)
+    // Use roughness^2 for perceptually linear blur progression
+    let num_mips = f32(textureNumLevels(material_environment_texture));
+    let mip = roughness * roughness * (num_mips - 1.0);
     // Use material environment texture (per-material reflection probe or environment map)
     let env_color = textureSampleLevel(material_environment_texture, material_environment_sampler, R, mip).rgb;
 
@@ -443,12 +451,17 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let normal_mag = dot(normal_sample, normal_sample);
     if (normal_mag > 0.001) {
         // Tangent-space normal: transform to world space using TBN
-        // For simplicity, add tangent-space offset to world normal
-        // (proper implementation would require tangent attribute)
-        let T = normalize(cross(in.world_normal, vec3<f32>(0.0, 1.0, 0.0)));
-        let B = cross(in.world_normal, T);
-        let TBN = mat3x3(T, B, in.world_normal);
-        world_normal = normalize(TBN * (normal_sample * 2.0 - 1.0));
+        // Proper TBN matrix construction matching GeometryPass
+        let N = normalize(in.world_normal);
+        let T = normalize(in.world_tangent.xyz - dot(in.world_tangent.xyz, N) * N);
+        let B = cross(N, T) * in.world_tangent.w;
+        let TBN = mat3x3(T, B, N);
+        
+        var N_tangent = normal_sample * 2.0 - 1.0;
+        // Convert OpenGL (Y-up) → WebGPU/DirectX (Y-down) coordinate system
+        // Blender exports glTF normal maps in OpenGL format, so we flip Y
+        N_tangent.y = -N_tangent.y;
+        world_normal = normalize(TBN * N_tangent);
     }
 
     // Fallback to up vector if normal is invalid (all zeros or NaN)
