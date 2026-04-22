@@ -4,6 +4,7 @@ import { MaterialBasic } from "./MaterialBasic";
 import { MaterialCustom } from "./MaterialCustom";
 import { Camera } from "../camera";
 import { Vertex } from "../geometries";
+import { getInstanceBufferLayout } from "../scene/InstanceGroup";
 import { Texture, CubeTexture, CubeRenderTarget } from "../textures";
 import { generate2DMipmaps } from "../textures/MipmapGenerator";
 import geometryPassShader from "../renderer/passes/GeometryPass.wgsl?raw";
@@ -48,6 +49,10 @@ export class MaterialManager {
   private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> =
     new Map();
   private hookPipelineCache: Map<
+    MaterialPBR | MaterialBasic,
+    GPURenderPipeline
+  > = new Map();
+  private hookInstancedPipelineCache: Map<
     MaterialPBR | MaterialBasic,
     GPURenderPipeline
   > = new Map();
@@ -322,6 +327,74 @@ export class MaterialManager {
     });
 
     this.hookPipelineCache.set(cacheKey, pipeline);
+    return pipeline;
+  }
+
+  /**
+   * Creates a render pipeline for hook/basic materials that is compatible with
+   * the instanced GeometryPass: 2 bind groups [camera, material] and includes
+   * the instance buffer in the vertex layout. Writes all 4 G-buffer targets.
+   */
+  getGeometryInstancedHookPipeline(
+    material: MaterialPBR | MaterialBasic,
+    cameraBindGroupLayout: GPUBindGroupLayout,
+  ): GPURenderPipeline | null {
+    if (this.hookInstancedPipelineCache.has(material)) {
+      return this.hookInstancedPipelineCache.get(material)!;
+    }
+
+    let shader = this.baseGeometryShader;
+    const materialHooks = (material as any).hooks || {};
+
+    if (materialHooks.albedo) {
+      const albedoFunctionRegex =
+        /fn\s+get_albedo_color\s*\([^)]*\)\s*->\s*vec4<f32>\s*\{[^}]*}/;
+      shader = shader.replace(albedoFunctionRegex, materialHooks.albedo);
+    }
+    if (materialHooks.uniforms) {
+      shader = shader.replace(
+        "//--HOOK_PLACEHOLDER_UNIFORMS--//",
+        materialHooks.uniforms,
+      );
+    }
+
+    const shaderModule = this.device.createShaderModule({
+      label: `Instanced Hook Shader: ${material.name}`,
+      code: shader,
+    });
+
+    const pipeline = this.device.createRenderPipeline({
+      label: `Instanced Hook Pipeline: ${material.name}`,
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [cameraBindGroupLayout, this.materialBindGroupLayout],
+      }),
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vs_main",
+        buffers: [Vertex.getBufferLayout(), getInstanceBufferLayout()],
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fs_main",
+        targets: [
+          { format: "rgba8unorm" }, // Albedo
+          { format: "rgba16float" }, // Normal
+          { format: "rgba8unorm" }, // Metal/Roughness
+          { format: "rgba16float" }, // Emissive (HDR)
+        ],
+      },
+      primitive: {
+        topology: "triangle-list",
+        cullMode: material.doubleSided ? "none" : "back",
+      },
+      depthStencil: {
+        format: "depth32float",
+        depthWriteEnabled: true,
+        depthCompare: "less",
+      },
+    });
+
+    this.hookInstancedPipelineCache.set(material, pipeline);
     return pipeline;
   }
 

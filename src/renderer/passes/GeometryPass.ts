@@ -146,9 +146,11 @@ export class GeometryPass {
         (group.material.type === MaterialType.PBR &&
           (group.material as any).hooks?.albedo)
       ) {
-        // Materials with hooks need special handling - skip for now
-        // TODO: Support hook pipelines with instancing
-        pipelineToUse = null;
+        // Hook/basic materials use their own instanced pipeline (2 bind groups + instance buffer)
+        pipelineToUse = materialManager.getGeometryInstancedHookPipeline(
+          group.material as MaterialPBR | MaterialBasic,
+          this.cameraBindGroupLayout,
+        );
       } else {
         pipelineToUse = this.pipeline;
       }

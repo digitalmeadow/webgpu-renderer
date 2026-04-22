@@ -1,4 +1,5 @@
 import { ParticlesPass } from "./passes/ParticlesPass";
+import { GBufferPass } from "./passes/GBufferPass";
 import { World, EntityType } from "../scene";
 import { Camera } from "../camera";
 import { Time } from "../time";
@@ -96,6 +97,7 @@ export class Renderer {
   private lightManager: LightManager;
   private sceneUniforms: SceneUniforms;
   private cameraBindGroupLayout: GPUBindGroupLayout;
+  private gBufferPasses: GBufferPass[] = [];
   private postPasses: PostPass[] = [];
   private postPassTextureA: GPUTexture | null = null;
   private postPassTextureB: GPUTexture | null = null;
@@ -463,6 +465,11 @@ export class Renderer {
       this.materialManager,
     );
 
+    // Extra G-buffer passes (e.g. compute-driven grass, GPU particles)
+    for (const pass of this.gBufferPasses) {
+      pass.render(commandEncoder, this.geometryBuffer, camera, time);
+    }
+
     const directionalLights = lights.filter(
       (light) => light.type === EntityType.LightDirectional,
     ) as DirectionalLight[];
@@ -712,6 +719,10 @@ export class Renderer {
     this.reflectionProbePass.setSkyboxTexture(texture);
     // Reserve environment texture ID 0 for the global skybox
     this.materialManager.setGlobalSkybox(texture);
+  }
+
+  public addGBufferPass(pass: GBufferPass): void {
+    this.gBufferPasses.push(pass);
   }
 
   public addPostPass(pass: PostPass): void {
