@@ -35,7 +35,7 @@ export class FlyControls {
     const forward = this.camera.transform.getForward();
     const len = Vec3.len(forward);
     if (len > 0) {
-      this.yaw = Math.atan2(-forward.x, forward.z);
+      this.yaw = Math.atan2(forward.x, forward.z);
       this.pitch = Math.asin(Math.max(-1, Math.min(1, forward.y / len)));
     }
   }

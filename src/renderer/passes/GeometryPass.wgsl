@@ -103,7 +103,9 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
         safe_forward = normalize(safe_forward);
     }
 
-    let right = normalize(cross(axisVec, safe_forward));
+    // cross(forward, axisVec) negates right vs cross(axisVec, forward),
+    // flipping triangle winding to CW to match frontFace: "cw"
+    let right = normalize(cross(safe_forward, axisVec));
     let up = axisVec;
 
     return mat3x3<f32>(right, up, safe_forward);

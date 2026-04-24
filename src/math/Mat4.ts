@@ -785,9 +785,11 @@ export class Mat4 {
       z2 *= len;
     }
 
-    let x0 = z1 * upz - z2 * upy;
-    let x1 = z2 * upx - z0 * upz;
-    let x2 = z0 * upy - z1 * upx;
+    // LH: right = up × forward
+    let x0 = upy * z2 - upz * z1;
+    let x1 = upz * z0 - upx * z2;
+    let x2 = upx * z1 - upy * z0;
+
     len = x0 * x0 + x1 * x1 + x2 * x2;
     if (len > 0) {
       len = 1 / Math.sqrt(len);
