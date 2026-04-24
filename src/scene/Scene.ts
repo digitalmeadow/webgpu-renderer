@@ -62,9 +62,6 @@ export class Scene {
     // Always update animations (they manage their own active state)
     this.animationManager.update(deltaTime);
 
-    // Always update world matrices (uses dirty tracking internally)
-    this.root.updateWorldMatrix();
-
     // Only update entities that require per-frame updates
     for (const entity of this.entities) {
       if (entity.enabled && entity.needsUpdate) {

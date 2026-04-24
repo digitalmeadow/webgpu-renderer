@@ -380,13 +380,6 @@ export class Renderer {
 
     this.cameras.add(camera);
 
-    world.update(time.delta);
-
-    // Only update world matrices if any transform changed
-    if (world.needsMatrixUpdate) {
-      world.updateWorldMatrices();
-    }
-
     camera.update();
 
     const meshes = this.collectVisibleMeshes(world, camera);

@@ -33,12 +33,10 @@ export class World {
     this._sceneVersion++;
   }
 
-  update(deltaTime: number): void {
+  step(deltaTime: number): void {
     for (const scene of this.scenes) {
       scene.update(deltaTime);
     }
-    // Mark as needing matrix update since entities may have changed transforms
-    this._needsMatrixUpdate = true;
   }
 
   updateWorldMatrices(): void {
