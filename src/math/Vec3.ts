@@ -147,6 +147,11 @@ export class Vec3 {
       out.data[0] = a.data[0] * scale;
       out.data[1] = a.data[1] * scale;
       out.data[2] = a.data[2] * scale;
+    } else {
+      console.warn("Vec3.normalize: zero-length vector");
+      out.data[0] = a.data[0];
+      out.data[1] = a.data[1];
+      out.data[2] = a.data[2];
     }
     return out;
   }
@@ -330,58 +335,40 @@ export class Vec3 {
 
   static rotateX(a: Vec3, b: Vec3, rad: number, out?: Vec3): Vec3 {
     out ??= new Vec3();
-    let p = [
-      a.data[0] - b.data[0],
-      a.data[1] - b.data[1],
-      a.data[2] - b.data[2],
-    ];
-    let r: number[];
-    r = [
-      p[0],
-      p[1] * Math.cos(rad) - p[2] * Math.sin(rad),
-      p[1] * Math.sin(rad) + p[2] * Math.cos(rad),
-    ];
-    out.data[0] = r[0] + b.data[0];
-    out.data[1] = r[1] + b.data[1];
-    out.data[2] = r[2] + b.data[2];
+    const px = a.data[0] - b.data[0];
+    const py = a.data[1] - b.data[1];
+    const pz = a.data[2] - b.data[2];
+    const s = Math.sin(rad);
+    const c = Math.cos(rad);
+    out.data[0] = px + b.data[0];
+    out.data[1] = py * c - pz * s + b.data[1];
+    out.data[2] = py * s + pz * c + b.data[2];
     return out;
   }
 
   static rotateY(a: Vec3, b: Vec3, rad: number, out?: Vec3): Vec3 {
     out ??= new Vec3();
-    let p = [
-      a.data[0] - b.data[0],
-      a.data[1] - b.data[1],
-      a.data[2] - b.data[2],
-    ];
-    let r: number[];
-    r = [
-      p[2] * Math.sin(rad) + p[0] * Math.cos(rad),
-      p[1],
-      p[2] * Math.cos(rad) - p[0] * Math.sin(rad),
-    ];
-    out.data[0] = r[0] + b.data[0];
-    out.data[1] = r[1] + b.data[1];
-    out.data[2] = r[2] + b.data[2];
+    const px = a.data[0] - b.data[0];
+    const py = a.data[1] - b.data[1];
+    const pz = a.data[2] - b.data[2];
+    const s = Math.sin(rad);
+    const c = Math.cos(rad);
+    out.data[0] = pz * s + px * c + b.data[0];
+    out.data[1] = py + b.data[1];
+    out.data[2] = pz * c - px * s + b.data[2];
     return out;
   }
 
   static rotateZ(a: Vec3, b: Vec3, rad: number, out?: Vec3): Vec3 {
     out ??= new Vec3();
-    let p = [
-      a.data[0] - b.data[0],
-      a.data[1] - b.data[1],
-      a.data[2] - b.data[2],
-    ];
-    let r: number[];
-    r = [
-      p[0] * Math.cos(rad) - p[1] * Math.sin(rad),
-      p[0] * Math.sin(rad) + p[1] * Math.cos(rad),
-      p[2],
-    ];
-    out.data[0] = r[0] + b.data[0];
-    out.data[1] = r[1] + b.data[1];
-    out.data[2] = r[2] + b.data[2];
+    const px = a.data[0] - b.data[0];
+    const py = a.data[1] - b.data[1];
+    const pz = a.data[2] - b.data[2];
+    const s = Math.sin(rad);
+    const c = Math.cos(rad);
+    out.data[0] = px * c - py * s + b.data[0];
+    out.data[1] = px * s + py * c + b.data[1];
+    out.data[2] = pz + b.data[2];
     return out;
   }
 }

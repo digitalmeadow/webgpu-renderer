@@ -75,7 +75,7 @@ export class Renderer {
   private textureSettings: ResolvedTextureSettings;
   private cameras: Set<Camera> = new Set();
 
-  public frustumCulling: boolean = false;
+  public frustumCulling: boolean = true;
   public skyboxTexture: CubeTexture | null = null;
   public transparentSortEnabled: boolean = true;
 
@@ -943,7 +943,7 @@ export class Renderer {
     // Filter meshes by frustum culling
     const visibleMeshes: Mesh[] = [];
     for (const mesh of allMeshes) {
-      if (aabbInFrustum(mesh.geometry.aabb, frustumPlanes)) {
+      if (aabbInFrustum(mesh.worldAABB, frustumPlanes)) {
         visibleMeshes.push(mesh);
       }
     }

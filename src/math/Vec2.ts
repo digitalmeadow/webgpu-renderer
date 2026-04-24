@@ -113,6 +113,10 @@ export class Vec2 {
       const scale = 1 / len;
       out.data[0] = a.data[0] * scale;
       out.data[1] = a.data[1] * scale;
+    } else {
+      console.warn("Vec2.normalize: zero-length vector");
+      out.data[0] = a.data[0];
+      out.data[1] = a.data[1];
     }
     return out;
   }

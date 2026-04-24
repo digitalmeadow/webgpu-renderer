@@ -56,10 +56,6 @@ export class Quat {
     return this.copy();
   }
 
-  static identity(): Quat {
-    return new Quat(0, 0, 0, 1);
-  }
-
   static create(x = 0, y = 0, z = 0, w = 1): Quat {
     return new Quat(x, y, z, w);
   }
@@ -469,9 +465,9 @@ export class Quat {
     out?: Quat,
   ): Quat {
     out ??= new Quat();
-    const temp1 = Quat.slerp(a, d, t);
-    const temp2 = Quat.slerp(b, c, t);
-    return Quat.slerp(temp1, temp2, 2 * t * (1 - t), out);
+    Quat.slerp(a, d, t, sqlerp0);
+    Quat.slerp(b, c, t, sqlerp1);
+    return Quat.slerp(sqlerp0, sqlerp1, 2 * t * (1 - t), out);
   }
 
   static equals(a: Quat, b: Quat, epsilon = 0.000001): boolean {
@@ -485,3 +481,6 @@ export class Quat {
 }
 
 const tempVec3 = new Vec3();
+// scratch quats for sqlerp — avoids per-call allocation
+const sqlerp0 = new Quat();
+const sqlerp1 = new Quat();

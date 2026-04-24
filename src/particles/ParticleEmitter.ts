@@ -1,6 +1,6 @@
 import { Entity, EntityType } from "../scene/Entity";
 import { Transform } from "../scene/Transform";
-import { VertexParticle, ParticleInstance, ParticleInstanceGPU } from ".";
+import { VertexParticle, VERTEX_PARTICLE_FLOAT_COUNT, ParticleInstance, ParticleInstanceGPU } from ".";
 import { Vec3 } from "../math";
 import { MaterialParticle } from "../materials";
 
@@ -64,11 +64,11 @@ export class ParticleEmitter extends Entity {
     const indices = VertexParticle.getIndexArray();
 
     const vertexData = new Float32Array(
-      (vertices.length * VertexParticle.vertexSize) / 4,
+      vertices.length * VERTEX_PARTICLE_FLOAT_COUNT,
     );
     for (let i = 0; i < vertices.length; i++) {
       const vertexArray = vertices[i].toArray();
-      vertexData.set(vertexArray, i * 10);
+      vertexData.set(vertexArray, i * VERTEX_PARTICLE_FLOAT_COUNT);
     }
 
     this.vertexBuffer = device.createBuffer({

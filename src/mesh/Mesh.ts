@@ -2,7 +2,7 @@ import { MaterialBase } from "../materials";
 import { MeshUniforms } from "./MeshUniforms";
 import { Entity, EntityType } from "../scene/Entity";
 import { Geometry } from "../geometries";
-import { Mat4 } from "../math";
+import { Mat4, AABBWorld } from "../math";
 import { SkinData } from "../skinning";
 import { InstanceData, DEFAULT_INSTANCE_DATA } from "../scene/InstanceData";
 
@@ -18,6 +18,7 @@ export class Mesh extends Entity {
   public instanceGroupId: string | null = null;
   public instanceData: InstanceData = DEFAULT_INSTANCE_DATA;
   public sortByDepth: boolean = false;
+  public readonly worldAABB: AABBWorld = new AABBWorld();
   private device: GPUDevice;
   private _lastWorldMatrixVersion: number = -1;
 
@@ -36,7 +37,7 @@ export class Mesh extends Entity {
 
   public updateWorldAABB(): void {
     const worldMatrix = this.transform.getWorldMatrix();
-    this.geometry.aabb.updateWorldSpace(worldMatrix);
+    this.worldAABB.update(this.geometry.aabb, worldMatrix);
     this._lastWorldMatrixVersion = this.transform.worldMatrixVersion;
   }
 

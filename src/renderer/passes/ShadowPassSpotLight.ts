@@ -150,17 +150,17 @@ export class ShadowPassSpotLight {
       // Filter visible meshes
       const visibleOpaqueMeshes = opaqueMeshes.filter((mesh) => {
         mesh.updateWorldAABB();
-        return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+        return aabbInFrustum(mesh.worldAABB, frustumPlanes);
       });
 
       const visibleAlphaTestMeshes = alphaTestMeshes.filter((mesh) => {
         mesh.updateWorldAABB();
-        return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+        return aabbInFrustum(mesh.worldAABB, frustumPlanes);
       });
 
       const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
         mesh.updateWorldAABB();
-        return aabbInFrustum(mesh.geometry.aabb, frustumPlanes);
+        return aabbInFrustum(mesh.worldAABB, frustumPlanes);
       });
 
       // Build instance groups

@@ -4,5 +4,6 @@ export * from "./Vec4";
 export * from "./Quat";
 export * from "./Mat4";
 export * from "./AABB";
+export * from "./AABBWorld";
 export * from "./Frustum";
 export * from "./interpolation";

@@ -12,7 +12,7 @@ export function mapRange(
 }
 
 export function lerp(a: number, b: number, t: number): number {
-  return mapRange(t, 0, 1, a, b);
+  return a + t * (b - a);
 }
 
 export function clamp(value: number, min: number, max: number): number {
@@ -24,8 +24,4 @@ export function rateIndependentLerpingFactor(
   deltaTime: number,
 ): number {
   return 1.0 - Math.exp(-decayRate * deltaTime);
-}
-
-export function lerpValue(a: number, b: number, factor: number): number {
-  return a + (b - a) * factor;
 }

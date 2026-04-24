@@ -1,4 +1,4 @@
-import { Vertex } from "./Vertex";
+import { Vertex, VERTEX_FLOAT_COUNT } from "./Vertex";
 import { AABB } from "../math";
 
 export class Geometry {
@@ -9,7 +9,7 @@ export class Geometry {
   public indexBuffer: GPUBuffer;
   public vertexCount: number;
   public indexCount: number;
-  
+
   public aabb: AABB;
 
   constructor(device: GPUDevice, vertices: Vertex[], indices: number[]) {
@@ -20,44 +20,35 @@ export class Geometry {
 
     const vertexData = this.getVertexData();
     this.vertexBuffer = device.createBuffer({
-      label: "geometry-vertex-buffer",
+      label: "Geometry Vertex Buffer",
       size: vertexData.byteLength,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
-    device.queue.writeBuffer(this.vertexBuffer, 0, vertexData.buffer);
+    device.queue.writeBuffer(this.vertexBuffer, 0, vertexData);
 
+    const indexData = new Uint32Array(indices);
     this.indexBuffer = device.createBuffer({
-      label: "geometry-index-buffer",
-      size: new Uint32Array(indices).byteLength,
+      label: "Geometry Index Buffer",
+      size: indexData.byteLength,
       usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
     });
-    device.queue.writeBuffer(this.indexBuffer, 0, new Uint32Array(indices));
+    device.queue.writeBuffer(this.indexBuffer, 0, indexData);
 
     this.aabb = this.computeAABB();
   }
 
   private computeAABB(): AABB {
     const aabb = new AABB();
-    const positions: number[] = [];
-    
     for (const vertex of this.vertices) {
-      positions.push(
-        vertex.position[0],
-        vertex.position[1],
-        vertex.position[2]
-      );
+      aabb.expandByPoint(vertex.position[0], vertex.position[1], vertex.position[2]);
     }
-    
-    aabb.setFromVertices(positions);
     return aabb;
   }
 
-  public getVertexData(): Float32Array {
-    const data = new Float32Array(
-      this.vertices.length * (Vertex.vertexSize / 4),
-    );
+  private getVertexData(): Float32Array<ArrayBuffer> {
+    const data = new Float32Array(this.vertices.length * VERTEX_FLOAT_COUNT) as Float32Array<ArrayBuffer>;
     this.vertices.forEach((v, i) => {
-      data.set(v.toArray(), i * (Vertex.vertexSize / 4));
+      data.set(v.toArray(), i * VERTEX_FLOAT_COUNT);
     });
     return data;
   }

@@ -13,10 +13,6 @@ export class Mat4 {
     this.data[15] = 1;
   }
 
-  static identity(): Mat4 {
-    return new Mat4();
-  }
-
   static create(): Mat4 {
     return new Mat4();
   }
@@ -88,7 +84,7 @@ export class Mat4 {
     return out;
   }
 
-  static invert(m: Mat4, out?: Mat4): Mat4 | null {
+  static invert(m: Mat4, out?: Mat4): Mat4 {
     out ??= new Mat4();
     const a00 = m.data[0],
       a01 = m.data[1],
@@ -122,7 +118,11 @@ export class Mat4 {
 
     let det =
       b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
-    if (!det) return null;
+    if (!det) {
+      console.warn("Mat4.invert: singular matrix, returning identity");
+      out.data.set(m.data);
+      return out;
+    }
     det = 1.0 / det;
 
     out.data[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
@@ -293,13 +293,17 @@ export class Mat4 {
     return out;
   }
 
-  static rotate(m: Mat4, rad: number, axis: Vec3, out?: Mat4): Mat4 | null {
+  static rotate(m: Mat4, rad: number, axis: Vec3, out?: Mat4): Mat4 {
     out ??= new Mat4();
     let x = axis.data[0],
       y = axis.data[1],
       z = axis.data[2];
     let len = Math.sqrt(x * x + y * y + z * z);
-    if (len < 0.000001) return null;
+    if (len < 0.000001) {
+      console.warn("Mat4.rotate: zero-length axis, returning copy");
+      out.data.set(m.data);
+      return out;
+    }
     len = 1 / len;
     x *= len;
     y *= len;

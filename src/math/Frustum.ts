@@ -1,122 +1,111 @@
 import { Vec3 } from "./Vec3";
 import { Mat4 } from "./Mat4";
-import { AABB } from "./AABB";
+import { AABBWorld } from "./AABBWorld";
 
 export class FrustumPlane {
   public normal: Vec3;
-  public d: number;
+  public distance: number;
 
   constructor() {
     this.normal = new Vec3();
-    this.d = 0;
+    this.distance = 0;
   }
 }
+
+// Pre-allocated plane array reused across calls — callers must not hold references between frames.
+const _planes: FrustumPlane[] = Array.from(
+  { length: 6 },
+  () => new FrustumPlane(),
+);
 
 export function frustumPlanesFromMatrix(
   viewProjectionMatrix: Mat4,
+  out: FrustumPlane[] = _planes,
 ): FrustumPlane[] {
-  const planes: FrustumPlane[] = [];
-  for (let i = 0; i < 6; i++) {
-    planes.push(new FrustumPlane());
-  }
-
   const m = viewProjectionMatrix.data;
 
-  // Matrix is stored in column-major order (standard for WebGPU/GLSL).
-  // So we need to read across columns to form rows:
-  // - row0 = [m[0], m[4], m[8], m[12]]  (first row)
-  // - row1 = [m[1], m[5], m[9], m[13]]  (second row)
-  // - row2 = [m[2], m[6], m[10], m[14]] (third row)
-  // - row3 = [m[3], m[7], m[11], m[15]] (fourth row / w row)
-  const row0 = [m[0], m[4], m[8], m[12]];
-  const row1 = [m[1], m[5], m[9], m[13]];
-  const row2 = [m[2], m[6], m[10], m[14]];
-  const row3 = [m[3], m[7], m[11], m[15]];
+  // Matrix stored column-major; read across columns to form rows.
+  // row0 = [m0, m4, m8,  m12]
+  // row1 = [m1, m5, m9,  m13]
+  // row2 = [m2, m6, m10, m14]
+  // row3 = [m3, m7, m11, m15]
+
+  // Each plane: normal = (px,py,pz), distance = p3; normalize by 1/len(normal).
+  let px: number, py: number, pz: number, p3: number, invLen: number;
 
   // Left: row3 + row0
-  let p = [
-    row3[0] + row0[0],
-    row3[1] + row0[1],
-    row3[2] + row0[2],
-    row3[3] + row0[3],
-  ];
-  let len = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-  planes[0].normal.set(p[0] / len, p[1] / len, p[2] / len);
-  planes[0].d = p[3] / len;
+  px = m[3] + m[0];
+  py = m[7] + m[4];
+  pz = m[11] + m[8];
+  p3 = m[15] + m[12];
+  invLen = 1 / Math.sqrt(px * px + py * py + pz * pz);
+  out[0].normal.set(px * invLen, py * invLen, pz * invLen);
+  out[0].distance = p3 * invLen;
 
   // Right: row3 - row0
-  p = [
-    row3[0] - row0[0],
-    row3[1] - row0[1],
-    row3[2] - row0[2],
-    row3[3] - row0[3],
-  ];
-  len = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-  planes[1].normal.set(p[0] / len, p[1] / len, p[2] / len);
-  planes[1].d = p[3] / len;
+  px = m[3] - m[0];
+  py = m[7] - m[4];
+  pz = m[11] - m[8];
+  p3 = m[15] - m[12];
+  invLen = 1 / Math.sqrt(px * px + py * py + pz * pz);
+  out[1].normal.set(px * invLen, py * invLen, pz * invLen);
+  out[1].distance = p3 * invLen;
 
   // Bottom: row3 + row1
-  p = [
-    row3[0] + row1[0],
-    row3[1] + row1[1],
-    row3[2] + row1[2],
-    row3[3] + row1[3],
-  ];
-  len = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-  planes[2].normal.set(p[0] / len, p[1] / len, p[2] / len);
-  planes[2].d = p[3] / len;
+  px = m[3] + m[1];
+  py = m[7] + m[5];
+  pz = m[11] + m[9];
+  p3 = m[15] + m[13];
+  invLen = 1 / Math.sqrt(px * px + py * py + pz * pz);
+  out[2].normal.set(px * invLen, py * invLen, pz * invLen);
+  out[2].distance = p3 * invLen;
 
   // Top: row3 - row1
-  p = [
-    row3[0] - row1[0],
-    row3[1] - row1[1],
-    row3[2] - row1[2],
-    row3[3] - row1[3],
-  ];
-  len = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-  planes[3].normal.set(p[0] / len, p[1] / len, p[2] / len);
-  planes[3].d = p[3] / len;
+  px = m[3] - m[1];
+  py = m[7] - m[5];
+  pz = m[11] - m[9];
+  p3 = m[15] - m[13];
+  invLen = 1 / Math.sqrt(px * px + py * py + pz * pz);
+  out[3].normal.set(px * invLen, py * invLen, pz * invLen);
+  out[3].distance = p3 * invLen;
 
   // Near: row3 + row2
-  p = [
-    row3[0] + row2[0],
-    row3[1] + row2[1],
-    row3[2] + row2[2],
-    row3[3] + row2[3],
-  ];
-  len = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-  planes[4].normal.set(p[0] / len, p[1] / len, p[2] / len);
-  planes[4].d = p[3] / len;
+  px = m[3] + m[2];
+  py = m[7] + m[6];
+  pz = m[11] + m[10];
+  p3 = m[15] + m[14];
+  invLen = 1 / Math.sqrt(px * px + py * py + pz * pz);
+  out[4].normal.set(px * invLen, py * invLen, pz * invLen);
+  out[4].distance = p3 * invLen;
 
   // Far: row3 - row2
-  p = [
-    row3[0] - row2[0],
-    row3[1] - row2[1],
-    row3[2] - row2[2],
-    row3[3] - row2[3],
-  ];
-  len = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-  planes[5].normal.set(p[0] / len, p[1] / len, p[2] / len);
-  planes[5].d = p[3] / len;
+  px = m[3] - m[2];
+  py = m[7] - m[6];
+  pz = m[11] - m[10];
+  p3 = m[15] - m[14];
+  invLen = 1 / Math.sqrt(px * px + py * py + pz * pz);
+  out[5].normal.set(px * invLen, py * invLen, pz * invLen);
+  out[5].distance = p3 * invLen;
 
-  return planes;
+  return out;
 }
 
-export function aabbInFrustum(aabb: AABB, planes: FrustumPlane[]): boolean {
-  const min = aabb.minWS;
-  const max = aabb.maxWS;
-
+export function aabbInFrustum(
+  aabb: AABBWorld,
+  planes: FrustumPlane[],
+): boolean {
   for (let i = 0; i < planes.length; i++) {
     const plane = planes[i];
-    const normal = plane.normal;
+    const nx = plane.normal.data[0];
+    const ny = plane.normal.data[1];
+    const nz = plane.normal.data[2];
 
-    let px = normal.data[0] >= 0 ? max.data[0] : min.data[0];
-    let py = normal.data[1] >= 0 ? max.data[1] : min.data[1];
-    let pz = normal.data[2] >= 0 ? max.data[2] : min.data[2];
+    // P-vertex: corner most in the direction of the plane normal
+    const px = nx >= 0 ? aabb.maxX : aabb.minX;
+    const py = ny >= 0 ? aabb.maxY : aabb.minY;
+    const pz = nz >= 0 ? aabb.maxZ : aabb.minZ;
 
-    const dot =
-      normal.data[0] * px + normal.data[1] * py + normal.data[2] * pz + plane.d;
-    if (dot < 0) {
+    if (nx * px + ny * py + nz * pz + plane.distance < 0) {
       return false;
     }
   }

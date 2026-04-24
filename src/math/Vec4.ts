@@ -111,12 +111,22 @@ export class Vec4 {
       out.data[1] = a.data[1] / len;
       out.data[2] = a.data[2] / len;
       out.data[3] = a.data[3] / len;
+    } else {
+      console.warn("Vec4.normalize: zero-length vector");
+      out.data[0] = a.data[0];
+      out.data[1] = a.data[1];
+      out.data[2] = a.data[2];
+      out.data[3] = a.data[3];
     }
     return out;
   }
 
   static distance(a: Vec4, b: Vec4): number {
-    return Vec4.len(Vec4.sub(a, b));
+    const dx = a.data[0] - b.data[0];
+    const dy = a.data[1] - b.data[1];
+    const dz = a.data[2] - b.data[2];
+    const dw = a.data[3] - b.data[3];
+    return Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
   }
 
   static lerp(a: Vec4, b: Vec4, t: number, out?: Vec4): Vec4 {

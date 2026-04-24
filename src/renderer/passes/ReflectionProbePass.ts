@@ -354,7 +354,8 @@ export class ReflectionProbePass {
       }
 
       // Frustum culling
-      if (aabbInFrustum(mesh.geometry.aabb, frustumPlanes)) {
+      mesh.updateWorldAABB();
+      if (aabbInFrustum(mesh.worldAABB, frustumPlanes)) {
         visibleMeshes.push(mesh);
       }
     }

@@ -14,7 +14,7 @@ export class Transform {
 
   constructor() {
     this.translation = Vec3.create();
-    this.rotation = Quat.identity();
+    this.rotation = Quat.create();
     this.scale = Vec3.create(1, 1, 1);
     this.localMatrix = Mat4.create();
     this.worldMatrix = Mat4.create();
