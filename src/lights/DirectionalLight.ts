@@ -120,15 +120,15 @@ export class DirectionalLight extends Light {
     const dot = Math.abs(Vec3.dot(lightDir, upCandidate));
     const up = dot > 0.9 ? Vec3.create(1, 0, 0) : upCandidate;
 
-    // Camera's local coordinate system (use temp cross to avoid collapse)
+    // Camera's local coordinate system (LH: right = worldUp × forward, up = forward × right)
     const forward = Vec3.normalize(cameraDirection.copy());
-    const tempRight = Vec3.cross(forward, Vec3.create(0, 1, 0));
+    const tempRight = Vec3.cross(Vec3.create(0, 1, 0), forward);
     const len = Vec3.len(tempRight);
     const right =
       len > 0.0001
         ? Vec3.normalize(tempRight)
-        : Vec3.normalize(Vec3.cross(forward, Vec3.create(1, 0, 0)));
-    const cameraUp = Vec3.cross(right, forward);
+        : Vec3.normalize(Vec3.cross(Vec3.create(1, 0, 0), forward));
+    const cameraUp = Vec3.cross(forward, right);
 
     const tanHalfFov = Math.tan(cameraFov / 2);
 

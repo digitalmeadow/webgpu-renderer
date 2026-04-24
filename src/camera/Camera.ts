@@ -1,193 +1,113 @@
-import { Mat4, Vec3 } from "../math";
+import { Mat4 } from "../math";
+import { Entity, EntityType } from "../scene/Entity";
+import { CameraUniforms } from "./CameraUniforms";
 
-const CAMERA_BUFFER_SIZE = 352;
-
-export class CameraUniforms {
-  buffer: GPUBuffer;
-  bindGroup: GPUBindGroup;
-  bindGroupLayout: GPUBindGroupLayout;
-
-  constructor(device: GPUDevice) {
-    this.buffer = device.createBuffer({
-      label: "Camera Uniforms Buffer",
-      size: CAMERA_BUFFER_SIZE,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    this.bindGroupLayout = device.createBindGroupLayout({
-      label: "Camera Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
-
-    this.bindGroup = device.createBindGroup({
-      label: "Camera Bind Group",
-      layout: this.bindGroupLayout,
-      entries: [
-        {
-          binding: 0,
-          resource: { buffer: this.buffer },
-        },
-      ],
-    });
-  }
-
-  update(
-    device: GPUDevice,
-    viewMatrix: Mat4,
-    projectionMatrix: Mat4,
-    viewProjectionMatrix: Mat4,
-    position: Vec3,
-    near: number,
-    far: number,
-  ): void {
-    const viewMatrixInverse = Mat4.create();
-    Mat4.invert(viewMatrix, viewMatrixInverse);
-
-    const projectionMatrixInverse = Mat4.create();
-    Mat4.invert(projectionMatrix, projectionMatrixInverse);
-
-    const pos = new Float32Array([position.x, position.y, position.z, 1]);
-    const nearFar = new Float32Array([near, far]);
-
-    device.queue.writeBuffer(this.buffer, 0, viewMatrix.data as any);
-    device.queue.writeBuffer(this.buffer, 64, projectionMatrix.data as any);
-    device.queue.writeBuffer(
-      this.buffer,
-      128,
-      viewProjectionMatrix.data as any,
-    );
-    device.queue.writeBuffer(this.buffer, 192, viewMatrixInverse.data as any);
-    device.queue.writeBuffer(
-      this.buffer,
-      256,
-      projectionMatrixInverse.data as any,
-    );
-    device.queue.writeBuffer(this.buffer, 320, pos);
-    device.queue.writeBuffer(this.buffer, 336, nearFar);
-  }
-}
-
-export class Camera {
-  public uniforms: CameraUniforms;
-  viewMatrix: Mat4;
-  projectionMatrix: Mat4;
-  viewProjectionMatrix: Mat4;
-
+export interface CameraDesc {
   fov: number;
   aspect: number;
   near: number;
   far: number;
+}
 
-  position: Vec3;
-  target: Vec3;
-  up: Vec3;
+export const DEFAULT_CAMERA_DESC: CameraDesc = {
+  fov: Math.PI / 4,
+  aspect: 16 / 9,
+  near: 0.1,
+  far: 100,
+};
 
-  needsUpdate: boolean = true;
+export class Camera extends Entity {
+  readonly type = EntityType.Camera;
+  readonly uniforms: CameraUniforms;
 
+  private desc: CameraDesc;
+  private viewMatrix: Mat4 = Mat4.create();
+  private projectionMatrix: Mat4 = Mat4.create();
+  private _viewProjectionMatrix: Mat4 = Mat4.create();
+
+  get viewProjectionMatrix(): Mat4 {
+    return this._viewProjectionMatrix;
+  }
+
+  // Desc field accessors — for read-only use by renderer internals
+  get fov(): number {
+    return this.desc.fov;
+  }
+  get aspect(): number {
+    return this.desc.aspect;
+  }
+  get near(): number {
+    return this.desc.near;
+  }
+  get far(): number {
+    return this.desc.far;
+  }
+
+  constructor(device: GPUDevice, name?: string, desc?: Partial<CameraDesc>);
+  constructor(device: GPUDevice, desc?: Partial<CameraDesc>);
   constructor(
     device: GPUDevice,
-    position: Vec3 = Vec3.create(0, 0, -5),
-    target: Vec3 = Vec3.create(0, 0, 0),
-    up: Vec3 = Vec3.create(0, 1, 0),
-    fov: number = Math.PI / 4,
-    aspect: number = 16 / 9,
-    near: number = 0.1,
-    far: number = 100,
+    nameOrDesc?: string | Partial<CameraDesc>,
+    desc?: Partial<CameraDesc>,
   ) {
+    const name = typeof nameOrDesc === "string" ? nameOrDesc : "Camera";
+    const resolvedDesc = typeof nameOrDesc === "object" ? nameOrDesc : desc;
+
+    super(name);
+    this.desc = { ...DEFAULT_CAMERA_DESC, ...resolvedDesc };
     this.uniforms = new CameraUniforms(device);
-    this.position = position;
-    this.target = target;
-    this.up = up;
-
-    this.fov = fov;
-    this.aspect = aspect;
-    this.near = near;
-    this.far = far;
-
-    this.viewMatrix = Mat4.create();
-    this.projectionMatrix = Mat4.create();
-    this.viewProjectionMatrix = Mat4.create();
-
-    this.updateProjection();
-    this.updateView();
+    this.needsUpdate = true;
   }
 
-  update(device: GPUDevice): void {
-    if (!this.needsUpdate) {
-      return;
-    }
-
-    this.updateProjection();
-    this.updateView();
-    this.uniforms.update(
-      device,
-      this.viewMatrix,
-      this.projectionMatrix,
-      this.viewProjectionMatrix,
-      this.position,
-      this.near,
-      this.far,
-    );
-    this.needsUpdate = false;
-  }
-
-  updateProjection(): void {
-    Mat4.perspective(
-      this.fov,
-      this.aspect,
-      this.near,
-      this.far,
-      this.projectionMatrix,
-    );
-  }
-
-  updateView(): void {
-    Mat4.lookAt(this.position, this.target, this.up, this.viewMatrix);
-    Mat4.multiply(
-      this.projectionMatrix,
-      this.viewMatrix,
-      this.viewProjectionMatrix,
-    );
+  updateDesc(partial: Partial<CameraDesc>): void {
+    this.desc = { ...this.desc, ...partial };
+    this.uniforms.markProjectionDirty();
     this.needsUpdate = true;
   }
 
   resize(width: number, height: number): void {
-    this.aspect = width / height;
+    this.updateDesc({ aspect: width / height });
+  }
+
+  update(): void {
+    if (!this.needsUpdate && !this.transform.needsUpdate) return;
+
+    this.transform.updateWorldMatrix();
     this.updateProjection();
     this.updateView();
-    this.needsUpdate = true;
+
+    this.uniforms.update(
+      this.viewMatrix,
+      this.projectionMatrix,
+      this._viewProjectionMatrix,
+      this.transform.getWorldPosition(),
+      this.desc.near,
+      this.desc.far,
+    );
+
+    this.needsUpdate = false;
   }
 
-  markNeedsUpdate(): void {
-    this.needsUpdate = true;
+  private updateProjection(): void {
+    Mat4.perspective(
+      this.desc.fov,
+      this.desc.aspect,
+      this.desc.near,
+      this.desc.far,
+      this.projectionMatrix,
+    );
   }
 
-  getForward(): Vec3 {
-    return Vec3.normalize(Vec3.sub(this.target, this.position));
+  private updateView(): void {
+    Mat4.invert(this.transform.worldMatrix, this.viewMatrix);
+    Mat4.multiply(
+      this.projectionMatrix,
+      this.viewMatrix,
+      this._viewProjectionMatrix,
+    );
   }
 
-  getUp(): Vec3 {
-    const forward = this.getForward();
-    const worldUp = Vec3.create(0, 1, 0);
-
-    // Handle case where forward is nearly parallel to world up
-    const dot = Math.abs(Vec3.dot(forward, worldUp));
-    const tempRight =
-      dot > 0.9
-        ? Vec3.cross(forward, Vec3.create(1, 0, 0))
-        : Vec3.cross(forward, worldUp);
-
-    const right = Vec3.normalize(tempRight);
-    return Vec3.normalize(Vec3.cross(right, forward));
-  }
-
-  getDirection(): Vec3 {
-    return this.getForward();
+  destroy(): void {
+    this.uniforms.destroy();
   }
 }

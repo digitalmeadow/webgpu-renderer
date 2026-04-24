@@ -311,6 +311,7 @@ export class MaterialManager {
       },
       primitive: {
         topology: "triangle-list",
+        frontFace: "cw",
         cullMode: material.doubleSided ? "none" : "back",
       },
       depthStencil: isOpaque
@@ -385,6 +386,7 @@ export class MaterialManager {
       },
       primitive: {
         topology: "triangle-list",
+        frontFace: "cw",
         cullMode: material.doubleSided ? "none" : "back",
       },
       depthStencil: {
@@ -466,6 +468,7 @@ export class MaterialManager {
       },
       primitive: {
         topology: "triangle-list",
+        frontFace: "cw",
         cullMode: material.doubleSided ? "none" : "back",
       },
       depthStencil: isOpaque

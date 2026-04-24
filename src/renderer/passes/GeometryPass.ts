@@ -63,6 +63,7 @@ export class GeometryPass {
       },
       primitive: {
         topology: "triangle-list",
+        frontFace: "cw",
         cullMode: "back",
       },
       depthStencil: {
@@ -87,7 +88,7 @@ export class GeometryPass {
     const instanceGroups = this.instanceGroupManager.buildGroups(
       device,
       allMeshes,
-      camera.position,
+      camera.transform.getWorldPosition(),
     );
 
     const passEncoder = encoder.beginRenderPass({

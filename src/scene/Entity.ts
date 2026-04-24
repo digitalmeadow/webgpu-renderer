@@ -1,6 +1,7 @@
 import { Transform } from "./Transform";
 
 export const EntityType = {
+  Camera: "camera",
   Mesh: "mesh",
   Group: "group",
   ParticleEmitter: "particleEmitter",
@@ -16,7 +17,7 @@ export abstract class Entity {
   name: string;
   transform: Transform;
   enabled: boolean = true;
-  requiresUpdate: boolean = false;
+  needsUpdate: boolean = false;
 
   constructor(name: string = "Entity") {
     this.name = name;

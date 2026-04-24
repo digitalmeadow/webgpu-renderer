@@ -128,6 +128,7 @@ export class Transform {
       up = new Vec3(1, 0, 0);
     }
 
+    // up × direction = right, forming RH-det basis {right, up, dir} required by getRotation
     let right = new Vec3();
     right.data[0] =
       up.data[1] * direction.data[2] - up.data[2] * direction.data[1];
@@ -145,6 +146,7 @@ export class Transform {
       right.data[2] /= rightLen;
     }
 
+    // direction × right = newUp, completing the RH-det orthonormal basis
     const newUp = new Vec3(
       direction.data[1] * right.data[2] - direction.data[2] * right.data[1],
       direction.data[2] * right.data[0] - direction.data[0] * right.data[2],

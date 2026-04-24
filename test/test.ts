@@ -108,16 +108,13 @@ async function main() {
   particleEmitter.transform.setPosition(0, 0.5, 5);
   scene.add(particleEmitter);
 
-  const camera = new Camera(
-    device,
-    Vec3.create(0, 5, 10),
-    Vec3.create(0, 0, 0),
-    undefined,
-    undefined,
-    canvas.clientWidth / canvas.clientHeight,
-    1.0,
-    20.0,
-  );
+  const camera = new Camera(device, {
+    aspect: canvas.clientWidth / canvas.clientHeight,
+    near: 1.0,
+    far: 20.0,
+  });
+  camera.transform.setPosition(0, 5, 10);
+  camera.transform.lookAt(Vec3.create(0, 0, 0));
 
   // Initialize fly controls
   const flyControls = new FlyControls(canvas, camera);

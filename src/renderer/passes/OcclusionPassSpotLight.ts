@@ -82,6 +82,7 @@ export class OcclusionPassSpotLight {
       },
       primitive: {
         topology: "triangle-list",
+        frontFace: "cw",
         cullMode: "back",
       },
       depthStencil: {
@@ -141,17 +142,17 @@ export class OcclusionPassSpotLight {
       const opaqueGroups = this.instanceGroupManager.buildGroups(
         device,
         opaqueMeshes,
-        camera.position,
+        camera.transform.getWorldPosition(),
       );
       const alphaTestGroups = this.instanceGroupManager.buildGroups(
         device,
         alphaTestMeshes,
-        camera.position,
+        camera.transform.getWorldPosition(),
       );
       const transparentGroups = this.instanceGroupManager.buildGroups(
         device,
         transparentMeshes,
-        camera.position,
+        camera.transform.getWorldPosition(),
       );
 
       const encoder = device.createCommandEncoder({

@@ -53,7 +53,7 @@ export class ParticleEmitter extends Entity {
     material?: MaterialParticle,
   ) {
     super(name);
-    this.requiresUpdate = true; // Particles always need per-frame updates
+    this.needsUpdate = true; // Particles always need per-frame updates
     this.device = device;
     this.desc = desc;
     this.maxInstances = maxInstances;

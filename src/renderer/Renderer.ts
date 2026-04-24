@@ -352,7 +352,7 @@ export class Renderer {
 
     for (const camera of this.cameras) {
       camera.resize(this.canvas.width, this.canvas.height);
-      camera.update(this.device);
+      camera.update();
     }
 
     this.recreateRenderTargets();
@@ -362,7 +362,7 @@ export class Renderer {
     this.cameras.add(camera);
     if (this.device) {
       camera.resize(this.canvas.width, this.canvas.height);
-      camera.update(this.device);
+      camera.update();
     }
   }
 
@@ -395,7 +395,7 @@ export class Renderer {
       world.updateWorldMatrices();
     }
 
-    camera.update(this.device);
+    camera.update();
 
     const meshes = this.collectVisibleMeshes(world, camera);
 
@@ -526,8 +526,8 @@ export class Renderer {
       // Update occlusion matrices using frustum-based coverage
       for (const light of occlusionEnabledDirectionalLights) {
         light.updateOcclusionMatrixFromFrustum(
-          camera.position,
-          camera.getForward(),
+          camera.transform.getWorldPosition(),
+          camera.transform.getWorldForward(),
           camera.near,
           camera.far,
           camera.fov,

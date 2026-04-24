@@ -419,7 +419,7 @@ export class LightManager {
     const activeLights = directionalLights.slice(0, this.maxDirectionalLights);
 
     if (activeLights.length > 0) {
-      const cameraDirection = camera.getForward();
+      const cameraDirection = camera.transform.getWorldForward();
 
       for (let i = 0; i < this.maxDirectionalLights; i++) {
         const light = activeLights[i];
@@ -433,7 +433,7 @@ export class LightManager {
           light.direction = light.transform.getForward();
 
           light.updateCascadeMatrices(
-            camera.position,
+            camera.transform.getWorldPosition(),
             cameraDirection,
             camera.near,
             camera.far,

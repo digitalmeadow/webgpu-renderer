@@ -160,7 +160,7 @@ export class ReflectionProbePass {
       const config = CUBE_FACE_CONFIGS[faceIndex];
 
       const camera = cameras[faceIndex];
-      camera.update(this.device);
+      camera.update();
 
       // Collect visible meshes for this face using frustum culling
       const visibleMeshes = this.collectVisibleMeshes(allMeshes, camera, probe);
@@ -281,16 +281,14 @@ export class ReflectionProbePass {
       );
 
       // Create camera with 90 degree FOV and 1:1 aspect ratio
-      const camera = new Camera(
-        this.device,
-        position.clone(),
-        target,
-        config.up.clone(),
-        Math.PI / 2, // 90 degrees
-        1.0, // 1:1 aspect ratio
+      const camera = new Camera(this.device, `ReflectionProbe_Face${i}`, {
+        fov: Math.PI / 2,
+        aspect: 1.0,
         near,
         far,
-      );
+      });
+      camera.transform.setPosition(position.x, position.y, position.z);
+      camera.transform.lookAt(target);
 
       cameras.push(camera);
     }

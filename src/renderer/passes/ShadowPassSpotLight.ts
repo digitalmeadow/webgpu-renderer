@@ -83,6 +83,7 @@ export class ShadowPassSpotLight {
       },
       primitive: {
         topology: "triangle-list",
+        frontFace: "cw",
         cullMode: "back",
       },
       depthStencil: {
@@ -166,17 +167,17 @@ export class ShadowPassSpotLight {
       const opaqueGroups = this.instanceGroupManager.buildGroups(
         device,
         visibleOpaqueMeshes,
-        camera.position,
+        camera.transform.getWorldPosition(),
       );
       const alphaTestGroups = this.instanceGroupManager.buildGroups(
         device,
         visibleAlphaTestMeshes,
-        camera.position,
+        camera.transform.getWorldPosition(),
       );
       const transparentGroups = this.instanceGroupManager.buildGroups(
         device,
         visibleTransparentMeshes,
-        camera.position,
+        camera.transform.getWorldPosition(),
       );
 
       const encoder = device.createCommandEncoder({

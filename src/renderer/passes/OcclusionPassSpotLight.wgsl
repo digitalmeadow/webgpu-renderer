@@ -73,7 +73,7 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
         safe_forward = normalize(safe_forward);
     }
 
-    let right = normalize(cross(safe_forward, axisVec));
+    let right = normalize(cross(axisVec, safe_forward));
     let up = axisVec;
     let billboard_forward = safe_forward;
 

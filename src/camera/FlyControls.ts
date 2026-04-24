@@ -1,8 +1,9 @@
-import { Vec3 } from "../math";
+import { Quat, Vec3 } from "../math";
+import { Camera } from "./Camera";
 
 export class FlyControls {
   private canvas: HTMLCanvasElement;
-  private camera: any;
+  private camera: Camera;
 
   private keys: Set<string> = new Set();
   private yaw: number = 0;
@@ -16,28 +17,33 @@ export class FlyControls {
   private lastMouseY = 0;
   private readonly sensitivity = 0.005;
 
-  constructor(canvas: HTMLCanvasElement, camera: any) {
+  private static readonly WORLD_UP = new Vec3(0, 1, 0);
+  private static readonly WORLD_RIGHT = new Vec3(1, 0, 0);
+  private static readonly WORLD_FORWARD = new Vec3(0, 0, 1);
+
+  constructor(canvas: HTMLCanvasElement, camera: Camera) {
     this.canvas = canvas;
     this.camera = camera;
 
     this.initKeyboard();
     this.initMouse();
-
     this.updateFromCamera();
   }
 
   private updateFromCamera(): void {
-    const forward = Vec3.sub(this.camera.target, this.camera.position);
+    // Read rotation quat directly — worldMatrix may not be updated yet at construction.
+    const forward = this.camera.transform.getForward();
     const len = Vec3.len(forward);
-    this.yaw = Math.atan2(-forward.x, forward.z);
-    this.pitch = Math.asin(forward.y / len);
+    if (len > 0) {
+      this.yaw = Math.atan2(-forward.x, forward.z);
+      this.pitch = Math.asin(Math.max(-1, Math.min(1, forward.y / len)));
+    }
   }
 
   private initKeyboard(): void {
     window.addEventListener("keydown", (e) => {
       this.keys.add(e.key.toLowerCase());
     });
-
     window.addEventListener("keyup", (e) => {
       this.keys.delete(e.key.toLowerCase());
     });
@@ -66,11 +72,11 @@ export class FlyControls {
     document.addEventListener("mousemove", (e) => {
       if (!this.isDragging) return;
 
-      const deltaX = e.clientX - this.lastMouseX;
-      const deltaY = e.clientY - this.lastMouseY;
+      const dx = e.clientX - this.lastMouseX;
+      const dy = e.clientY - this.lastMouseY;
 
-      this.yaw += deltaX * this.sensitivity;
-      this.pitch -= deltaY * this.sensitivity;
+      this.yaw += dx * this.sensitivity;
+      this.pitch -= dy * this.sensitivity;
       this.pitch = Math.max(
         -Math.PI / 2 + 0.01,
         Math.min(Math.PI / 2 - 0.01, this.pitch),
@@ -79,95 +85,73 @@ export class FlyControls {
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
 
-      // Mark camera as needing update when mouse moves
-      this.camera.markNeedsUpdate();
+      this.camera.needsUpdate = true;
     });
 
     document.addEventListener("mouseup", () => {
       this.isDragging = false;
     });
-
     document.addEventListener("mouseleave", () => {
       this.isDragging = false;
     });
   }
 
   update(deltaTime: number): void {
-    let hasMoved = false;
+    // Build orientation quaternion directly from yaw/pitch — no target point needed.
+    // Yaw rotates around world Y; pitch rotates around local X (applied after yaw).
+    const qYaw = Quat.fromAxisAngle(FlyControls.WORLD_UP, this.yaw);
+    const qPitch = Quat.fromAxisAngle(FlyControls.WORLD_RIGHT, -this.pitch);
+    const q = Quat.multiply(qYaw, qPitch);
 
-    // Calculate forward direction from camera orientation
-    let forward = Vec3.sub(this.camera.target, this.camera.position);
-    Vec3.normalize(forward, forward);
-
-    // Calculate right vector from forward cross world up
-    const worldUp = new Vec3(0, 1, 0);
-    let right = Vec3.cross(forward, worldUp);
-    Vec3.normalize(right, right);
-
-    // Calculate local up from right cross forward
-    let localUp = Vec3.cross(right, forward);
-    Vec3.normalize(localUp, localUp);
+    // Derive movement basis from the combined quaternion.
+    const forward = Vec3.transformQuat(FlyControls.WORLD_FORWARD, q);
+    const right = Vec3.transformQuat(FlyControls.WORLD_RIGHT, q);
+    const up = Vec3.transformQuat(FlyControls.WORLD_UP, q);
 
     const actualSpeed = this.keys.has("shift") ? this.speed * 2 : this.speed;
     const moveSpeed = actualSpeed * deltaTime;
-
     const movement = new Vec3(0, 0, 0);
+    let hasMoved = false;
 
     if (this.keys.has("w")) {
-      movement.x += forward.x * moveSpeed;
-      movement.y += forward.y * moveSpeed;
-      movement.z += forward.z * moveSpeed;
+      Vec3.addScaled(movement, forward, +moveSpeed, movement);
       hasMoved = true;
     }
     if (this.keys.has("s")) {
-      movement.x -= forward.x * moveSpeed;
-      movement.y -= forward.y * moveSpeed;
-      movement.z -= forward.z * moveSpeed;
+      Vec3.addScaled(movement, forward, -moveSpeed, movement);
       hasMoved = true;
     }
     if (this.keys.has("a")) {
-      movement.x -= right.x * moveSpeed;
-      movement.y -= right.y * moveSpeed;
-      movement.z -= right.z * moveSpeed;
+      Vec3.addScaled(movement, right, -moveSpeed, movement);
       hasMoved = true;
     }
     if (this.keys.has("d")) {
-      movement.x += right.x * moveSpeed;
-      movement.y += right.y * moveSpeed;
-      movement.z += right.z * moveSpeed;
+      Vec3.addScaled(movement, right, +moveSpeed, movement);
       hasMoved = true;
     }
     if (this.keys.has("q")) {
-      movement.x -= localUp.x * moveSpeed;
-      movement.y -= localUp.y * moveSpeed;
-      movement.z -= localUp.z * moveSpeed;
+      Vec3.addScaled(movement, up, -moveSpeed, movement);
       hasMoved = true;
     }
     if (this.keys.has("e")) {
-      movement.x += localUp.x * moveSpeed;
-      movement.y += localUp.y * moveSpeed;
-      movement.z += localUp.z * moveSpeed;
+      Vec3.addScaled(movement, up, +moveSpeed, movement);
       hasMoved = true;
     }
 
-    // Apply movement
-    this.camera.position.x += movement.x;
-    this.camera.position.y += movement.y;
-    this.camera.position.z += movement.z;
-
-    // Update target based on yaw/pitch
-    const target = new Vec3(
-      this.camera.position.x - Math.sin(this.yaw) * Math.cos(this.pitch),
-      this.camera.position.y + Math.sin(this.pitch),
-      this.camera.position.z + Math.cos(this.yaw) * Math.cos(this.pitch),
-    );
-
-    this.camera.target.set(target.x, target.y, target.z);
-    this.camera.updateView();
-
-    // Mark camera as needing update only if moved
     if (hasMoved) {
-      this.camera.markNeedsUpdate();
+      const pos = this.camera.transform.translation;
+      this.camera.transform.setPosition(
+        pos.x + movement.x,
+        pos.y + movement.y,
+        pos.z + movement.z,
+      );
+    }
+
+    // Apply orientation directly — bypasses Transform.lookAt entirely.
+    this.camera.transform.setRotationQuat(q.x, q.y, q.z, q.w);
+
+    if (hasMoved) {
+      this.camera.needsUpdate = true;
     }
   }
 

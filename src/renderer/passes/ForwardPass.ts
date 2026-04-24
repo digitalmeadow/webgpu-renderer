@@ -153,7 +153,7 @@ export class ForwardPass {
     const instanceGroups = this.instanceGroupManager.buildGroups(
       this.device,
       meshes,
-      camera.position,
+      camera.transform.getWorldPosition(),
     );
 
     const skyboxTexture = this.sceneUniforms.getSkyboxTexture();
@@ -225,7 +225,7 @@ export class ForwardPass {
 
     // Optionally sort instance groups by distance for transparency
     if (this.sortEnabled) {
-      const cameraPos = camera.position;
+      const cameraPos = camera.transform.getWorldPosition();
       instanceGroups.sort((a, b) => {
         // Use first mesh in group for sorting
         const distA =

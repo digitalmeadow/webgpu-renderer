@@ -716,12 +716,13 @@ export class Mat4 {
 
     out.data[8] = 0;
     out.data[9] = 0;
+    // WebGPU NDC z range is [0,1], not [-1,1] — use reversed formula
     out.data[10] = far * rangeInv;
     out.data[11] = 1;
 
     out.data[12] = 0;
     out.data[13] = 0;
-    out.data[14] = -(near * far) * rangeInv;
+    out.data[14] = -near * far * rangeInv;
     out.data[15] = 0;
 
     return out;
