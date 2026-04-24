@@ -7,6 +7,7 @@ import { Vertex } from "../../geometries";
 import { Vec3 } from "../../math";
 import shader from "./ForwardPass.wgsl?raw";
 import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
+import { createCameraBindGroupLayout } from "../../camera/CameraUniforms";
 
 export class ForwardPass {
   private device: GPUDevice;
@@ -38,16 +39,7 @@ export class ForwardPass {
       code: shader,
     });
 
-    const cameraBindGroupLayout = device.createBindGroupLayout({
-      label: "Forward Pass Camera Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
+    const cameraBindGroupLayout = createCameraBindGroupLayout(device);
 
     this.lightSceneBindGroupLayout = device.createBindGroupLayout({
       label: "Forward Pass Light Scene Bind Group Layout",

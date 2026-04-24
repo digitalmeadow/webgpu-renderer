@@ -1,6 +1,6 @@
 import shader from "./ShadowPassSpotLight.wgsl?raw";
 import { Mesh } from "../../mesh";
-import { SpotLight } from "../../lights";
+import { SpotLight, getSpotLightShadowBindGroupLayout } from "../../lights";
 import { Vertex } from "../../geometries";
 import { MaterialManager } from "../../materials";
 import { frustumPlanesFromMatrix, aabbInFrustum, Vec3 } from "../../math";
@@ -74,7 +74,7 @@ export class ShadowPassSpotLight {
     this.pipeline = this.device.createRenderPipeline({
       label: "Shadow Pass SpotLight Pipeline",
       layout: this.device.createPipelineLayout({
-        bindGroupLayouts: [SpotLight.getShadowBindGroupLayout(this.device)],
+        bindGroupLayouts: [getSpotLightShadowBindGroupLayout(this.device)],
       }),
       vertex: {
         module: shaderModule,
@@ -100,7 +100,7 @@ export class ShadowPassSpotLight {
       label: "Shadow Pass SpotLight Transparent Pipeline",
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [
-          SpotLight.getShadowBindGroupLayout(this.device),
+          getSpotLightShadowBindGroupLayout(this.device),
           this.materialManager.materialBindGroupLayout,
         ],
       }),

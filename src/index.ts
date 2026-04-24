@@ -1,4 +1,5 @@
 export * from "./math";
+export * from "./utils";
 export * from "./time";
 export * from "./uniforms";
 export * from "./lights";

@@ -5,6 +5,27 @@ import { EntityType } from "../scene/Entity";
 export const SHADOW_MAP_CASCADES_COUNT = 3;
 export const DEFAULT_SHADOW_CASCADE_SPLITS = [0.0, 0.33, 0.66, 1.0];
 
+// Module-level cache — layout descriptor is identical for all instances
+let _shadowBindGroupLayout: GPUBindGroupLayout | null = null;
+
+export function getDirectionalLightShadowBindGroupLayout(
+  device: GPUDevice,
+): GPUBindGroupLayout {
+  if (!_shadowBindGroupLayout) {
+    _shadowBindGroupLayout = device.createBindGroupLayout({
+      label: "DirectionalLight Shadow BindGroup Layout",
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
+      ],
+    });
+  }
+  return _shadowBindGroupLayout;
+}
+
 export class DirectionalLight extends Light {
   readonly type = EntityType.LightDirectional;
   public direction: Vec3 = new Vec3(0, -1, -0.5);
@@ -31,11 +52,8 @@ export class DirectionalLight extends Light {
 
   public shadowBuffer: GPUBuffer | null = null;
   public shadowBindGroup: GPUBindGroup | null = null;
-  private shadowBindGroupLayout: GPUBindGroupLayout | null = null;
 
   private _device: GPUDevice | null = null;
-
-  private static defaultShadowBindGroupLayout: GPUBindGroupLayout | null = null;
 
   constructor(name: string) {
     super(name);
@@ -54,25 +72,9 @@ export class DirectionalLight extends Light {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.shadowBindGroupLayout = device.createBindGroupLayout({
-      label: "DirectionalLight Shadow BindGroup Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
-
-    if (!DirectionalLight.defaultShadowBindGroupLayout) {
-      DirectionalLight.defaultShadowBindGroupLayout =
-        this.shadowBindGroupLayout;
-    }
-
     this.shadowBindGroup = device.createBindGroup({
       label: "DirectionalLight Shadow BindGroup",
-      layout: this.shadowBindGroupLayout,
+      layout: getDirectionalLightShadowBindGroupLayout(device),
       entries: [
         {
           binding: 0,
@@ -80,25 +82,6 @@ export class DirectionalLight extends Light {
         },
       ],
     });
-  }
-
-  public static getShadowBindGroupLayout(
-    device: GPUDevice,
-  ): GPUBindGroupLayout {
-    if (!DirectionalLight.defaultShadowBindGroupLayout) {
-      const layout = device.createBindGroupLayout({
-        label: "DirectionalLight Shadow BindGroup Layout",
-        entries: [
-          {
-            binding: 0,
-            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-            buffer: { type: "uniform" },
-          },
-        ],
-      });
-      DirectionalLight.defaultShadowBindGroupLayout = layout;
-    }
-    return DirectionalLight.defaultShadowBindGroupLayout;
   }
 
   public updateCascadeMatrices(

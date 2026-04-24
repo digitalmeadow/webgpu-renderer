@@ -4,6 +4,7 @@ import { VertexParticle } from "../../particles";
 import { ParticleInstanceGPU } from "../../particles";
 import { Texture } from "../../textures";
 import shader from "./ParticlesPass.wgsl?raw";
+import { createCameraBindGroupLayout } from "../../camera/CameraUniforms";
 
 export class ParticlesPass {
   private device: GPUDevice;

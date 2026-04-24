@@ -1,31 +1,38 @@
 import { Mat4, Vec3 } from "../math";
+import { GpuFloats, byteSize, alignVec4 } from "../utils";
 
-// Buffer layout (column-major, std140-compatible):
-//   view                mat4   64b   offset 0
-//   projection          mat4   64b   offset 64
-//   viewProjection      mat4   64b   offset 128
-//   viewInverse         mat4   64b   offset 192
-//   projectionInverse   mat4   64b   offset 256
-//   position            vec4   16b   offset 320
-//   nearFar             vec2    8b   offset 336
-//   padding                     8b   offset 344
-//   total                      352b
-const MAT4_F = 16; // floats per mat4
-const VEC4_F = 4;
-const VEC2_F = 2;
-const PAD_F = 2;
-const TOTAL_F = MAT4_F * 5 + VEC4_F + VEC2_F + PAD_F; // 88 floats = 352 bytes
+const OFFSET_VIEW_MATRIX = 0;
+const OFFSET_PROJECTION_MATRIX = OFFSET_VIEW_MATRIX + GpuFloats.mat4;
+const OFFSET_VIEW_PROJECTION_MATRIX = OFFSET_PROJECTION_MATRIX + GpuFloats.mat4;
+const OFFSET_VIEW_INVERSE_MATRIX =
+  OFFSET_VIEW_PROJECTION_MATRIX + GpuFloats.mat4;
+const OFFSET_PROJECTION_INVERSE_MATRIX =
+  OFFSET_VIEW_INVERSE_MATRIX + GpuFloats.mat4;
+const OFFSET_POSITION = OFFSET_PROJECTION_INVERSE_MATRIX + GpuFloats.mat4;
+const OFFSET_NEAR_FAR = OFFSET_POSITION + GpuFloats.vec4;
 
-// Float-index offsets for staging buffer writes
-const F_VIEW = 0;
-const F_PROJECTION = MAT4_F;
-const F_VIEW_PROJ = MAT4_F * 2;
-const F_VIEW_INV = MAT4_F * 3;
-const F_PROJ_INV = MAT4_F * 4;
-const F_POSITION = MAT4_F * 5;
-const F_NEAR_FAR = F_POSITION + VEC4_F;
+const FLOAT_COUNT = alignVec4(OFFSET_NEAR_FAR + GpuFloats.vec2); // pad to vec4 → 88 floats
+const BUFFER_SIZE = byteSize(FLOAT_COUNT);
 
-const BUFFER_SIZE = TOTAL_F * Float32Array.BYTES_PER_ELEMENT; // 352
+let _cameraBindGroupLayout: GPUBindGroupLayout | null = null;
+
+export function createCameraBindGroupLayout(
+  device: GPUDevice,
+): GPUBindGroupLayout {
+  if (!_cameraBindGroupLayout) {
+    _cameraBindGroupLayout = device.createBindGroupLayout({
+      label: "Camera Bind Group Layout",
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
+      ],
+    });
+  }
+  return _cameraBindGroupLayout;
+}
 
 export class CameraUniforms {
   private device: GPUDevice;
@@ -33,11 +40,9 @@ export class CameraUniforms {
   readonly bindGroup: GPUBindGroup;
   readonly bindGroupLayout: GPUBindGroupLayout;
 
-  // Pre-allocated — avoids per-frame heap allocations
-  private stagingData = new Float32Array(TOTAL_F);
+  private uniformData = new Float32Array(FLOAT_COUNT);
   private viewMatrixInverse: Mat4 = Mat4.create();
   private projectionMatrixInverse: Mat4 = Mat4.create();
-  private projectionDirty: boolean = true;
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -48,26 +53,13 @@ export class CameraUniforms {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.bindGroupLayout = device.createBindGroupLayout({
-      label: "Camera Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
+    this.bindGroupLayout = createCameraBindGroupLayout(device);
 
     this.bindGroup = device.createBindGroup({
       label: "Camera Bind Group",
       layout: this.bindGroupLayout,
       entries: [{ binding: 0, resource: { buffer: this.buffer } }],
     });
-  }
-
-  markProjectionDirty(): void {
-    this.projectionDirty = true;
   }
 
   update(
@@ -78,30 +70,33 @@ export class CameraUniforms {
     near: number,
     far: number,
   ): void {
-    const d = this.stagingData;
-
-    if (this.projectionDirty) {
-      Mat4.invert(projectionMatrix, this.projectionMatrixInverse);
-      this.projectionDirty = false;
-    }
-
+    Mat4.invert(projectionMatrix, this.projectionMatrixInverse);
     Mat4.invert(viewMatrix, this.viewMatrixInverse);
 
-    d.set(viewMatrix.data, F_VIEW);
-    d.set(projectionMatrix.data, F_PROJECTION);
-    d.set(viewProjectionMatrix.data, F_VIEW_PROJ);
-    d.set(this.viewMatrixInverse.data, F_VIEW_INV);
-    d.set(this.projectionMatrixInverse.data, F_PROJ_INV);
+    this.uniformData.set(viewMatrix.data, OFFSET_VIEW_MATRIX);
+    this.uniformData.set(projectionMatrix.data, OFFSET_PROJECTION_MATRIX);
+    this.uniformData.set(
+      viewProjectionMatrix.data,
+      OFFSET_VIEW_PROJECTION_MATRIX,
+    );
+    this.uniformData.set(
+      this.viewMatrixInverse.data,
+      OFFSET_VIEW_INVERSE_MATRIX,
+    );
+    this.uniformData.set(
+      this.projectionMatrixInverse.data,
+      OFFSET_PROJECTION_INVERSE_MATRIX,
+    );
 
-    d[F_POSITION] = position.x;
-    d[F_POSITION + 1] = position.y;
-    d[F_POSITION + 2] = position.z;
-    d[F_POSITION + 3] = 1;
+    this.uniformData[OFFSET_POSITION] = position.x;
+    this.uniformData[OFFSET_POSITION + 1] = position.y;
+    this.uniformData[OFFSET_POSITION + 2] = position.z;
+    this.uniformData[OFFSET_POSITION + 3] = 1;
 
-    d[F_NEAR_FAR] = near;
-    d[F_NEAR_FAR + 1] = far;
+    this.uniformData[OFFSET_NEAR_FAR] = near;
+    this.uniformData[OFFSET_NEAR_FAR + 1] = far;
 
-    this.device.queue.writeBuffer(this.buffer, 0, d.buffer as ArrayBuffer);
+    this.device.queue.writeBuffer(this.buffer, 0, this.uniformData);
   }
 
   destroy(): void {

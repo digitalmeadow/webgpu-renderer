@@ -4,6 +4,27 @@ import { EntityType } from "../scene/Entity";
 
 export const SPOT_SHADOW_MAP_SIZE = 1024;
 
+// Module-level cache — layout descriptor is identical for all instances
+let _shadowBindGroupLayout: GPUBindGroupLayout | null = null;
+
+export function getSpotLightShadowBindGroupLayout(
+  device: GPUDevice,
+): GPUBindGroupLayout {
+  if (!_shadowBindGroupLayout) {
+    _shadowBindGroupLayout = device.createBindGroupLayout({
+      label: "SpotLight Shadow BindGroup Layout",
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
+      ],
+    });
+  }
+  return _shadowBindGroupLayout;
+}
+
 export class SpotLight extends Light {
   readonly type = EntityType.LightSpot;
   public direction: Vec3 = new Vec3(0, -1, 0);
@@ -25,11 +46,8 @@ export class SpotLight extends Light {
 
   public shadowBuffer: GPUBuffer | null = null;
   public shadowBindGroup: GPUBindGroup | null = null;
-  private shadowBindGroupLayout: GPUBindGroupLayout | null = null;
 
   private _device: GPUDevice | null = null;
-
-  private static defaultShadowBindGroupLayout: GPUBindGroupLayout | null = null;
 
   constructor(name: string) {
     super(name);
@@ -44,24 +62,9 @@ export class SpotLight extends Light {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.shadowBindGroupLayout = device.createBindGroupLayout({
-      label: "SpotLight Shadow BindGroup Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
-
-    if (!SpotLight.defaultShadowBindGroupLayout) {
-      SpotLight.defaultShadowBindGroupLayout = this.shadowBindGroupLayout;
-    }
-
     this.shadowBindGroup = device.createBindGroup({
       label: "SpotLight Shadow BindGroup",
-      layout: this.shadowBindGroupLayout,
+      layout: getSpotLightShadowBindGroupLayout(device),
       entries: [
         {
           binding: 0,
@@ -69,25 +72,6 @@ export class SpotLight extends Light {
         },
       ],
     });
-  }
-
-  public static getShadowBindGroupLayout(
-    device: GPUDevice,
-  ): GPUBindGroupLayout {
-    if (!SpotLight.defaultShadowBindGroupLayout) {
-      const layout = device.createBindGroupLayout({
-        label: "SpotLight Shadow BindGroup Layout",
-        entries: [
-          {
-            binding: 0,
-            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-            buffer: { type: "uniform" },
-          },
-        ],
-      });
-      SpotLight.defaultShadowBindGroupLayout = layout;
-    }
-    return SpotLight.defaultShadowBindGroupLayout;
   }
 
   public updateShadowMatrix(): void {

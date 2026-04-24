@@ -25,6 +25,7 @@ import { frustumPlanesFromMatrix, aabbInFrustum } from "../math";
 import { CubeTexture } from "../textures/CubeTexture";
 import { ReflectionProbe } from "../scene/ReflectionProbe";
 import { CubeRenderTarget } from "../textures/CubeRenderTarget";
+import { createCameraBindGroupLayout } from "../camera/CameraUniforms";
 
 export interface TextureSettings {
   mipmapEnabled?: boolean;
@@ -223,16 +224,7 @@ export class Renderer {
       this.renderHeight,
     );
 
-    this.cameraBindGroupLayout = this.device.createBindGroupLayout({
-      label: "Camera Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
+    this.cameraBindGroupLayout = createCameraBindGroupLayout(this.device);
 
     this.geometryPass = new GeometryPass(
       this.device,

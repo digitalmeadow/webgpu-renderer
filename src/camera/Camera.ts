@@ -23,13 +23,9 @@ export class Camera extends Entity {
   private desc: CameraDesc;
   private viewMatrix: Mat4 = Mat4.create();
   private projectionMatrix: Mat4 = Mat4.create();
-  private _viewProjectionMatrix: Mat4 = Mat4.create();
+  public viewProjectionMatrix: Mat4 = Mat4.create();
+  private projectionNeedsUpdate: boolean = true;
 
-  get viewProjectionMatrix(): Mat4 {
-    return this._viewProjectionMatrix;
-  }
-
-  // Desc field accessors — for read-only use by renderer internals
   get fov(): number {
     return this.desc.fov;
   }
@@ -43,25 +39,16 @@ export class Camera extends Entity {
     return this.desc.far;
   }
 
-  constructor(device: GPUDevice, name?: string, desc?: Partial<CameraDesc>);
-  constructor(device: GPUDevice, desc?: Partial<CameraDesc>);
-  constructor(
-    device: GPUDevice,
-    nameOrDesc?: string | Partial<CameraDesc>,
-    desc?: Partial<CameraDesc>,
-  ) {
-    const name = typeof nameOrDesc === "string" ? nameOrDesc : "Camera";
-    const resolvedDesc = typeof nameOrDesc === "object" ? nameOrDesc : desc;
-
+  constructor(device: GPUDevice, name?: string, desc?: Partial<CameraDesc>) {
     super(name);
-    this.desc = { ...DEFAULT_CAMERA_DESC, ...resolvedDesc };
+    this.desc = { ...DEFAULT_CAMERA_DESC, ...desc };
     this.uniforms = new CameraUniforms(device);
     this.needsUpdate = true;
   }
 
   updateDesc(partial: Partial<CameraDesc>): void {
     this.desc = { ...this.desc, ...partial };
-    this.uniforms.markProjectionDirty();
+    this.projectionNeedsUpdate = true;
     this.needsUpdate = true;
   }
 
@@ -72,14 +59,17 @@ export class Camera extends Entity {
   update(): void {
     if (!this.needsUpdate && !this.transform.needsUpdate) return;
 
-    this.transform.updateWorldMatrix();
-    this.updateProjection();
-    this.updateView();
+    if (this.projectionNeedsUpdate) {
+      this.updateProjection();
+      this.projectionNeedsUpdate = false;
+    }
+
+    this.updateViewMatrices();
 
     this.uniforms.update(
       this.viewMatrix,
       this.projectionMatrix,
-      this._viewProjectionMatrix,
+      this.viewProjectionMatrix,
       this.transform.getWorldPosition(),
       this.desc.near,
       this.desc.far,
@@ -98,12 +88,12 @@ export class Camera extends Entity {
     );
   }
 
-  private updateView(): void {
+  private updateViewMatrices(): void {
     Mat4.invert(this.transform.worldMatrix, this.viewMatrix);
     Mat4.multiply(
       this.projectionMatrix,
       this.viewMatrix,
-      this._viewProjectionMatrix,
+      this.viewProjectionMatrix,
     );
   }
 

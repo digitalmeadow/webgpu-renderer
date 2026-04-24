@@ -1,6 +1,21 @@
 import { Mat4 } from "../math";
 import { MAX_JOINTS } from "../skinning";
 
+export function createMeshBindGroupLayout(
+  device: GPUDevice,
+): GPUBindGroupLayout {
+  return device.createBindGroupLayout({
+    label: "Mesh Uniforms Bind Group Layout",
+    entries: [
+      {
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX,
+        buffer: { type: "uniform" },
+      },
+    ],
+  });
+}
+
 export class MeshUniforms {
   buffer: GPUBuffer;
   bindGroup: GPUBindGroup;
@@ -30,16 +45,7 @@ export class MeshUniforms {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.bindGroupLayout = device.createBindGroupLayout({
-      label: "Mesh Uniforms Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
+    this.bindGroupLayout = createMeshBindGroupLayout(device);
 
     this.bindGroup = device.createBindGroup({
       label: "Mesh Uniforms Bind Group",

@@ -6,6 +6,41 @@ const FOG_COLOR_SUN_DEFAULT = new Vec3(252 / 255, 199 / 255, 122 / 255);
 const FOG_EXTINCTION_DEFAULT = new Vec3(0.001, 0.001, 0.001);
 const FOG_INSCATTERING_DEFAULT = new Vec3(0.0015, 0.0015, 0.0015);
 
+export function createSceneBindGroupLayout(
+  device: GPUDevice,
+): GPUBindGroupLayout {
+  return device.createBindGroupLayout({
+    label: "Scene Uniforms Bind Group Layout",
+    entries: [
+      {
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        buffer: { type: "uniform" },
+      },
+      {
+        binding: 1,
+        visibility: GPUShaderStage.FRAGMENT,
+        texture: { viewDimension: "cube" },
+      },
+      {
+        binding: 2,
+        visibility: GPUShaderStage.FRAGMENT,
+        sampler: { type: "filtering" },
+      },
+      {
+        binding: 3,
+        visibility: GPUShaderStage.FRAGMENT,
+        texture: { viewDimension: "cube" },
+      },
+      {
+        binding: 4,
+        visibility: GPUShaderStage.FRAGMENT,
+        sampler: { type: "filtering" },
+      },
+    ],
+  });
+}
+
 export class SceneUniforms {
   public buffer: GPUBuffer;
   public bindGroup: GPUBindGroup;
@@ -58,46 +93,7 @@ export class SceneUniforms {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.bindGroupLayout = device.createBindGroupLayout({
-      label: "Scene Uniforms Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-          buffer: {
-            type: "uniform",
-          },
-        },
-        {
-          binding: 1,
-          visibility: GPUShaderStage.FRAGMENT,
-          texture: {
-            viewDimension: "cube",
-          },
-        },
-        {
-          binding: 2,
-          visibility: GPUShaderStage.FRAGMENT,
-          sampler: {
-            type: "filtering",
-          },
-        },
-        {
-          binding: 3,
-          visibility: GPUShaderStage.FRAGMENT,
-          texture: {
-            viewDimension: "cube",
-          },
-        },
-        {
-          binding: 4,
-          visibility: GPUShaderStage.FRAGMENT,
-          sampler: {
-            type: "filtering",
-          },
-        },
-      ],
-    });
+    this.bindGroupLayout = createSceneBindGroupLayout(device);
 
     this.bindGroup = device.createBindGroup({
       label: "Scene Uniforms Bind Group",

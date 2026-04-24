@@ -1,6 +1,10 @@
 import shader from "./ShadowPassDirectionalLight.wgsl?raw";
 import { Mesh } from "../../mesh";
-import { DirectionalLight, SHADOW_MAP_CASCADES_COUNT } from "../../lights";
+import {
+  DirectionalLight,
+  SHADOW_MAP_CASCADES_COUNT,
+  getDirectionalLightShadowBindGroupLayout,
+} from "../../lights";
 import { Vertex } from "../../geometries";
 import { frustumPlanesFromMatrix, aabbInFrustum, Vec3 } from "../../math";
 import { MaterialManager } from "../../materials";
@@ -91,7 +95,7 @@ export class ShadowPassDirectionalLight {
       label: "Shadow Pass Pipeline",
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [
-          DirectionalLight.getShadowBindGroupLayout(this.device),
+          getDirectionalLightShadowBindGroupLayout(this.device),
         ],
       }),
       vertex: {
@@ -119,7 +123,7 @@ export class ShadowPassDirectionalLight {
       label: "Shadow Pass Transparent Pipeline",
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [
-          DirectionalLight.getShadowBindGroupLayout(this.device),
+          getDirectionalLightShadowBindGroupLayout(this.device),
           this.materialManager.materialBindGroupLayout,
         ],
       }),

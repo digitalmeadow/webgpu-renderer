@@ -1,6 +1,9 @@
 import shader from "./OcclusionPassDirectionalLight.wgsl?raw";
 import { Mesh } from "../../mesh";
-import { DirectionalLight } from "../../lights";
+import {
+  DirectionalLight,
+  getDirectionalLightShadowBindGroupLayout,
+} from "../../lights";
 import { Vertex } from "../../geometries";
 import { MaterialManager } from "../../materials";
 import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
@@ -79,7 +82,7 @@ export class OcclusionPassDirectionalLight {
       label: "Occlusion Pass Directional Pipeline",
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [
-          DirectionalLight.getShadowBindGroupLayout(this.device),
+          getDirectionalLightShadowBindGroupLayout(this.device),
         ],
       }),
       vertex: {
@@ -104,7 +107,7 @@ export class OcclusionPassDirectionalLight {
       label: "Occlusion Pass Directional Transparent Pipeline",
       layout: this.device.createPipelineLayout({
         bindGroupLayouts: [
-          DirectionalLight.getShadowBindGroupLayout(this.device),
+          getDirectionalLightShadowBindGroupLayout(this.device),
           this.materialManager.materialBindGroupLayout,
         ],
       }),

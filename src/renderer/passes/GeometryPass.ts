@@ -11,6 +11,7 @@ import {
   MaterialType,
 } from "../../materials";
 import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
+import { createCameraBindGroupLayout } from "../../camera/CameraUniforms";
 
 export class GeometryPass {
   private pipeline: GPURenderPipeline;
@@ -27,16 +28,7 @@ export class GeometryPass {
       code: shader,
     });
 
-    this.cameraBindGroupLayout = device.createBindGroupLayout({
-      label: "Camera Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
+    this.cameraBindGroupLayout = createCameraBindGroupLayout(device);
 
     this.pipeline = device.createRenderPipeline({
       label: "Geometry Pass Pipeline",
