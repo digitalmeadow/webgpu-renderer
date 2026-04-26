@@ -3,6 +3,7 @@ Critique clean up all files
 Simplify and restructure
 
 Go back and knock off TODOs eg: instances mesh skinning
+Explore deduping shared logic, skinning, billboarding between pass shaders
 
 --- Visuals ---
 

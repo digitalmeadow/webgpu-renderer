@@ -6,7 +6,7 @@ import {
   getDirectionalLightShadowBindGroupLayout,
 } from "../../lights";
 import { Vertex } from "../../geometries";
-import { frustumPlanesFromMatrix, aabbInFrustum, Vec3 } from "../../math";
+import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
 import { MaterialManager } from "../../materials";
 import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
 import { Camera } from "../../camera";
@@ -16,6 +16,8 @@ export class ShadowPassDirectionalLight {
   private materialManager: MaterialManager;
   private maxDirectionalLights: number;
   private shadowMapSize: number;
+  private depthBias: number = 5000;
+  private depthBiasSlopeScale: number = 1.5;
   private pipeline!: GPURenderPipeline;
   private transparentPipeline!: GPURenderPipeline;
   private shadowTexture!: GPUTexture;
@@ -29,11 +31,15 @@ export class ShadowPassDirectionalLight {
     materialManager: MaterialManager,
     maxDirectionalLights: number = 1,
     shadowMapSize: number = 2048,
+    depthBias: number = 5000,
+    depthBiasSlopeScale: number = 1.5,
   ) {
     this.device = device;
     this.materialManager = materialManager;
     this.maxDirectionalLights = maxDirectionalLights;
     this.shadowMapSize = shadowMapSize;
+    this.depthBias = depthBias;
+    this.depthBiasSlopeScale = depthBiasSlopeScale;
 
     this.createShadowResources();
     this.createPipelines();
@@ -112,8 +118,8 @@ export class ShadowPassDirectionalLight {
         depthWriteEnabled: true,
         depthCompare: "less-equal",
         format: "depth32float",
-        depthBias: 5000,
-        depthBiasSlopeScale: 1.5,
+        depthBias: this.depthBias,
+        depthBiasSlopeScale: this.depthBiasSlopeScale,
         depthBiasClamp: 0,
       },
     });
@@ -145,8 +151,8 @@ export class ShadowPassDirectionalLight {
         depthWriteEnabled: true,
         depthCompare: "less-equal",
         format: "depth32float",
-        depthBias: 5000,
-        depthBiasSlopeScale: 1.5,
+        depthBias: this.depthBias,
+        depthBiasSlopeScale: this.depthBiasSlopeScale,
         depthBiasClamp: 0,
       },
     });
@@ -166,21 +172,7 @@ export class ShadowPassDirectionalLight {
     camera: Camera,
   ): void {
     this.instanceGroupManager.beginFrame();
-    const opaqueGroups = this.instanceGroupManager.buildGroups(
-      device,
-      opaqueMeshes,
-      camera.transform.getWorldPosition(),
-    );
-    const alphaTestGroups = this.instanceGroupManager.buildGroups(
-      device,
-      alphaTestMeshes,
-      camera.transform.getWorldPosition(),
-    );
-    const transparentGroups = this.instanceGroupManager.buildGroups(
-      device,
-      transparentMeshes,
-      camera.transform.getWorldPosition(),
-    );
+    const cameraPos = camera.transform.getWorldPosition();
 
     for (
       let lightIndex = 0;
@@ -200,10 +192,34 @@ export class ShadowPassDirectionalLight {
           light.viewProjectionMatrices[cascadeIndex],
         );
 
-        // Disable culling for debugging:
-        const visibleOpaqueGroups = opaqueGroups;
-        const visibleAlphaTestGroups = alphaTestGroups;
-        const visibleTransparentGroups = transparentGroups;
+        const visibleOpaqueMeshes = opaqueMeshes.filter((mesh) => {
+          mesh.updateWorldAABB();
+          return aabbInFrustum(mesh.worldAABB, frustumPlanes);
+        });
+        const visibleAlphaTestMeshes = alphaTestMeshes.filter((mesh) => {
+          mesh.updateWorldAABB();
+          return aabbInFrustum(mesh.worldAABB, frustumPlanes);
+        });
+        const visibleTransparentMeshes = transparentMeshes.filter((mesh) => {
+          mesh.updateWorldAABB();
+          return aabbInFrustum(mesh.worldAABB, frustumPlanes);
+        });
+
+        const visibleOpaqueGroups = this.instanceGroupManager.buildGroups(
+          device,
+          visibleOpaqueMeshes,
+          cameraPos,
+        );
+        const visibleAlphaTestGroups = this.instanceGroupManager.buildGroups(
+          device,
+          visibleAlphaTestMeshes,
+          cameraPos,
+        );
+        const visibleTransparentGroups = this.instanceGroupManager.buildGroups(
+          device,
+          visibleTransparentMeshes,
+          cameraPos,
+        );
 
         const textureLayerIndex =
           lightIndex * SHADOW_MAP_CASCADES_COUNT + cascadeIndex;

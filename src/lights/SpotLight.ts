@@ -29,7 +29,7 @@ export class SpotLight extends Light {
   readonly type = EntityType.LightSpot;
   public direction: Vec3 = new Vec3(0, -1, 0);
   public fov: number = 45;
-  public prenumbra: number = 0.0;
+  public penumbra: number = 0.0;
   public aspectRatio: number = 1.0;
   public radius: number = 0.0;
   public near: number = 0.1;
@@ -143,9 +143,9 @@ export class SpotLight extends Light {
     const forward = this.transform.getWorldForward();
     data.set(forward.data, 60);
 
-    // vec4 fov_prenumbra (4 floats) at index 64
-    const fovPrenumbra = new Float32Array([this.fov, this.prenumbra, 0, 0]);
-    data.set(fovPrenumbra, 64);
+    // vec4 fov_penumbra (4 floats) at index 64
+    const fovPenumbra = new Float32Array([this.fov, this.penumbra, 0, 0]);
+    data.set(fovPenumbra, 64);
 
     // vec4 aspect_radius (4 floats) at index 68
     const aspectRadius = new Float32Array([

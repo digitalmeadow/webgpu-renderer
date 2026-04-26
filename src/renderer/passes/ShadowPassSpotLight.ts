@@ -3,7 +3,7 @@ import { Mesh } from "../../mesh";
 import { SpotLight, getSpotLightShadowBindGroupLayout } from "../../lights";
 import { Vertex } from "../../geometries";
 import { MaterialManager } from "../../materials";
-import { frustumPlanesFromMatrix, aabbInFrustum, Vec3 } from "../../math";
+import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
 import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
 import { Camera } from "../../camera";
 
@@ -12,6 +12,8 @@ export class ShadowPassSpotLight {
   private materialManager: MaterialManager;
   private maxSpotLights: number;
   private shadowMapSize: number;
+  private depthBias: number = 5000;
+  private depthBiasSlopeScale: number = 1.5;
   private pipeline!: GPURenderPipeline;
   private transparentPipeline!: GPURenderPipeline;
   private shadowTexture!: GPUTexture;
@@ -25,11 +27,15 @@ export class ShadowPassSpotLight {
     materialManager: MaterialManager,
     maxSpotLights: number = 1,
     shadowMapSize: number = 1024,
+    depthBias: number = 5000,
+    depthBiasSlopeScale: number = 1.5,
   ) {
     this.device = device;
     this.materialManager = materialManager;
     this.maxSpotLights = maxSpotLights;
     this.shadowMapSize = shadowMapSize;
+    this.depthBias = depthBias;
+    this.depthBiasSlopeScale = depthBiasSlopeScale;
 
     this.createShadowResources();
     this.createPipelines();
@@ -90,8 +96,8 @@ export class ShadowPassSpotLight {
         depthWriteEnabled: true,
         depthCompare: "less-equal",
         format: "depth32float",
-        depthBias: 5000,
-        depthBiasSlopeScale: 1.5,
+        depthBias: this.depthBias,
+        depthBiasSlopeScale: this.depthBiasSlopeScale,
         depthBiasClamp: 0,
       },
     });
@@ -122,8 +128,8 @@ export class ShadowPassSpotLight {
         depthWriteEnabled: true,
         depthCompare: "less-equal",
         format: "depth32float",
-        depthBias: 5000,
-        depthBiasSlopeScale: 1.5,
+        depthBias: this.depthBias,
+        depthBiasSlopeScale: this.depthBiasSlopeScale,
         depthBiasClamp: 0,
       },
     });

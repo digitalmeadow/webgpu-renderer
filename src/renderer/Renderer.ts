@@ -51,6 +51,10 @@ export interface RendererOptions {
   textureSettings?: TextureSettings;
   alphaMode?: GPUCanvasAlphaMode;
   occlusionMapSize?: number;
+  shadowDirectionalDepthBias?: number;
+  shadowDirectionalDepthBiasSlopeScale?: number;
+  shadowSpotDepthBias?: number;
+  shadowSpotDepthBiasSlopeScale?: number;
 }
 
 const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
@@ -224,6 +228,8 @@ export class Renderer {
       this.materialManager,
       this.maxDirectionalLights,
       shadowMapSize,
+      options.shadowDirectionalDepthBias,
+      options.shadowDirectionalDepthBiasSlopeScale,
     );
 
     this.shadowPassSpotLight = new ShadowPassSpotLight(
@@ -231,6 +237,8 @@ export class Renderer {
       this.materialManager,
       this.maxSpotLights,
       shadowMapSize,
+      options.shadowSpotDepthBias,
+      options.shadowSpotDepthBiasSlopeScale,
     );
 
     this.occlusionPassDirectionalLight = new OcclusionPassDirectionalLight(

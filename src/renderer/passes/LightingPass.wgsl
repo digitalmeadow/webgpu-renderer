@@ -55,7 +55,7 @@ struct LightSpotUniforms {
     near_far: vec4<f32>,
     color_intensity: vec4<f32>,
     forward: vec4<f32>,
-    fov_prenumbra: vec4<f32>,
+    fov_penumbra: vec4<f32>,
     aspect_radius: vec4<f32>,
 }
 
@@ -590,7 +590,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
             // Light forward direction (should already be light → forward)
             let forward = normalize(light_spot.forward.xyz);
-            let prenumbra_percent = light_spot.fov_prenumbra.y;
+            let penumbra_percent = light_spot.fov_penumbra.y;
 
             // Extract shadow UV from shadow coords (already aspect-correct)
             let proj_correction = 1.0 / shadow_coords.w;
@@ -612,8 +612,8 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             // Blend
             var normalized_dist = mix(rect_factor, radial_dist, radius);
 
-            // Apply prenumbra with smooth falloff
-            let spot_factor = smoothstep(1.0, 1.0 - prenumbra_percent, normalized_dist);
+            // Apply penumbra with smooth falloff
+            let spot_factor = smoothstep(1.0, 1.0 - penumbra_percent, normalized_dist);
 
             // Distance-based falloff using spotlight's frustum
             // shadow_coords.w contains perspective-correct depth where w ≈ -view_z

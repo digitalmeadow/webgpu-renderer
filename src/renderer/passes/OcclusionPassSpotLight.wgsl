@@ -31,7 +31,7 @@ struct LightSpotUniforms {
     near_far: vec4<f32>,
     color_intensity: vec4<f32>,
     forward: vec4<f32>,
-    fov_prenumbra: vec4<f32>,
+    fov_penumbra: vec4<f32>,
     aspect_radius: vec4<f32>,
 }
 

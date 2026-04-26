@@ -81,7 +81,7 @@ struct LightSpotUniforms {
     near_far: vec4<f32>,
     color_intensity: vec4<f32>,
     forward: vec4<f32>,
-    fov_prenumbra: vec4<f32>,
+    fov_penumbra: vec4<f32>,
     aspect_radius: vec4<f32>,
 }
 
@@ -475,7 +475,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             let light_to_frag = light_spot.position.xyz - in.world_position;
             let light_dir = normalize(light_to_frag);
 
-            let prenumbra_percent = light_spot.fov_prenumbra.y;
+            let penumbra_percent = light_spot.fov_penumbra.y;
 
             let proj_correction = 1.0 / shadow_coords.w;
             let shadow_uv = shadow_coords.xy * vec2<f32>(0.5, -0.5) * proj_correction + vec2<f32>(0.5, 0.5);
@@ -490,7 +490,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
             var normalized_dist = mix(rect_factor, radial_dist, radius);
 
-            let spot_factor = smoothstep(1.0, 1.0 - prenumbra_percent, normalized_dist);
+            let spot_factor = smoothstep(1.0, 1.0 - penumbra_percent, normalized_dist);
 
             let light_distance = shadow_coords.w;
             let spot_far = light_spot.near_far.y;

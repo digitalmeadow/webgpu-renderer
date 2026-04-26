@@ -177,7 +177,7 @@ async function main() {
   spot.fov = 40;
   spot.near = 0.5;
   spot.far = 20;
-  spot.prenumbra = 0.3;
+  spot.penumbra = 0.3;
   scene.add(spot);
 
   // Smoke particles

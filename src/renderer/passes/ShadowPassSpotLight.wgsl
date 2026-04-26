@@ -1,5 +1,3 @@
-const MAX_JOINTS: u32 = 64u;
-
 struct MaterialUniforms {
   color: vec4<f32>,
   opacity: f32,
@@ -31,7 +29,7 @@ struct LightSpotUniforms {
     near_far: vec4<f32>,
     color_intensity: vec4<f32>,
     forward: vec4<f32>,
-    fov_prenumbra: vec4<f32>,
+    fov_penumbra: vec4<f32>,
     aspect_radius: vec4<f32>,
 }
 
@@ -132,11 +130,9 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @builtin(frag_depth) f32 {
+fn fs_main(in: VertexOutput) {
     let albedo = textureSample(albedoTexture, nearestSampler, in.uv);
-    if (albedo.a == 0.0) {
+    if (albedo.a < material.alpha_cutoff) {
         discard;
     }
-    // WebGPU ortho matrix produces NDC Z in [0,1] directly
-    return in.position.z / in.position.w;
 }

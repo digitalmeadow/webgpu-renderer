@@ -1,5 +1,3 @@
-const MAX_JOINTS: u32 = 64u;
-
 struct MaterialUniforms {
   color: vec4<f32>,
   opacity: f32,
@@ -128,13 +126,9 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @builtin(frag_depth) f32 {
+fn fs_main(in: VertexOutput) {
     let albedo = textureSample(albedoTexture, nearestSampler, in.uv);
-    if (albedo.a == 0.0) {
+    if (albedo.a < material.alpha_cutoff) {
         discard;
     }
-    // For orthographic projection in WebGPU:
-    // The ortho matrix already maps view-space Z [near, far] to NDC Z [0, 1]
-    // w = 1.0 for ortho, so z/w = z produces correct NDC depth
-    return in.position.z / in.position.w;
 }

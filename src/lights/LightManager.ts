@@ -314,11 +314,11 @@ export class LightManager {
     const forward = light.transform.getWorldForward();
     lightData.set(forward.data, 60);
 
-    // FOV in radians (outer angle), prenumbra as percentage (0-1), unused, unused
+    // FOV in radians (outer angle), penumbra as percentage (0-1), unused, unused
     const fovRad = (light.fov * Math.PI) / 180;
-    const prenumbra = Math.max(0, Math.min(1, light.prenumbra));
-    const fovPrenumbra = new Float32Array([fovRad, prenumbra, 0, 0]);
-    lightData.set(fovPrenumbra, 64);
+    const penumbra = Math.max(0, Math.min(1, light.penumbra));
+    const fovPenumbra = new Float32Array([fovRad, penumbra, 0, 0]);
+    lightData.set(fovPenumbra, 64);
 
     // Aspect ratio, radius, unused, unused
     const aspectRadius = new Float32Array([
@@ -338,7 +338,7 @@ export class LightManager {
     lightData[57] = 1.0;
     lightData[58] = 1.0;
     lightData[59] = 0.0;
-    // Fallback FOV (45 degrees in radians), prenumbra percentage (0-1)
+    // Fallback FOV (45 degrees in radians), penumbra percentage (0-1)
     const defaultFov = (45 * Math.PI) / 180;
     lightData[64] = defaultFov;
     lightData[65] = 0.0;
