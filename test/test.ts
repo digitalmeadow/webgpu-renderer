@@ -29,6 +29,30 @@ const UV_DEBUG_UNIFORMS_HOOK = `fn material_albedo_color() -> vec4<f32> {
   return vec4<f32>(1.0, 1.0, 1.0, 1.0);
 }`;
 
+// Hook showcase sphere — exercises all four ShaderHooks
+
+const HOOK_SHOWCASE_UNIFORMS = `fn stripe(v: f32, freq: f32) -> f32 {
+  return sin(v * freq * 6.28318) * 0.5 + 0.5;
+}`;
+
+const HOOK_SHOWCASE_ALBEDO = `fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
+  let s = stripe(uv.x, 4.0) * stripe(uv.y, 6.0);
+  return vec4<f32>(s * 0.9 + 0.1, 0.3, 0.8 - s * 0.5, 1.0);
+}`;
+
+const HOOK_SHOWCASE_ALBEDO_LOGIC = `fn modify_albedo(color: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
+  let dist = length(uv - vec2<f32>(0.5, 0.5)) * 2.0;
+  let rim = pow(dist, 2.0) * 0.4;
+  return vec4<f32>(color.rgb + rim, color.a);
+}`;
+
+const HOOK_SHOWCASE_VERTEX = `fn vertex_post_process(world_pos: vec3<f32>, uv: vec2<f32>, instance: InstanceInput) -> vec3<f32> {
+  let origin = vec3<f32>(instance.model_matrix_3.x, instance.model_matrix_3.y, instance.model_matrix_3.z);
+  let local_normal = normalize(world_pos - origin);
+  let displacement = sin(world_pos.y * 8.0 + world_pos.x * 4.0) * 0.10;
+  return world_pos + local_normal * displacement;
+}`;
+
 async function main() {
   const canvas = document.getElementById("gpu-canvas") as HTMLCanvasElement;
   if (!canvas) {
@@ -115,6 +139,25 @@ async function main() {
   const uvSphere = new Mesh(device, "uv-sphere", sphereGeo, uvDebugMat);
   uvSphere.transform.setPosition(3.5, 1, 0);
   scene.add(uvSphere);
+
+  // Hook showcase sphere — exercises all four hooks: uniforms, albedo, albedo_logic, vertex_post_process
+  const hookShowcaseMat = new MaterialBasic(device, "hook-showcase", {
+    color: [1, 1, 1, 1],
+    hooks: {
+      uniforms: HOOK_SHOWCASE_UNIFORMS,
+      albedo: HOOK_SHOWCASE_ALBEDO,
+      albedo_logic: HOOK_SHOWCASE_ALBEDO_LOGIC,
+      vertex_post_process: HOOK_SHOWCASE_VERTEX,
+    },
+  });
+  const hookShowcaseSphere = new Mesh(
+    device,
+    "hook-showcase-sphere",
+    sphereGeo,
+    hookShowcaseMat,
+  );
+  hookShowcaseSphere.transform.setPosition(7, 1, 0);
+  scene.add(hookShowcaseSphere);
 
   // Directional light — cascading shadow maps
   const sun = new DirectionalLight("sun");

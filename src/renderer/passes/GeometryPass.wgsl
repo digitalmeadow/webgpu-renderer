@@ -1,5 +1,3 @@
-const MAX_JOINTS: u32 = 64u;
-
 struct MaterialUniforms {
   color: vec4<f32>,           // offset 0-15
   opacity: f32,               // offset 16-19
@@ -31,10 +29,22 @@ fn get_dither_threshold(screen_pos: vec2<f32>) -> f32 {
 
 //--HOOK_PLACEHOLDER_UNIFORMS--//
 
+// Replaceable via ShaderHooks.albedo. Signature must match exactly.
 fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
     return textureSample(albedoTexture, nearestSampler, uv);
 }
 
+// Replaceable via ShaderHooks.albedo_logic. Signature must match exactly.
+fn modify_albedo(color: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
+    return color;
+}
+
+// Replaceable via ShaderHooks.vertex_post_process. Signature must match exactly.
+fn vertex_post_process(world_pos: vec3<f32>, uv: vec2<f32>, instance: InstanceInput) -> vec3<f32> {
+    return world_pos;
+}
+
+// Not replaceable via hooks.
 fn get_emissive(uv: vec2<f32>) -> vec4<f32> {
     let emissive_tex = textureSample(emissiveTexture, linearSampler, uv);
     let emissive_color = emissive_tex.rgb * material.emissive.rgb;
@@ -43,8 +53,6 @@ fn get_emissive(uv: vec2<f32>) -> vec4<f32> {
     let bloom_intensity = max(max(final_emissive.r, final_emissive.g), final_emissive.b);
     return vec4<f32>(final_emissive, bloom_intensity);
 }
-
-//--HOOK_PLACEHOLDER_ALBEDO--//
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -170,10 +178,13 @@ fn vs_main(
         let world_position = model_matrix * vec4<f32>(local_pos, 1.0);
         output.world_position = world_position.xyz;
         output.world_normal = (model_matrix * vec4<f32>(local_normal, 0.0)).xyz;
-        output.world_tangent = (model_matrix * vec4<f32>(tangent.xyz, 0.0));
+        // Preserve tangent.w (handedness); w=0 in the transformed vec4 is intentional (direction, not point)
+        output.world_tangent = vec4<f32>((model_matrix * vec4<f32>(tangent.xyz, 0.0)).xyz, tangent.w);
     }
     
     output.uv_coords = uv;
+
+    output.world_position = vertex_post_process(output.world_position, uv, instance);
 
     let view_position = camera.view_matrix * vec4<f32>(output.world_position, 1.0);
     output.position = camera.projection_matrix * view_position;
@@ -193,7 +204,7 @@ struct GBufferOutput {
 fn fs_main(in: VertexOutput) -> GBufferOutput {
     var output: GBufferOutput;
 
-    let albedo_tex = get_albedo_color(in.uv_coords);
+    let albedo_tex = modify_albedo(get_albedo_color(in.uv_coords), in.uv_coords);
     let base_albedo = albedo_tex.rgb * material.color.rgb;
     let final_alpha = albedo_tex.a * material.opacity;
 

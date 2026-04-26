@@ -21,7 +21,7 @@ export class GeometryPass {
 
   constructor(
     device: GPUDevice,
-    geometryBuffer: GeometryBuffer,
+    _geometryBuffer: GeometryBuffer,
     materialManager: MaterialManager,
   ) {
     const shaderModule = device.createShaderModule({
@@ -66,12 +66,29 @@ export class GeometryPass {
     });
   }
 
+  // Self-contained convenience wrapper used by ReflectionProbePass (opens and
+  // closes its own render pass). The main render loop uses draw() instead so
+  // GBufferPasses can share the same open pass.
   render(
     device: GPUDevice,
     encoder: GPUCommandEncoder,
     geometryBuffer: GeometryBuffer,
-    opaqueMeshes: Mesh[],
-    alphaTestMeshes: Mesh[],
+    meshes: Mesh[],
+    camera: Camera,
+    materialManager: MaterialManager,
+    // External manager lets callers (e.g. ReflectionProbePass) own buffer lifetime.
+    // When provided, beginFrame() is skipped — caller is responsible for cleanup.
+    groupManager?: InstanceGroupManager,
+  ): void {
+    const passEncoder = geometryBuffer.beginRenderPass(encoder);
+    this.draw(device, passEncoder, meshes, camera, materialManager, groupManager);
+    passEncoder.end();
+  }
+
+  draw(
+    device: GPUDevice,
+    passEncoder: GPURenderPassEncoder,
+    meshes: Mesh[],
     camera: Camera,
     materialManager: MaterialManager,
     // External manager lets callers (e.g. ReflectionProbePass) own buffer lifetime.
@@ -82,70 +99,49 @@ export class GeometryPass {
     if (!groupManager) {
       activeManager.beginFrame();
     }
-    const allMeshes = [...opaqueMeshes, ...alphaTestMeshes];
     const instanceGroups = activeManager.buildGroups(
       device,
-      allMeshes,
+      meshes,
       camera.transform.getWorldPosition(),
     );
-
-    const passEncoder = encoder.beginRenderPass({
-      label: "Geometry Pass",
-      colorAttachments: [
-        {
-          view: geometryBuffer.albedoView,
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: "clear",
-          storeOp: "store",
-        },
-        {
-          view: geometryBuffer.normalView,
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: "clear",
-          storeOp: "store",
-        },
-        {
-          view: geometryBuffer.metalRoughnessView,
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: "clear",
-          storeOp: "store",
-        },
-        {
-          view: geometryBuffer.emissiveView,
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: "clear",
-          storeOp: "store",
-        },
-      ],
-      depthStencilAttachment: {
-        view: geometryBuffer.depthView,
-        depthClearValue: 1.0,
-        depthLoadOp: "clear",
-        depthStoreOp: "store",
-      },
-    });
 
     passEncoder.setBindGroup(0, camera.uniforms.bindGroup);
 
     let currentPipeline: GPURenderPipeline | null = null;
 
-    // Render each instance group
     for (const group of instanceGroups) {
       if (!group.instanceBuffer || group.instanceCount === 0) continue;
 
       let pipelineToUse: GPURenderPipeline | null = null;
 
-      // Check if material needs custom pipeline
       if (group.material.type === MaterialType.Custom) {
-        // Custom materials need special handling - skip for now
-        // TODO: Support custom pipelines with instancing
-        pipelineToUse = null;
+        const mat = group.material as MaterialCustom;
+        if (!mat.passes.geometry) continue;
+        pipelineToUse = materialManager.getCustomPipeline(
+          mat,
+          "geometry",
+          this.cameraBindGroupLayout,
+        );
+        if (!pipelineToUse) continue;
+
+        if (pipelineToUse !== currentPipeline) {
+          passEncoder.setPipeline(pipelineToUse);
+          currentPipeline = pipelineToUse;
+        }
+
+        // Custom materials own their bind group at group 1
+        passEncoder.setBindGroup(1, mat.bindGroup);
+        passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
+        passEncoder.setVertexBuffer(1, group.instanceBuffer);
+        passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
+        passEncoder.drawIndexed(group.geometry.indexCount, group.instanceCount);
+        continue;
       } else if (
-        group.material.type === MaterialType.Basic ||
-        (group.material.type === MaterialType.PBR &&
-          (group.material as any).hooks?.albedo)
+        (group.material.type === MaterialType.Basic ||
+          group.material.type === MaterialType.PBR) &&
+        (group.material as MaterialBasic | MaterialPBR).hasHooks
       ) {
-        // Hook/basic materials use their own instanced pipeline (2 bind groups + instance buffer)
+        // Hook materials use their own instanced pipeline (2 bind groups + instance buffer)
         pipelineToUse = materialManager.getGeometryInstancedHookPipeline(
           group.material as MaterialPBR | MaterialBasic,
           this.cameraBindGroupLayout,
@@ -161,23 +157,15 @@ export class GeometryPass {
         currentPipeline = pipelineToUse;
       }
 
-      // Material bind group moved to group 1 (was group 2)
       const materialBindGroup = materialManager.getBindGroup(group.material);
-      if (!materialBindGroup) {
-        continue;
-      }
+      if (!materialBindGroup) continue;
 
       passEncoder.setBindGroup(1, materialBindGroup);
 
-      // Set vertex and instance buffers
       passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
       passEncoder.setVertexBuffer(1, group.instanceBuffer);
       passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
-
-      // Draw all instances in one call
       passEncoder.drawIndexed(group.geometry.indexCount, group.instanceCount);
     }
-
-    passEncoder.end();
   }
 }

@@ -416,22 +416,23 @@ export class Renderer {
 
     const commandEncoder = this.device.createCommandEncoder();
 
-    // Geometry Pass (deferred: opaque, mask, dither)
-    const geometryPassMeshes = [...alphaTestMeshes, ...ditherMeshes];
-    this.geometryPass.render(
+    // Single G-buffer render pass shared by GeometryPass and all GBufferPasses —
+    // avoids per-pass tile flushes on tile-based GPUs (Apple Silicon).
+    const gBufferPassEncoder = this.geometryBuffer.beginRenderPass(commandEncoder);
+
+    this.geometryPass.draw(
       this.device,
-      commandEncoder,
-      this.geometryBuffer,
-      opaqueMeshes,
-      geometryPassMeshes,
+      gBufferPassEncoder,
+      [...opaqueMeshes, ...alphaTestMeshes, ...ditherMeshes],
       camera,
       this.materialManager,
     );
 
-    // Extra G-buffer passes (e.g. compute-driven grass, GPU particles)
     for (const pass of this.gBufferPasses) {
-      pass.render(commandEncoder, this.geometryBuffer, camera, time);
+      pass.render(gBufferPassEncoder, camera, time);
     }
+
+    gBufferPassEncoder.end();
 
     this.lightManager.update(directionalLights, camera);
     if (spotLights.length > 0) {
@@ -538,7 +539,7 @@ export class Renderer {
   }
 
   private renderShadowAndOcclusion(
-    commandEncoder: GPUCommandEncoder,
+    _commandEncoder: GPUCommandEncoder,
     directionalLights: DirectionalLight[],
     spotLights: SpotLight[],
     opaqueMeshes: Mesh[],

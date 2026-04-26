@@ -41,17 +41,12 @@ export function createSphereGeometry(
       const v = r / rings;
 
       vertices.push(
-        new Vertex(
-          [x, y, z, 1],
-          [nx, ny, nz, 0],
-          [tx, ty, tz, 1],
-          [u, v],
-        ),
+        new Vertex([x, y, z, 1], [nx, ny, nz, 0], [tx, ty, tz, 1], [u, v]),
       );
     }
   }
 
-  // Build index buffer: two triangles per quad, wound CW (matching renderer convention)
+  // Build index buffer: two triangles per quad
   const stride = sectors + 1;
   for (let r = 0; r < rings; r++) {
     for (let s = 0; s < sectors; s++) {
@@ -60,9 +55,8 @@ export function createSphereGeometry(
       const c = (r + 1) * stride + s;
       const d = (r + 1) * stride + s + 1;
 
-      // CW winding: top-left triangle then bottom-right triangle
-      indices.push(a, c, b);
-      indices.push(b, c, d);
+      indices.push(a, b, c);
+      indices.push(b, d, c);
     }
   }
 

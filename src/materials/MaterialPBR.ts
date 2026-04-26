@@ -50,4 +50,13 @@ export class MaterialPBR extends MaterialBase {
     this.baseColorFactor = options.baseColorFactor ?? [1, 1, 1, 1];
     this.uniforms = new MaterialUniforms(device, this);
   }
+
+  get hasHooks(): boolean {
+    return !!(
+      this.hooks.uniforms ||
+      this.hooks.albedo ||
+      this.hooks.albedo_logic ||
+      this.hooks.vertex_post_process
+    );
+  }
 }

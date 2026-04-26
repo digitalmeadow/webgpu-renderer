@@ -1,5 +1,5 @@
 import { Mesh } from "../../mesh";
-import { MaterialManager } from "../../materials";
+import { MaterialManager, MaterialBasic, MaterialPBR, MaterialCustom, MaterialType } from "../../materials";
 import { LightManager } from "../../lights/LightManager";
 import { SceneUniforms } from "../../uniforms";
 import { Camera } from "../../camera";
@@ -14,7 +14,8 @@ export class ForwardPass {
   private pipeline: GPURenderPipeline;
   private materialBindGroupLayout: GPUBindGroupLayout;
   private materialManager: MaterialManager;
-  private lightSceneBindGroupLayout: GPUBindGroupLayout;
+  public readonly lightSceneBindGroupLayout: GPUBindGroupLayout;
+  public readonly cameraBindGroupLayout: GPUBindGroupLayout;
   private lightManager: LightManager;
   private sceneUniforms: SceneUniforms;
   private sortEnabled: boolean;
@@ -45,7 +46,7 @@ export class ForwardPass {
       code: shader,
     });
 
-    const cameraBindGroupLayout = createCameraBindGroupLayout(device);
+    this.cameraBindGroupLayout = createCameraBindGroupLayout(device);
 
     this.lightSceneBindGroupLayout = device.createBindGroupLayout({
       label: "Forward Pass Light Scene Bind Group Layout",
@@ -97,7 +98,7 @@ export class ForwardPass {
       label: "Forward Pass Pipeline",
       layout: device.createPipelineLayout({
         bindGroupLayouts: [
-          cameraBindGroupLayout,
+          this.cameraBindGroupLayout,
           this.lightSceneBindGroupLayout,
           this.materialBindGroupLayout,
         ],
@@ -226,40 +227,81 @@ export class ForwardPass {
       },
     });
 
-    passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, camera.uniforms.bindGroup);
-    passEncoder.setBindGroup(1, this.lightSceneBindGroup!);
 
     // Optionally sort instance groups by distance for transparency
     if (this.sortEnabled) {
       const cameraPos = camera.transform.getWorldPosition();
       instanceGroups.sort((a, b) => {
-        // Use first mesh in group for sorting
         const distA =
           a.meshes.length > 0
-            ? Vec3.distanceSquared(
-                a.meshes[0].transform.getWorldPosition(),
-                cameraPos,
-              )
+            ? Vec3.distanceSquared(a.meshes[0].transform.getWorldPosition(), cameraPos)
             : 0;
         const distB =
           b.meshes.length > 0
-            ? Vec3.distanceSquared(
-                b.meshes[0].transform.getWorldPosition(),
-                cameraPos,
-              )
+            ? Vec3.distanceSquared(b.meshes[0].transform.getWorldPosition(), cameraPos)
             : 0;
         return distB - distA;
       });
     }
 
+    let currentPipeline: GPURenderPipeline | null = null;
+    // Tracks whether lightScene is currently bound at group 1
+    let lightSceneAtGroup1 = false;
+
     // Render each instance group
     for (const group of instanceGroups) {
       if (!group.instanceBuffer || group.instanceCount === 0) continue;
 
-      const materialBindGroup = this.materialManager.getBindGroup(
-        group.material,
-      );
+      if (group.material.type === MaterialType.Custom) {
+        const mat = group.material as MaterialCustom;
+        if (!mat.passes.forward) continue;
+        const pipeline = this.materialManager.getCustomPipeline(
+          mat, "forward", this.cameraBindGroupLayout,
+        );
+        if (!pipeline) continue;
+
+        if (pipeline !== currentPipeline) {
+          passEncoder.setPipeline(pipeline);
+          currentPipeline = pipeline;
+        }
+        // Custom material owns group 1
+        passEncoder.setBindGroup(1, mat.bindGroup);
+        lightSceneAtGroup1 = false;
+        passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
+        passEncoder.setVertexBuffer(1, group.instanceBuffer);
+        passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
+        passEncoder.drawIndexed(group.geometry.indexCount, group.instanceCount);
+        continue;
+      }
+
+      // Hook or default material — lightScene at group 1, material at group 2
+      let pipeline: GPURenderPipeline;
+      if (
+        (group.material.type === MaterialType.Basic || group.material.type === MaterialType.PBR) &&
+        (group.material as MaterialBasic | MaterialPBR).hasHooks
+      ) {
+        pipeline = this.materialManager.getForwardInstancedHookPipeline(
+          group.material as MaterialBasic | MaterialPBR,
+          this.cameraBindGroupLayout,
+          this.lightSceneBindGroupLayout,
+        ) ?? this.pipeline;
+      } else {
+        pipeline = this.pipeline;
+      }
+
+      if (pipeline !== currentPipeline) {
+        passEncoder.setPipeline(pipeline);
+        currentPipeline = pipeline;
+      }
+
+      // Re-bind lightScene if a custom material displaced it
+      if (!lightSceneAtGroup1) {
+        passEncoder.setBindGroup(1, this.lightSceneBindGroup!);
+        lightSceneAtGroup1 = true;
+      }
+
+      const materialBindGroup = this.materialManager.getBindGroup(group.material);
       if (!materialBindGroup) continue;
 
       passEncoder.setBindGroup(2, materialBindGroup);

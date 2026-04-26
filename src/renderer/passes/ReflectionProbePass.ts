@@ -226,13 +226,11 @@ export class ReflectionProbePass {
       clearCubeFaceEncoder.end();
 
       // 2. Geometry Pass - render geometry to G-buffer
-      const geometryPassMeshes = [...alphaTestMeshes, ...ditherMeshes];
       this.geometryPass.render(
         this.device,
         encoder,
         geometryBuffer,
-        opaqueMeshes,
-        geometryPassMeshes,
+        [...opaqueMeshes, ...alphaTestMeshes, ...ditherMeshes],
         camera,
         this.materialManager,
         this.instanceGroupManager, // probe owns buffer lifetime across all 6 faces

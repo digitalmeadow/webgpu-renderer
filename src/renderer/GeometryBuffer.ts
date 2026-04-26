@@ -149,6 +149,24 @@ export class GeometryBuffer {
     this.createTextures(device, width, height);
   }
 
+  beginRenderPass(encoder: GPUCommandEncoder): GPURenderPassEncoder {
+    return encoder.beginRenderPass({
+      label: "G-Buffer Pass",
+      colorAttachments: [
+        { view: this.albedoView,         clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" },
+        { view: this.normalView,         clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" },
+        { view: this.metalRoughnessView, clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" },
+        { view: this.emissiveView,       clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" },
+      ],
+      depthStencilAttachment: {
+        view: this.depthView,
+        depthClearValue: 1.0,
+        depthLoadOp: "clear",
+        depthStoreOp: "store",
+      },
+    });
+  }
+
   destroy(): void {
     this.albedoTexture.destroy();
     this.normalTexture.destroy();
