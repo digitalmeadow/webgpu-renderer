@@ -104,12 +104,13 @@ export class Transform {
     return Vec3.transformQuat(forward, this.rotation, out ?? forward);
   }
 
-  lookAt(target: Vec3): this {
+  lookAt(target: Vec3, upHint?: Vec3): this {
     const dir = Vec3.sub(target, this.translation);
     Vec3.normalize(dir, dir);
 
-    let up = new Vec3(0, 1, 0);
-    if (Math.abs(dir.y) > 0.9999) up = new Vec3(1, 0, 0);
+    let up =
+      upHint ??
+      (Math.abs(dir.y) > 0.9999 ? new Vec3(1, 0, 0) : new Vec3(0, 1, 0));
 
     // up × dir = right; dir × right = corrected up
     const right = Vec3.cross(up, dir);

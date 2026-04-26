@@ -5,7 +5,7 @@ export class CubeRenderTarget {
   public gpuTexture: GPUTexture;
   public gpuTextureView: GPUTextureView;
   public gpuSampler: GPUSampler;
-  public faceViews: GPUTextureView[][];  // [face][mip]
+  public faceViews: GPUTextureView[][]; // [face][mip]
   public mipLevelCount: number;
   public resolution: number;
   public depthTexture: GPUTexture;

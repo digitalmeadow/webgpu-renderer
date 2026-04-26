@@ -13,7 +13,7 @@ import { LightManager } from "../../lights/LightManager";
 import { SceneUniforms } from "../../uniforms";
 import { CubeRenderTarget } from "../../textures/CubeRenderTarget";
 import { CubeTexture } from "../../textures/CubeTexture";
-import { EntityType } from "../../scene/Entity";
+import { EntityType, InstanceGroupManager } from "../../scene";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
 
 /**
@@ -40,12 +40,12 @@ import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
  */
 const CUBE_FACE_CONFIGS = [
   {
-    target: Vec3.create(1, 0, 0),
+    target: Vec3.create(-1, 0, 0),
     up: Vec3.create(0, 1, 0),
     name: "+X (right, yellow)",
-  }, // +X (right)
+  }, // +X (right) — camera looks -X in left-handed WebGPU coords
   {
-    target: Vec3.create(-1, 0, 0),
+    target: Vec3.create(1, 0, 0),
     up: Vec3.create(0, 1, 0),
     name: "-X (left, pink)",
   }, // -X (left)
@@ -83,6 +83,14 @@ export class ReflectionProbePass {
   private sceneUniforms: SceneUniforms;
   private cameraBindGroupLayout: GPUBindGroupLayout;
   private skyboxTexture: CubeTexture | null = null;
+  // Owns instance buffer lifetime for probe renders — isolated from the main
+  // frame's GeometryPass manager so main-frame beginFrame() can't destroy
+  // buffers still referenced by a submitted (but not yet GPU-executed) probe encoder.
+  private instanceGroupManager: InstanceGroupManager =
+    new InstanceGroupManager();
+  // Cached per-probe resources — recreated only when probe.resolution changes.
+  private cachedProbeResolution: number = 0;
+  private faceCameras: Camera[] = [];
 
   constructor(
     device: GPUDevice,
@@ -112,7 +120,6 @@ export class ReflectionProbePass {
    * Render the scene from the probe's perspective to all 6 cube faces
    */
   render(probe: ReflectionProbe, world: World): void {
-    // Create or get cube render target
     if (!probe.cubeRenderTarget) {
       probe.cubeRenderTarget = new CubeRenderTarget(
         this.device,
@@ -120,35 +127,61 @@ export class ReflectionProbePass {
       );
     }
 
-    // Create geometry buffer for probe rendering
-    // We create a new one each time to match the probe resolution
-    this.geometryBuffer = new GeometryBuffer(
-      this.device,
-      probe.resolution,
-      probe.resolution,
-    );
-
-    // Create skybox pass for rendering environment background
-    // Always recreate to match the current geometry buffer size
-    this.skyboxPass = new SkyboxPass(
-      this.device,
-      this.cameraBindGroupLayout,
-      this.geometryBuffer,
-    );
-    this.skyboxPass.setSkyboxTexture(this.skyboxTexture);
+    // Recreate resolution-dependent resources only when probe.resolution changes.
+    if (probe.resolution !== this.cachedProbeResolution) {
+      this.geometryBuffer?.destroy();
+      this.geometryBuffer = new GeometryBuffer(
+        this.device,
+        probe.resolution,
+        probe.resolution,
+      );
+      this.skyboxPass = new SkyboxPass(
+        this.device,
+        this.cameraBindGroupLayout,
+        this.geometryBuffer,
+      );
+      this.skyboxPass.setSkyboxTexture(this.skyboxTexture);
+      // Destroy old face cameras before replacing.
+      for (const cam of this.faceCameras) cam.destroy();
+      this.faceCameras = this.createCubeFaceCameras(
+        new Vec3(0, 0, 0), // position updated below
+        probe.near,
+        probe.far,
+      );
+      this.cachedProbeResolution = probe.resolution;
+    }
 
     const cubeRenderTarget = probe.cubeRenderTarget;
     const probePosition = probe.transform.getWorldPosition();
 
-    // Create cameras for each cube face
-    const cameras = this.createCubeFaceCameras(
-      probePosition,
-      probe.near,
-      probe.far,
-    );
+    // Update face camera transforms in-place (probe may have moved).
+    for (let i = 0; i < 6; i++) {
+      const config = CUBE_FACE_CONFIGS[i];
+      const target = Vec3.create(
+        probePosition.x + config.target.x,
+        probePosition.y + config.target.y,
+        probePosition.z + config.target.z,
+      );
+      this.faceCameras[i].transform.setPosition(
+        probePosition.x,
+        probePosition.y,
+        probePosition.z,
+      );
+      this.faceCameras[i].transform.lookAt(target, config.up);
+      this.faceCameras[i].updateDesc({ near: probe.near, far: probe.far });
+      // Face cameras aren't in a scene so world matrices must be updated manually.
+      this.faceCameras[i].transform.updateWorldMatrix();
+    }
+    const cameras = this.faceCameras;
+    // Non-null: always set in the resolution guard block above.
+    const geometryBuffer = this.geometryBuffer!;
 
     // Collect all meshes from the world
     const allMeshes = this.collectMeshes(world);
+
+    // Destroy instance buffers from the previous probe render. By the time
+    // we get here, the GPU has finished executing that prior submission.
+    this.instanceGroupManager.beginFrame();
 
     // Main command encoder for all cube faces
     const encoder = this.device.createCommandEncoder({
@@ -157,8 +190,6 @@ export class ReflectionProbePass {
 
     // Render each cube face
     for (let faceIndex = 0; faceIndex < 6; faceIndex++) {
-      const config = CUBE_FACE_CONFIGS[faceIndex];
-
       const camera = cameras[faceIndex];
       camera.update();
 
@@ -199,11 +230,12 @@ export class ReflectionProbePass {
       this.geometryPass.render(
         this.device,
         encoder,
-        this.geometryBuffer,
+        geometryBuffer,
         opaqueMeshes,
         geometryPassMeshes,
         camera,
         this.materialManager,
+        this.instanceGroupManager, // probe owns buffer lifetime across all 6 faces
       );
 
       const lightingPassEncoder = encoder.beginRenderPass({
@@ -223,7 +255,7 @@ export class ReflectionProbePass {
         .pipeline as GPURenderPipeline;
 
       lightingPassEncoder.setPipeline(lightingPipeline);
-      lightingPassEncoder.setBindGroup(0, this.geometryBuffer.bindGroup);
+      lightingPassEncoder.setBindGroup(0, geometryBuffer.bindGroup);
       lightingPassEncoder.setBindGroup(1, camera.uniforms.bindGroup);
       lightingPassEncoder.setBindGroup(2, this.lightManager.lightingBindGroup);
       // Use probe-specific bind group that excludes custom environment textures
@@ -286,7 +318,7 @@ export class ReflectionProbePass {
         far,
       });
       camera.transform.setPosition(position.x, position.y, position.z);
-      camera.transform.lookAt(target);
+      camera.transform.lookAt(target, config.up);
 
       cameras.push(camera);
     }
@@ -358,8 +390,7 @@ export class ReflectionProbePass {
       }
     }
 
-    // return visibleMeshes;
-    return allMeshes; // For testing, render all meshes without culling
+    return visibleMeshes;
   }
 
   /**

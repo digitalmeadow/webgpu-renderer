@@ -8,8 +8,12 @@ export class Time {
 
   public timeScale = 1;
 
-  public get delta(): number { return this._delta; }
-  public get elapsed(): number { return this._elapsed; }
+  public get delta(): number {
+    return this._delta;
+  }
+  public get elapsed(): number {
+    return this._elapsed;
+  }
 
   update(): void {
     const now = performance.now();

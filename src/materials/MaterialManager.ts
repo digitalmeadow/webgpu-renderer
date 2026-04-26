@@ -30,7 +30,8 @@ export class MaterialManager {
   private cubeTextureCache: Map<string, CubeTexture> = new Map();
   private nearestSampler: GPUSampler;
   private linearSampler: GPUSampler;
-  private bindGroupCache: Map<MaterialBase, GPUBindGroup> = new Map();
+  private bindGroupCache = new WeakMap<MaterialBase, GPUBindGroup>();
+  private bindGroupEnvTextureCache = new WeakMap<MaterialBase, CubeTexture | CubeRenderTarget | null>();
   public readonly materialBindGroupLayout: GPUBindGroupLayout;
   private placeholderNormalTexture: GPUTexture;
   private placeholderMetalRoughnessTexture: GPUTexture;
@@ -400,6 +401,7 @@ export class MaterialManager {
         }
       }
       this.bindGroupCache.delete(material);
+      this.bindGroupEnvTextureCache.delete(material);
     }
   }
 
@@ -460,14 +462,26 @@ export class MaterialManager {
 
   getBindGroup(material: MaterialBase): GPUBindGroup | null {
     if (this.bindGroupCache.has(material)) {
-      return this.bindGroupCache.get(material)!;
+      if (material.type === MaterialType.PBR) {
+        const pbrMat = material as MaterialPBR;
+        if (pbrMat.environmentTexture !== this.bindGroupEnvTextureCache.get(material)) {
+          // env texture changed — evict and rebuild
+          this.bindGroupCache.delete(material);
+        } else {
+          return this.bindGroupCache.get(material)!;
+        }
+      } else {
+        return this.bindGroupCache.get(material)!;
+      }
     }
 
     if (material.type === MaterialType.PBR) {
       const pbrMaterial = material as MaterialPBR;
-      if (!pbrMaterial.albedoTexture) return this.fallbackBindGroup;
-      const albedoView = this.textureCache.get(pbrMaterial.albedoTexture)?.createView();
-      if (!albedoView) return null;
+      // Use placeholder albedo when none is set (still need a per-material bind group for correct environmentTextureId)
+      const albedoView = pbrMaterial.albedoTexture
+        ? this.textureCache.get(pbrMaterial.albedoTexture)?.createView() ?? null
+        : this.placeholderAlbedoTexture.createView();
+      if (!albedoView) return null; // null only when albedoTexture is set but not yet loaded
 
       const normalTexture =
         pbrMaterial.normalTexture && this.textureCache.get(pbrMaterial.normalTexture);
@@ -512,6 +526,7 @@ export class MaterialManager {
       });
 
       this.bindGroupCache.set(material, bindGroup);
+      this.bindGroupEnvTextureCache.set(material, pbrMaterial.environmentTexture);
       return bindGroup;
     } else if (material.type === MaterialType.Basic) {
       const basicMaterial = material as MaterialBasic;

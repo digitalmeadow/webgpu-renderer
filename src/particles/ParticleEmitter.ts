@@ -30,7 +30,9 @@ const MESH_UNIFORMS_BUFFER_SIZE = floatByteSize(MESH_UNIFORMS_FLOAT_COUNT);
 
 // Material uniforms: gradient map settings
 const MATERIAL_UNIFORMS_FLOAT_COUNT = GpuFloats.vec4;
-const MATERIAL_UNIFORMS_BUFFER_SIZE = floatByteSize(MATERIAL_UNIFORMS_FLOAT_COUNT);
+const MATERIAL_UNIFORMS_BUFFER_SIZE = floatByteSize(
+  MATERIAL_UNIFORMS_FLOAT_COUNT,
+);
 
 export class ParticleEmitter extends Entity {
   readonly type = EntityType.ParticleEmitter;

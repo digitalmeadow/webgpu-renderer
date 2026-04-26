@@ -74,10 +74,16 @@ export class GeometryPass {
     alphaTestMeshes: Mesh[],
     camera: Camera,
     materialManager: MaterialManager,
+    // External manager lets callers (e.g. ReflectionProbePass) own buffer lifetime.
+    // When provided, beginFrame() is skipped — caller is responsible for cleanup.
+    groupManager?: InstanceGroupManager,
   ): void {
-    this.instanceGroupManager.beginFrame();
+    const activeManager = groupManager ?? this.instanceGroupManager;
+    if (!groupManager) {
+      activeManager.beginFrame();
+    }
     const allMeshes = [...opaqueMeshes, ...alphaTestMeshes];
-    const instanceGroups = this.instanceGroupManager.buildGroups(
+    const instanceGroups = activeManager.buildGroups(
       device,
       allMeshes,
       camera.transform.getWorldPosition(),

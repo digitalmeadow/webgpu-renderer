@@ -75,12 +75,17 @@ export class GeometryBuffer {
     this.createTextures(device, width, height);
   }
 
-  private createTextures(device: GPUDevice, width: number, height: number): void {
+  private createTextures(
+    device: GPUDevice,
+    width: number,
+    height: number,
+  ): void {
     this.albedoTexture = device.createTexture({
       label: "G-Buffer Albedo Texture",
       size: [width, height],
       format: "rgba8unorm",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.albedoView = this.albedoTexture.createView();
 
@@ -88,7 +93,8 @@ export class GeometryBuffer {
       label: "G-Buffer Normal Texture",
       size: [width, height],
       format: "rgba16float",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.normalView = this.normalTexture.createView();
 
@@ -96,7 +102,8 @@ export class GeometryBuffer {
       label: "G-Buffer Metal/Roughness Texture",
       size: [width, height],
       format: "rgba8unorm",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.metalRoughnessView = this.metalRoughnessTexture.createView();
 
@@ -104,7 +111,8 @@ export class GeometryBuffer {
       label: "G-Buffer Emissive Texture",
       size: [width, height],
       format: "rgba16float",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.emissiveView = this.emissiveTexture.createView();
 
@@ -112,7 +120,8 @@ export class GeometryBuffer {
       label: "G-Buffer Depth Texture",
       size: [width, height],
       format: "depth32float",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.depthView = this.depthTexture.createView();
 
