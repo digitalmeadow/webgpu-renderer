@@ -9,3 +9,4 @@ export { MaterialCustom } from "./MaterialCustom";
 export { MaterialUniforms } from "./MaterialUniforms";
 export { MaterialManager } from "./MaterialManager";
 export { MaterialParticle } from "./MaterialParticle";
+export type { ShaderHooks } from "./ShaderHooks";

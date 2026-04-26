@@ -1,14 +1,7 @@
 import { MaterialBase, MaterialType, AlphaMode } from "./MaterialBase";
 import { Texture, CubeTexture, CubeRenderTarget } from "../textures";
 import { MaterialUniforms } from "./MaterialUniforms";
-
-export interface ShaderHooks {
-  uniforms?: string;
-  albedo?: string;
-  vertex_post_process?: string;
-  albedo_logic?: string;
-  metal_rough_logic?: string;
-}
+import { ShaderHooks } from "./ShaderHooks";
 
 interface MaterialPBROptions {
   albedoTexture?: Texture | null;
@@ -23,6 +16,7 @@ interface MaterialPBROptions {
   emissiveTexture?: Texture | null;
   emissiveFactor?: [number, number, number];
   emissiveIntensity?: number;
+  baseColorFactor?: [number, number, number, number];
 }
 
 export class MaterialPBR extends MaterialBase {
@@ -36,8 +30,8 @@ export class MaterialPBR extends MaterialBase {
   public uniforms: MaterialUniforms;
   baseColorFactor: [number, number, number, number] = [1, 1, 1, 1];
   emissiveTexture: Texture | null = null;
-  emissiveFactor: [number, number, number] = [1, 1, 1];
-  emissiveIntensity: number = 1.0;
+  emissiveFactor: [number, number, number] = [0, 0, 0];
+  emissiveIntensity: number = 0.0;
 
   constructor(
     device: GPUDevice,
@@ -51,8 +45,9 @@ export class MaterialPBR extends MaterialBase {
     this.environmentTexture = options.environmentTexture ?? null;
     this.hooks = options.hooks ?? {};
     this.emissiveTexture = options.emissiveTexture ?? null;
-    this.emissiveFactor = options.emissiveFactor ?? [1, 1, 1];
-    this.emissiveIntensity = options.emissiveIntensity ?? 1.0;
+    this.emissiveFactor = options.emissiveFactor ?? [0, 0, 0];
+    this.emissiveIntensity = options.emissiveIntensity ?? 0.0;
+    this.baseColorFactor = options.baseColorFactor ?? [1, 1, 1, 1];
     this.uniforms = new MaterialUniforms(device, this);
   }
 }

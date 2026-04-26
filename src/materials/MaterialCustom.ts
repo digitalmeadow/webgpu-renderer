@@ -1,17 +1,12 @@
 import { MaterialBase, MaterialType, AlphaMode } from "./MaterialBase";
 import { MaterialUniforms } from "./MaterialUniforms";
 
-interface MaterialCustomUniforms {
-  [key: string]: number | number[];
-}
-
 interface MaterialCustomOptions {
   name: string;
   passes?: {
     geometry?: string;
     forward?: string;
   };
-  uniforms?: MaterialCustomUniforms;
   alphaMode?: AlphaMode;
   alphaCutoff?: number;
   opacity?: number;
@@ -21,13 +16,11 @@ interface MaterialCustomOptions {
 export class MaterialCustom extends MaterialBase {
   readonly type = MaterialType.Custom;
   passes: { geometry?: string; forward?: string } = {};
-  customUniforms: MaterialCustomUniforms = {};
   public uniforms: MaterialUniforms;
 
   constructor(device: GPUDevice, name: string, options: MaterialCustomOptions) {
     super(name, options);
     this.passes = options.passes ?? {};
-    this.customUniforms = options.uniforms ?? {};
     this.specialization.isCustom = true;
     this.uniforms = new MaterialUniforms(device, this);
   }

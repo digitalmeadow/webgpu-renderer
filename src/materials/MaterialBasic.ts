@@ -1,10 +1,14 @@
 import { MaterialBase, MaterialType, AlphaMode } from "./MaterialBase";
 import { MaterialUniforms } from "./MaterialUniforms";
+import { ShaderHooks } from "./ShaderHooks";
 
-export interface ShaderHooks {
-  albedo?: string;
-  uniforms?: string;
-}
+const DEFAULT_ALBEDO_HOOK = `fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
+  return material_albedo_color();
+}`;
+
+const DEFAULT_UNIFORMS_HOOK = `fn material_albedo_color() -> vec4<f32> {
+  return vec4<f32>(material.color.rgb, material.color.a);
+}`;
 
 interface MaterialBasicOptions {
   color?: [number, number, number, number];
@@ -28,20 +32,11 @@ export class MaterialBasic extends MaterialBase {
   ) {
     super(name, options);
     this.color = options.color ?? [1, 1, 1, 1];
-    this.hooks = options.hooks ?? {};
-
-    if (!this.hooks.albedo) {
-      this.hooks.albedo = `fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
-        return material_albedo_color();
-      }`;
-    }
-
-    if (!this.hooks.uniforms) {
-      this.hooks.uniforms = `fn material_albedo_color() -> vec4<f32> { 
-        return vec4<f32>(material.color.rgb, material.color.a); 
-      }`;
-    }
-
+    this.hooks = {
+      albedo: DEFAULT_ALBEDO_HOOK,
+      uniforms: DEFAULT_UNIFORMS_HOOK,
+      ...options.hooks,
+    };
     this.uniforms = new MaterialUniforms(device, this);
   }
 }
