@@ -39,6 +39,7 @@ export class LightManager {
 
   public lightingBindGroupLayout: GPUBindGroupLayout;
   public lightingBindGroup: GPUBindGroup;
+  public lightingBindGroupNeedsUpdate: boolean = true;
 
   public sceneLightBindGroupLayout: GPUBindGroupLayout;
   public sceneLightBindGroup: GPUBindGroup | null = null;
@@ -236,12 +237,16 @@ export class LightManager {
     view: GPUTextureView | null,
     viewArray: GPUTextureView[] | null = null,
   ): void {
+    if (view === this.shadowTextureView && viewArray === this.shadowTextureViewArray) return;
     this.shadowTextureView = view;
     this.shadowTextureViewArray = viewArray;
+    this.lightingBindGroupNeedsUpdate = true;
   }
 
   public setSpotShadowTexture(view: GPUTextureView | null): void {
+    if (view === this.spotShadowTextureView) return;
     this.spotShadowTextureView = view;
+    this.lightingBindGroupNeedsUpdate = true;
   }
 
   public updateSpotLights(spotLights: SpotLight[]): void {
@@ -364,6 +369,8 @@ export class LightManager {
     directionalLights: DirectionalLight[],
     spotLights: SpotLight[],
   ): void {
+    if (!this.lightingBindGroupNeedsUpdate) return;
+
     const activeLights = directionalLights.slice(0, this.maxDirectionalLights);
     const hasAnyShadowedLight = activeLights.some(
       (light) => light.shadowBuffer && this.shadowTextureView,
@@ -413,6 +420,7 @@ export class LightManager {
         },
       ],
     });
+    this.lightingBindGroupNeedsUpdate = false;
   }
 
   public update(directionalLights: DirectionalLight[], camera: Camera): void {

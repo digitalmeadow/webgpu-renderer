@@ -75,7 +75,7 @@ export class GeometryPass {
     camera: Camera,
     materialManager: MaterialManager,
   ): void {
-    // Build instance groups for all meshes
+    this.instanceGroupManager.beginFrame();
     const allMeshes = [...opaqueMeshes, ...alphaTestMeshes];
     const instanceGroups = this.instanceGroupManager.buildGroups(
       device,

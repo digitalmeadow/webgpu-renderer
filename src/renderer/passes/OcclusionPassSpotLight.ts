@@ -135,6 +135,7 @@ export class OcclusionPassSpotLight {
     transparentMeshes: Mesh[] = [],
     camera: Camera,
   ): void {
+    this.instanceGroupManager.beginFrame();
     for (let lightIndex = 0; lightIndex < spotLights.length; lightIndex++) {
       const light = spotLights[lightIndex];
 

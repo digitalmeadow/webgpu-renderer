@@ -65,7 +65,7 @@ export class Scene {
     // Only update entities that require per-frame updates
     for (const entity of this.entities) {
       if (entity.enabled && entity.needsUpdate) {
-        entity.update(deltaTime);
+        entity.update?.(deltaTime);
       }
     }
   }

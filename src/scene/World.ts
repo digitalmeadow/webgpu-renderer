@@ -18,6 +18,7 @@ export class World {
     if (index !== -1) {
       this.scenes.splice(index, 1);
       this._sceneVersion++;
+      this._needsMatrixUpdate = true;
     }
   }
 

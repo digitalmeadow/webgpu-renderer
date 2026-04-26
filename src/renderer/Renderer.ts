@@ -553,9 +553,10 @@ export class Renderer {
 
     this.lightManager.updateLightingBindGroup(directionalLights, spotLights);
 
-    // Update environment texture array for per-material environment maps
-    const envTextures = this.materialManager.getEnvironmentTextures();
-    this.sceneUniforms.setEnvironmentTextures(envTextures);
+    if (this.materialManager.environmentTexturesNeedsUpdate) {
+      this.sceneUniforms.setEnvironmentTextures(this.materialManager.getEnvironmentTextures());
+      this.materialManager.environmentTexturesNeedsUpdate = false;
+    }
 
     // Lighting Pass
     this.lightingPass.render(

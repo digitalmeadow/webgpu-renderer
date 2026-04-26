@@ -1,54 +1,61 @@
 import { Mesh } from "../mesh";
 import { Geometry } from "../geometries";
 import { MaterialBase } from "../materials";
+import { GpuFloats, byteSize, alignVec4 } from "../utils";
 
-export const INSTANCE_STRIDE = 112; // 64 (mat4) + 4 (u32) + 32 (2x vec4) + 12 (padding)
+// Model matrix split into vec4 since WebGPU vertex attributes can't be mat4 — they must be 4 separate vec4 attributes
+const OFFSET_MATRIX_ROW0 = 0;
+const OFFSET_MATRIX_ROW1 = OFFSET_MATRIX_ROW0 + GpuFloats.vec4;
+const OFFSET_MATRIX_ROW2 = OFFSET_MATRIX_ROW1 + GpuFloats.vec4;
+const OFFSET_MATRIX_ROW3 = OFFSET_MATRIX_ROW2 + GpuFloats.vec4;
+
+// Exported for InstanceGroupManager writes and getInstanceBufferLayout
+export const OFFSET_MATRIX = OFFSET_MATRIX_ROW0;
+export const OFFSET_BILLBOARD = OFFSET_MATRIX + GpuFloats.mat4; // uint32, same word size as f32
+export const OFFSET_CUSTOM_DATA0 = OFFSET_BILLBOARD + 1;
+export const OFFSET_CUSTOM_DATA1 = OFFSET_CUSTOM_DATA0 + GpuFloats.vec4;
+
+export const FLOAT_COUNT = alignVec4(OFFSET_CUSTOM_DATA1 + GpuFloats.vec4);
+export const INSTANCE_STRIDE = byteSize(FLOAT_COUNT);
 
 export function getInstanceBufferLayout(): GPUVertexBufferLayout {
   return {
     arrayStride: INSTANCE_STRIDE,
     stepMode: "instance",
     attributes: [
-      // Model matrix row 0
       {
         shaderLocation: 6,
-        offset: 0,
+        offset: byteSize(OFFSET_MATRIX_ROW0),
         format: "float32x4",
       },
-      // Model matrix row 1
       {
         shaderLocation: 7,
-        offset: 16,
+        offset: byteSize(OFFSET_MATRIX_ROW1),
         format: "float32x4",
       },
-      // Model matrix row 2
       {
         shaderLocation: 8,
-        offset: 32,
+        offset: byteSize(OFFSET_MATRIX_ROW2),
         format: "float32x4",
       },
-      // Model matrix row 3
       {
         shaderLocation: 9,
-        offset: 48,
+        offset: byteSize(OFFSET_MATRIX_ROW3),
         format: "float32x4",
       },
-      // Billboard axis
       {
         shaderLocation: 10,
-        offset: 64,
+        offset: byteSize(OFFSET_BILLBOARD),
         format: "uint32",
       },
-      // Custom data 0
       {
         shaderLocation: 11,
-        offset: 68,
+        offset: byteSize(OFFSET_CUSTOM_DATA0),
         format: "float32x4",
       },
-      // Custom data 1
       {
         shaderLocation: 12,
-        offset: 84,
+        offset: byteSize(OFFSET_CUSTOM_DATA1),
         format: "float32x4",
       },
     ],
@@ -61,7 +68,7 @@ export class InstanceGroup {
   geometry: Geometry;
   material: MaterialBase;
   instanceBuffer: GPUBuffer | null = null;
-  instanceBufferData: ArrayBuffer;
+  instanceBufferData: Float32Array<ArrayBuffer> | null = null;
   instanceCount: number = 0;
   sortByDepth: boolean = false;
 
@@ -69,7 +76,6 @@ export class InstanceGroup {
     this.id = id;
     this.geometry = geometry;
     this.material = material;
-    this.instanceBufferData = new ArrayBuffer(0);
   }
 
   addMesh(mesh: Mesh): void {

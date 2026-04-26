@@ -1,51 +1,73 @@
 import { Mesh } from "../mesh";
-import { InstanceGroup, INSTANCE_STRIDE } from "./InstanceGroup";
+import {
+  InstanceGroup,
+  INSTANCE_STRIDE,
+  FLOAT_COUNT,
+  OFFSET_MATRIX,
+  OFFSET_BILLBOARD,
+  OFFSET_CUSTOM_DATA0,
+  OFFSET_CUSTOM_DATA1,
+} from "./InstanceGroup";
 import { Geometry } from "../geometries";
 import { MaterialBase } from "../materials";
 import { Vec3 } from "../math";
 
 export class InstanceGroupManager {
-  private groups: Map<string, InstanceGroup> = new Map();
+  // All groups created since the last beginFrame() — destroyed as a batch next frame
+  private activeGroups: InstanceGroup[] = [];
   private geometryIds: WeakMap<Geometry, number> = new WeakMap();
   private materialIds: WeakMap<MaterialBase, number> = new WeakMap();
   private nextGeometryId = 0;
   private nextMaterialId = 0;
+
+  // Call once at the start of each render() — destroys previous frame's GPU buffers
+  beginFrame(): void {
+    for (const group of this.activeGroups) {
+      group.destroy();
+    }
+    this.activeGroups = [];
+  }
 
   buildGroups(
     device: GPUDevice,
     meshes: Mesh[],
     cameraPosition: Vec3,
   ): InstanceGroup[] {
-    this.groups.clear();
+    const groups = new Map<string, InstanceGroup>();
 
     for (const mesh of meshes) {
       if (!mesh.material) continue;
 
       const key = this.getGroupKey(mesh);
 
-      if (!this.groups.has(key)) {
+      if (!groups.has(key)) {
         const group = new InstanceGroup(key, mesh.geometry, mesh.material);
-        // Inherit sortByDepth from first mesh in group
         group.sortByDepth = mesh.sortByDepth;
-        this.groups.set(key, group);
+        groups.set(key, group);
       }
 
-      this.groups.get(key)!.addMesh(mesh);
+      const group = groups.get(key)!;
+
+      if (mesh.sortByDepth !== group.sortByDepth) {
+        console.warn(`InstanceGroup ${key}: sortByDepth mismatch between meshes`);
+      }
+
+      group.addMesh(mesh);
     }
 
-    // Sort groups that need depth sorting
-    for (const group of this.groups.values()) {
+    for (const group of groups.values()) {
       if (group.sortByDepth) {
         this.sortInstancesByDepth(group, cameraPosition);
       }
     }
 
-    // Update all instance buffers
-    for (const group of this.groups.values()) {
+    for (const group of groups.values()) {
       this.updateInstanceBuffer(device, group);
     }
 
-    return Array.from(this.groups.values());
+    const result = Array.from(groups.values());
+    this.activeGroups.push(...result);
+    return result;
   }
 
   private sortInstancesByDepth(
@@ -53,19 +75,17 @@ export class InstanceGroupManager {
     cameraPosition: Vec3,
   ): void {
     group.meshes.sort((a, b) => {
-      // Get world positions from transforms
       const posA = a.transform.getWorldMatrix();
       const posB = b.transform.getWorldMatrix();
 
-      // Extract position from matrix (column 3: indices 12, 13, 14)
+      // Extract position from matrix column 3
       const worldPosA = new Vec3(posA.data[12], posA.data[13], posA.data[14]);
       const worldPosB = new Vec3(posB.data[12], posB.data[13], posB.data[14]);
 
-      // Calculate squared distances (skip sqrt for performance)
       const distSqA = Vec3.distanceSquared(cameraPosition, worldPosA);
       const distSqB = Vec3.distanceSquared(cameraPosition, worldPosB);
 
-      // Sort descending (furthest first = back-to-front for alpha blending)
+      // Descending — furthest first for back-to-front alpha blending
       return distSqB - distSqA;
     });
   }
@@ -74,12 +94,10 @@ export class InstanceGroupManager {
     const geometryId = this.getGeometryId(mesh.geometry);
     const materialId = this.getMaterialId(mesh.material!);
 
-    // User-specified instance group
     if (mesh.instanceGroupId) {
       return `${mesh.instanceGroupId}_${geometryId}_${materialId}`;
     }
 
-    // Auto-batch by geometry + material
     return `_auto_${geometryId}_${materialId}`;
   }
 
@@ -100,39 +118,30 @@ export class InstanceGroupManager {
   private updateInstanceBuffer(device: GPUDevice, group: InstanceGroup): void {
     const size = group.meshes.length * INSTANCE_STRIDE;
 
-    // Create or resize buffer
-    if (!group.instanceBuffer || group.instanceBuffer.size < size) {
-      group.instanceBuffer?.destroy();
-      group.instanceBuffer = device.createBuffer({
-        label: `Instance Buffer ${group.id}`,
-        size,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-      });
-    }
+    group.instanceBuffer = device.createBuffer({
+      label: `Instance Buffer ${group.id}`,
+      size,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
 
-    group.instanceBufferData = new ArrayBuffer(size);
-    const floatView = new Float32Array(group.instanceBufferData);
-    const uintView = new Uint32Array(group.instanceBufferData);
+    const underlying = new ArrayBuffer(size);
+    group.instanceBufferData = new Float32Array(underlying);
+    const uintView = new Uint32Array(underlying);
 
     for (let i = 0; i < group.meshes.length; i++) {
       const mesh = group.meshes[i];
-      const offset = (i * INSTANCE_STRIDE) / 4; // Offset in 32-bit words
+      const offset = i * FLOAT_COUNT;
 
-      // Model matrix (64 bytes = 16 floats)
       const matrix = mesh.transform.getWorldMatrix();
-      floatView.set(matrix.data, offset);
+      group.instanceBufferData.set(matrix.data, offset + OFFSET_MATRIX);
 
-      // Billboard axis (4 bytes at offset 64)
-      const billboardValue = this.getBillboardValue(mesh.billboard);
-      uintView[offset + 16] = billboardValue;
+      uintView[offset + OFFSET_BILLBOARD] = this.getBillboardValue(mesh.billboard);
 
-      // CustomData0 (16 bytes at offset 68)
       const data0 = mesh.instanceData?.customData0 || [0, 0, 0, 0];
-      floatView.set(data0, offset + 17);
+      group.instanceBufferData.set(data0, offset + OFFSET_CUSTOM_DATA0);
 
-      // CustomData1 (16 bytes at offset 84)
-      const data1 = mesh.instanceData?.customData1 || [1, 1, 1, 1];
-      floatView.set(data1, offset + 21);
+      const data1 = mesh.instanceData?.customData1 || [0, 0, 0, 0];
+      group.instanceBufferData.set(data1, offset + OFFSET_CUSTOM_DATA1);
     }
 
     device.queue.writeBuffer(group.instanceBuffer, 0, group.instanceBufferData);
@@ -147,9 +156,6 @@ export class InstanceGroupManager {
   }
 
   clear(): void {
-    for (const group of this.groups.values()) {
-      group.destroy();
-    }
-    this.groups.clear();
+    this.beginFrame();
   }
 }

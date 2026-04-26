@@ -24,7 +24,7 @@ export abstract class Entity {
     this.transform = new Transform();
   }
 
-  update(deltaTime?: number): void {}
+  update?(deltaTime?: number): void;
 }
 
 export class GroupEntity extends Entity {

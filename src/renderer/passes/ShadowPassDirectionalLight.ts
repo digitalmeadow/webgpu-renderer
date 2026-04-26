@@ -165,7 +165,7 @@ export class ShadowPassDirectionalLight {
     transparentMeshes: Mesh[] = [],
     camera: Camera,
   ): void {
-    // Build instance groups for all mesh types
+    this.instanceGroupManager.beginFrame();
     const opaqueGroups = this.instanceGroupManager.buildGroups(
       device,
       opaqueMeshes,

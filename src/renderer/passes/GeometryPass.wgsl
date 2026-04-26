@@ -66,6 +66,7 @@ struct CameraUniforms {
 }
 
 struct InstanceInput {
+    // Vertex attributes have no mat4 type — split into 4 vec4 and reconstruct in vs_main
     @location(6) model_matrix_0: vec4<f32>,
     @location(7) model_matrix_1: vec4<f32>,
     @location(8) model_matrix_2: vec4<f32>,

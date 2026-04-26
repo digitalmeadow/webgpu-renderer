@@ -5,5 +5,5 @@ export interface InstanceData {
 
 export const DEFAULT_INSTANCE_DATA: InstanceData = {
   customData0: [0, 0, 0, 0],
-  customData1: [1, 1, 1, 1],
+  customData1: [0, 0, 0, 0],
 };

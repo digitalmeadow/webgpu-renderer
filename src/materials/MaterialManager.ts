@@ -45,6 +45,7 @@ export class MaterialManager {
     []; // Index 0 reserved for global skybox
   private environmentTextureMap: Map<CubeTexture | CubeRenderTarget, number> =
     new Map(); // Maps texture to ID
+  public environmentTexturesNeedsUpdate: boolean = false;
 
   private customPipelineCache: Map<MaterialCustom, GPURenderPipeline> =
     new Map();
@@ -792,6 +793,7 @@ export class MaterialManager {
     const newId = this.environmentTextures.length;
     this.environmentTextures.push(envTexture);
     this.environmentTextureMap.set(envTexture, newId);
+    this.environmentTexturesNeedsUpdate = true;
 
     return newId;
   }

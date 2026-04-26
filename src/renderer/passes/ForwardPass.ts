@@ -21,6 +21,12 @@ export class ForwardPass {
   private instanceGroupManager: InstanceGroupManager =
     new InstanceGroupManager();
 
+  private lightSceneBindGroup: GPUBindGroup | null = null;
+  private lastShadowTextureView: GPUTextureView | null = null;
+  private lastSpotShadowTextureView: GPUTextureView | null = null;
+  private lastSkyboxTextureView: GPUTextureView | null = null;
+  private lastSkyboxSampler: GPUSampler | null = null;
+
   constructor(
     device: GPUDevice,
     materialManager: MaterialManager,
@@ -141,7 +147,7 @@ export class ForwardPass {
     outputView: GPUTextureView,
     depthView: GPUTextureView,
   ): void {
-    // Build instance groups
+    this.instanceGroupManager.beginFrame();
     const instanceGroups = this.instanceGroupManager.buildGroups(
       this.device,
       meshes,
@@ -149,52 +155,61 @@ export class ForwardPass {
     );
 
     const skyboxTexture = this.sceneUniforms.getSkyboxTexture();
-    const skyboxTextureView = skyboxTexture?.gpuTextureView;
-    const skyboxSampler = skyboxTexture?.gpuSampler;
+    const skyboxTextureView = skyboxTexture?.gpuTextureView ?? null;
+    const skyboxSampler = skyboxTexture?.gpuSampler ?? null;
+    const shadowView = this.lightManager.shadowTextureView ?? null;
+    const spotShadowView = this.lightManager.spotShadowTextureView ?? null;
 
-    const lightSceneBindGroup = this.device.createBindGroup({
-      label: "Forward Pass Light Scene Bind Group",
-      layout: this.lightSceneBindGroupLayout,
-      entries: [
-        {
-          binding: 0,
-          resource: { buffer: this.sceneUniforms.buffer },
-        },
-        {
-          binding: 1,
-          resource: this.lightManager.shadowSampler,
-        },
-        {
-          binding: 2,
-          resource: { buffer: this.lightManager.lightBuffer },
-        },
-        {
-          binding: 3,
-          resource:
-            this.lightManager.shadowTextureView ||
-            this.lightManager.dummyShadowTextureView,
-        },
-        {
-          binding: 4,
-          resource: { buffer: this.lightManager.spotLightBuffer },
-        },
-        {
-          binding: 5,
-          resource:
-            this.lightManager.spotShadowTextureView ||
-            this.lightManager.dummyShadowTextureView,
-        },
-        {
-          binding: 6,
-          resource:
-            skyboxTextureView || this.sceneUniforms.getPlaceholderTextureView(),
-        },
-        {
-          binding: 7,
-          resource: skyboxSampler || this.sceneUniforms.getPlaceholderSampler(),
-        },
-      ],
-    });
+    if (
+      this.lightSceneBindGroup === null ||
+      this.lastShadowTextureView !== shadowView ||
+      this.lastSpotShadowTextureView !== spotShadowView ||
+      this.lastSkyboxTextureView !== skyboxTextureView ||
+      this.lastSkyboxSampler !== skyboxSampler
+    ) {
+      this.lightSceneBindGroup = this.device.createBindGroup({
+        label: "Forward Pass Light Scene Bind Group",
+        layout: this.lightSceneBindGroupLayout,
+        entries: [
+          {
+            binding: 0,
+            resource: { buffer: this.sceneUniforms.buffer },
+          },
+          {
+            binding: 1,
+            resource: this.lightManager.shadowSampler,
+          },
+          {
+            binding: 2,
+            resource: { buffer: this.lightManager.lightBuffer },
+          },
+          {
+            binding: 3,
+            resource: shadowView || this.lightManager.dummyShadowTextureView,
+          },
+          {
+            binding: 4,
+            resource: { buffer: this.lightManager.spotLightBuffer },
+          },
+          {
+            binding: 5,
+            resource: spotShadowView || this.lightManager.dummyShadowTextureView,
+          },
+          {
+            binding: 6,
+            resource: skyboxTextureView || this.sceneUniforms.getPlaceholderTextureView(),
+          },
+          {
+            binding: 7,
+            resource: skyboxSampler || this.sceneUniforms.getPlaceholderSampler(),
+          },
+        ],
+      });
+      this.lastShadowTextureView = shadowView;
+      this.lastSpotShadowTextureView = spotShadowView;
+      this.lastSkyboxTextureView = skyboxTextureView;
+      this.lastSkyboxSampler = skyboxSampler;
+    }
 
     const passEncoder = encoder.beginRenderPass({
       label: "Forward Pass",
@@ -213,7 +228,7 @@ export class ForwardPass {
 
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setBindGroup(0, camera.uniforms.bindGroup);
-    passEncoder.setBindGroup(1, lightSceneBindGroup);
+    passEncoder.setBindGroup(1, this.lightSceneBindGroup!);
 
     // Optionally sort instance groups by distance for transparency
     if (this.sortEnabled) {

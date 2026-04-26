@@ -16,7 +16,14 @@ export class ParticlesPass {
   private particlesPassBindGroupLayout: GPUBindGroupLayout;
 
   private textureCache: Map<Texture, GPUTexture> = new Map();
+  private textureViewCache: Map<GPUTexture, GPUTextureView> = new Map();
   private placeholderTextureView: GPUTextureView;
+
+  private particlesPassBindGroup: GPUBindGroup | null = null;
+  private emitterBindGroupCache: WeakMap<
+    ParticleEmitter,
+    { meshBG: GPUBindGroup; spriteTexture: Texture | null; gradientTexture: Texture | null }
+  > = new WeakMap();
 
   constructor(device: GPUDevice, cameraBindGroupLayout: GPUBindGroupLayout) {
     this.device = device;
@@ -159,46 +166,41 @@ export class ParticlesPass {
 
     passEncoder.setBindGroup(0, camera.uniforms.bindGroup);
 
+    if (!this.particlesPassBindGroup) {
+      this.particlesPassBindGroup = this.device.createBindGroup({
+        label: "Particles Pass Bind Group",
+        layout: this.particlesPassBindGroupLayout,
+        entries: [{ binding: 0, resource: this.sampler }],
+      });
+    }
+    passEncoder.setBindGroup(2, this.particlesPassBindGroup);
+
     for (const emitter of emitters) {
       if (emitter.instances.length === 0) {
         continue;
       }
 
-      const particlesPassBindGroup = this.device.createBindGroup({
-        label: "Particles Pass Bind Group",
-        layout: this.particlesPassBindGroupLayout,
-        entries: [
-          {
-            binding: 0,
-            resource: this.sampler,
-          },
-        ],
-      });
-      passEncoder.setBindGroup(2, particlesPassBindGroup);
-
-      const meshBindGroup = this.device.createBindGroup({
-        label: "MeshParticle Bind Group",
-        layout: this.meshBindGroupLayout,
-        entries: [
-          {
-            binding: 0,
-            resource: { buffer: emitter.meshUniformsBuffer },
-          },
-          {
-            binding: 1,
-            resource: { buffer: emitter.materialUniformsBuffer },
-          },
-          {
-            binding: 2,
-            resource: this.getTextureView(emitter.material.spriteTexture),
-          },
-          {
-            binding: 3,
-            resource: this.getTextureView(emitter.material.gradientMapTexture),
-          },
-        ],
-      });
-      passEncoder.setBindGroup(1, meshBindGroup);
+      const cached = this.emitterBindGroupCache.get(emitter);
+      const spriteTexture = emitter.material.spriteTexture;
+      const gradientTexture = emitter.material.gradientMapTexture;
+      if (
+        !cached ||
+        cached.spriteTexture !== spriteTexture ||
+        cached.gradientTexture !== gradientTexture
+      ) {
+        const meshBG = this.device.createBindGroup({
+          label: "MeshParticle Bind Group",
+          layout: this.meshBindGroupLayout,
+          entries: [
+            { binding: 0, resource: { buffer: emitter.meshUniformsBuffer } },
+            { binding: 1, resource: { buffer: emitter.materialUniformsBuffer } },
+            { binding: 2, resource: this.getTextureView(spriteTexture) },
+            { binding: 3, resource: this.getTextureView(gradientTexture) },
+          ],
+        });
+        this.emitterBindGroupCache.set(emitter, { meshBG, spriteTexture, gradientTexture });
+      }
+      passEncoder.setBindGroup(1, this.emitterBindGroupCache.get(emitter)!.meshBG);
 
       passEncoder.setVertexBuffer(0, emitter.vertexBuffer);
       passEncoder.setVertexBuffer(1, emitter.instanceBuffer);
@@ -238,7 +240,11 @@ export class ParticlesPass {
       this.textureCache.set(texture, gpuTexture);
     }
 
-    return this.textureCache.get(texture)!.createView();
+    const gpuTexture = this.textureCache.get(texture)!;
+    if (!this.textureViewCache.has(gpuTexture)) {
+      this.textureViewCache.set(gpuTexture, gpuTexture.createView());
+    }
+    return this.textureViewCache.get(gpuTexture)!;
   }
 
   private createPlaceholderTextureView(): GPUTextureView {
