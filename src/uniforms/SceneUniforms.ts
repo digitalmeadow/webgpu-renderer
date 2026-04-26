@@ -1,5 +1,5 @@
 import { Vec3 } from "../math";
-import { GpuFloats, byteSize, alignVec4 } from "../utils";
+import { GpuFloats, floatByteSize, alignVec4 } from "../utils";
 import { CubeTexture, CubeRenderTarget } from "../textures";
 
 const FOG_COLOR_BASE_DEFAULT = new Vec3(72 / 255, 73 / 255, 75 / 255);
@@ -17,7 +17,7 @@ const OFFSET_FOG_SUN_EXPONENT = OFFSET_FOG_INSCATTERING + GpuFloats.vec3; // w o
 const OFFSET_FOG_ENABLED = OFFSET_FOG_INSCATTERING + GpuFloats.vec4; // u32
 
 const FLOAT_COUNT = alignVec4(OFFSET_FOG_ENABLED + GpuFloats.f32); // = 24
-const BUFFER_SIZE = byteSize(FLOAT_COUNT); // = 96
+const BUFFER_SIZE = floatByteSize(FLOAT_COUNT); // = 96
 
 let _layout: GPUBindGroupLayout | null = null;
 
@@ -145,7 +145,7 @@ export class SceneUniforms {
     this.u32Data[0] = this.fogEnabled ? 1 : 0;
     this.device.queue.writeBuffer(
       this.buffer,
-      byteSize(OFFSET_FOG_ENABLED),
+      floatByteSize(OFFSET_FOG_ENABLED),
       this.u32Data,
     );
   }

@@ -1,4 +1,4 @@
-import { GpuFloats, byteSize } from "../utils";
+import { GpuFloats, floatByteSize } from "../utils";
 
 const OFFSET_POSITION  = 0;
 const OFFSET_NORMAL    = OFFSET_POSITION  + GpuFloats.vec4;
@@ -8,7 +8,7 @@ const OFFSET_JOINT_IDX = OFFSET_UV        + GpuFloats.vec2;
 const OFFSET_JOINT_WGT = OFFSET_JOINT_IDX + GpuFloats.vec4;
 
 export const VERTEX_FLOAT_COUNT = OFFSET_JOINT_WGT + GpuFloats.vec4;
-export const VERTEX_BYTE_SIZE   = byteSize(VERTEX_FLOAT_COUNT);
+export const VERTEX_BYTE_SIZE   = floatByteSize(VERTEX_FLOAT_COUNT);
 
 export class Vertex {
   public position: [number, number, number, number];
@@ -50,12 +50,12 @@ export class Vertex {
       arrayStride: VERTEX_BYTE_SIZE,
       stepMode: "vertex",
       attributes: [
-        { shaderLocation: 0, offset: byteSize(OFFSET_POSITION),  format: "float32x4" },
-        { shaderLocation: 1, offset: byteSize(OFFSET_NORMAL),    format: "float32x4" },
-        { shaderLocation: 5, offset: byteSize(OFFSET_TANGENT),   format: "float32x4" },
-        { shaderLocation: 2, offset: byteSize(OFFSET_UV),        format: "float32x2" },
-        { shaderLocation: 3, offset: byteSize(OFFSET_JOINT_IDX), format: "float32x4" },
-        { shaderLocation: 4, offset: byteSize(OFFSET_JOINT_WGT), format: "float32x4" },
+        { shaderLocation: 0, offset: floatByteSize(OFFSET_POSITION),  format: "float32x4" },
+        { shaderLocation: 1, offset: floatByteSize(OFFSET_NORMAL),    format: "float32x4" },
+        { shaderLocation: 5, offset: floatByteSize(OFFSET_TANGENT),   format: "float32x4" },
+        { shaderLocation: 2, offset: floatByteSize(OFFSET_UV),        format: "float32x2" },
+        { shaderLocation: 3, offset: floatByteSize(OFFSET_JOINT_IDX), format: "float32x4" },
+        { shaderLocation: 4, offset: floatByteSize(OFFSET_JOINT_WGT), format: "float32x4" },
       ],
     };
   }

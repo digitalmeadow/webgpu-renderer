@@ -1,6 +1,6 @@
 import { Mat4 } from "../math";
 import { MAX_JOINTS } from "../skinning";
-import { GpuFloats, byteSize, alignVec4 } from "../utils";
+import { GpuFloats, floatByteSize, alignVec4 } from "../utils";
 
 const OFFSET_MODEL_MATRIX = 0;
 const OFFSET_JOINT_MATRICES = OFFSET_MODEL_MATRIX + GpuFloats.mat4;
@@ -9,7 +9,7 @@ const OFFSET_APPLY_SKINNING =
 const OFFSET_BILLBOARD_AXIS = OFFSET_APPLY_SKINNING + 1; // packed in same vec4
 
 const FLOAT_COUNT = alignVec4(OFFSET_BILLBOARD_AXIS + 1);
-const BUFFER_SIZE = byteSize(FLOAT_COUNT);
+const BUFFER_SIZE = floatByteSize(FLOAT_COUNT);
 
 let _meshBindGroupLayout: GPUBindGroupLayout | null = null;
 
@@ -75,7 +75,7 @@ export class MeshUniforms {
     this.skinningData[1] = billboardAxis;
     device.queue.writeBuffer(
       this.buffer,
-      byteSize(OFFSET_APPLY_SKINNING),
+      floatByteSize(OFFSET_APPLY_SKINNING),
       this.skinningData,
     );
   }
@@ -94,7 +94,7 @@ export class MeshUniforms {
     }
     device.queue.writeBuffer(
       this.buffer,
-      byteSize(OFFSET_JOINT_MATRICES),
+      floatByteSize(OFFSET_JOINT_MATRICES),
       this.uniformData,
       OFFSET_JOINT_MATRICES,
       n * GpuFloats.mat4,
@@ -105,7 +105,7 @@ export class MeshUniforms {
     this.skinningData[0] = value ? 1 : 0;
     device.queue.writeBuffer(
       this.buffer,
-      byteSize(OFFSET_APPLY_SKINNING),
+      floatByteSize(OFFSET_APPLY_SKINNING),
       this.skinningData,
     );
   }

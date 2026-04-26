@@ -6,12 +6,12 @@
 
 ## Buffer Layout (`*Uniforms.ts` files)
 
-### Use `GpuFloats`, `byteSize`, `alignVec4` from `src/utils/bufferLayout.ts`
+### Use `GpuFloats`, `floatByteSize`, `alignVec4` from `src/utils/bufferLayout.ts`
 
 Never write raw multipliers like `* 4`, `* 16`, or `* Float32Array.BYTES_PER_ELEMENT`. Use the shared primitives:
 
 ```ts
-import { GpuFloats, byteSize, alignVec4 } from "../utils";
+import { GpuFloats, floatByteSize, alignVec4 } from "../utils";
 ```
 
 ### Waterfall offset constants
@@ -40,7 +40,7 @@ const FLOAT_COUNT = alignVec4(OFFSET_NEAR_FAR + GpuFloats.vec2);
 
 ```ts
 const FLOAT_COUNT = alignVec4(OFFSET_NEAR_FAR + GpuFloats.vec2);
-const BUFFER_SIZE = byteSize(FLOAT_COUNT);
+const BUFFER_SIZE = floatByteSize(FLOAT_COUNT);
 ```
 
 ### Pre-allocate the CPU-side staging array
@@ -166,7 +166,7 @@ When refactoring a file, verify:
 - [ ] `uniformData` is pre-allocated, passed directly (not `.buffer`) to `writeBuffer`
 - [ ] BindGroupLayout exported as a cached free function
 - [ ] Dirty flags named `*needsUpdate*`, owned at the right level
-- [ ] No magic byte offsets (e.g. `writeBuffer(buf, 240, ...)`) — derive from `byteSize(OFFSET_*)`
+- [ ] No magic byte offsets (e.g. `writeBuffer(buf, 240, ...)`) — derive from `floatByteSize(OFFSET_*)`
 - [ ] All GPU resources have labels
 - [ ] No unexplained magic numbers anywhere
 - [ ] Public mutable reference types are plain fields, not getter-wrapped privates

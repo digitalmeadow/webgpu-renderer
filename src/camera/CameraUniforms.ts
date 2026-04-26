@@ -1,5 +1,5 @@
 import { Mat4, Vec3 } from "../math";
-import { GpuFloats, byteSize, alignVec4 } from "../utils";
+import { GpuFloats, floatByteSize, alignVec4 } from "../utils";
 
 const OFFSET_VIEW_MATRIX = 0;
 const OFFSET_PROJECTION_MATRIX = OFFSET_VIEW_MATRIX + GpuFloats.mat4;
@@ -12,7 +12,7 @@ const OFFSET_POSITION = OFFSET_PROJECTION_INVERSE_MATRIX + GpuFloats.mat4;
 const OFFSET_NEAR_FAR = OFFSET_POSITION + GpuFloats.vec4;
 
 const FLOAT_COUNT = alignVec4(OFFSET_NEAR_FAR + GpuFloats.vec2); // pad to vec4 → 88 floats
-const BUFFER_SIZE = byteSize(FLOAT_COUNT);
+const BUFFER_SIZE = floatByteSize(FLOAT_COUNT);
 
 let _cameraBindGroupLayout: GPUBindGroupLayout | null = null;
 

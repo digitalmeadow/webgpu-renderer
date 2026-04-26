@@ -1,10 +1,10 @@
-import { GpuFloats, byteSize } from "../utils";
+import { GpuFloats, floatByteSize } from "../utils";
 
 const OFFSET_POSITION = 0;
 const OFFSET_UV = OFFSET_POSITION + GpuFloats.vec4;
 
 export const VERTEX_PARTICLE_FLOAT_COUNT = OFFSET_UV + GpuFloats.vec2;
-export const VERTEX_PARTICLE_BYTE_SIZE = byteSize(VERTEX_PARTICLE_FLOAT_COUNT);
+export const VERTEX_PARTICLE_BYTE_SIZE = floatByteSize(VERTEX_PARTICLE_FLOAT_COUNT);
 
 // Pre-computed quad vertices: position (vec4), uv (vec2)
 export const PARTICLE_QUAD_VERTEX_DATA = new Float32Array([
@@ -27,10 +27,10 @@ export function getParticleVertexBufferLayout(): GPUVertexBufferLayout {
     attributes: [
       {
         shaderLocation: 0,
-        offset: byteSize(OFFSET_POSITION),
+        offset: floatByteSize(OFFSET_POSITION),
         format: "float32x4",
       },
-      { shaderLocation: 1, offset: byteSize(OFFSET_UV), format: "float32x2" },
+      { shaderLocation: 1, offset: floatByteSize(OFFSET_UV), format: "float32x2" },
     ],
   };
 }
