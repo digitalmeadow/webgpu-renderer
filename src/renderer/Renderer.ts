@@ -55,6 +55,7 @@ export interface RendererOptions {
   shadowDirectionalDepthBiasSlopeScale?: number;
   shadowSpotDepthBias?: number;
   shadowSpotDepthBiasSlopeScale?: number;
+  skyboxFilter?: "nearest" | "linear";
 }
 
 const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
@@ -272,6 +273,7 @@ export class Renderer {
       this.device,
       this.cameraBindGroupLayout,
       this.geometryBuffer,
+      options.skyboxFilter ?? "linear",
     );
 
     this.reflectionProbePass = new ReflectionProbePass(
