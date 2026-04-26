@@ -16,6 +16,8 @@ import { SkyboxPass } from "./passes/SkyboxPass";
 import { PostPass, PostPassContext } from "./passes/PostPass";
 import { ReflectionProbePass } from "./passes/ReflectionProbePass";
 import { MaterialManager } from "../materials";
+import { MaterialType } from "../materials/MaterialBase";
+import { MaterialPBR } from "../materials/MaterialPBR";
 import { ParticleEmitter } from "../particles";
 import { Mesh } from "../mesh";
 import { LightManager } from "../lights/LightManager";
@@ -24,7 +26,6 @@ import { Light, DirectionalLight, SpotLight } from "../lights";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../math";
 import { CubeTexture } from "../textures/CubeTexture";
 import { ReflectionProbe } from "../scene/ReflectionProbe";
-import { CubeRenderTarget } from "../textures/CubeRenderTarget";
 import { createCameraBindGroupLayout } from "../camera/CameraUniforms";
 
 export interface TextureSettings {
@@ -48,12 +49,15 @@ export interface RendererOptions {
   transparentSortEnabled?: boolean;
   antiAliasingScale?: number;
   textureSettings?: TextureSettings;
+  alphaMode?: GPUCanvasAlphaMode;
+  occlusionMapSize?: number;
 }
 
 const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
 const DEFAULT_MAX_SPOT_LIGHTS = 1;
 const MAX_SHADOW_MAP_SIZE = 2048;
 const SHADOW_MAP_SIZE_RATIO = 2;
+const DEFAULT_OCCLUSION_MAP_SIZE = 512;
 
 const DEFAULT_TEXTURE_SETTINGS: ResolvedTextureSettings = {
   mipmapEnabled: true,
@@ -64,13 +68,15 @@ const DEFAULT_TEXTURE_SETTINGS: ResolvedTextureSettings = {
 export class Renderer {
   private canvas: HTMLCanvasElement;
   private device: GPUDevice;
-  private context: GPUCanvasContext | null = null;
+  private context: GPUCanvasContext;
   private format: GPUTextureFormat;
+  private alphaMode: GPUCanvasAlphaMode;
   private maxDirectionalLights: number;
   private maxSpotLights: number;
+  private occlusionMapSize: number;
   private targetRenderWidth: number;
   private targetRenderHeight: number;
-  private devicePixelRatioOption: number;
+  private devicePixelRatio: number;
   private antiAliasingScale: number;
   private textureSettings: ResolvedTextureSettings;
   private cameras: Set<Camera> = new Set();
@@ -118,14 +124,24 @@ export class Renderer {
   private cachedReflectionProbes: ReflectionProbe[] = [];
   private lastSceneVersion: number = -1;
 
-  constructor(canvas: HTMLCanvasElement, options: RendererOptions = {}) {
+  private constructor(
+    canvas: HTMLCanvasElement,
+    device: GPUDevice,
+    context: GPUCanvasContext,
+    format: GPUTextureFormat,
+    options: RendererOptions,
+  ) {
     this.canvas = canvas;
-    this.maxDirectionalLights =
-      options.maxDirectionalLights ?? DEFAULT_MAX_DIRECTIONAL_LIGHTS;
+    this.device = device;
+    this.context = context;
+    this.format = format;
+    this.alphaMode = options.alphaMode ?? "premultiplied";
+    this.maxDirectionalLights = options.maxDirectionalLights ?? DEFAULT_MAX_DIRECTIONAL_LIGHTS;
     this.maxSpotLights = options.maxSpotLights ?? DEFAULT_MAX_SPOT_LIGHTS;
+    this.occlusionMapSize = options.occlusionMapSize ?? DEFAULT_OCCLUSION_MAP_SIZE;
     this.targetRenderWidth = options.renderWidth ?? 0;
     this.targetRenderHeight = options.renderHeight ?? 0;
-    this.devicePixelRatioOption = options.devicePixelRatio ?? 1;
+    this.devicePixelRatio = options.devicePixelRatio ?? 1;
     this.transparentSortEnabled = options.transparentSortEnabled ?? true;
     this.antiAliasingScale = options.antiAliasingScale ?? 1;
     this.textureSettings = {
@@ -139,64 +155,10 @@ export class Renderer {
         options.textureSettings?.mipmapFilter ??
         DEFAULT_TEXTURE_SETTINGS.mipmapFilter,
     };
-    this.device = null as unknown as GPUDevice;
-    this.format = "rgba16float";
 
-    this.geometryBuffer = null as unknown as GeometryBuffer;
-    this.geometryPass = null as unknown as GeometryPass;
-    this.lightingPass = null as unknown as LightingPass;
-    this.outputPass = null as unknown as OutputPass;
-    this.shadowPassDirectionalLight =
-      null as unknown as ShadowPassDirectionalLight;
-    this.shadowPassSpotLight = null as unknown as ShadowPassSpotLight;
-    this.occlusionPassDirectionalLight =
-      null as unknown as OcclusionPassDirectionalLight;
-    this.occlusionPassSpotLight = null as unknown as OcclusionPassSpotLight;
-    this.particlesPass = null as unknown as ParticlesPass;
-    this.forwardPass = null as unknown as ForwardPass;
-    this.skyboxPass = null as unknown as SkyboxPass;
-    this.reflectionProbePass = null as unknown as ReflectionProbePass;
-    this.materialManager = null as unknown as MaterialManager;
-    this.lightManager = null as unknown as LightManager;
-    this.sceneUniforms = null as unknown as SceneUniforms;
-    this.cameraBindGroupLayout = null as unknown as GPUBindGroupLayout;
-  }
-
-  async init(): Promise<void> {
-    if (!navigator.gpu) {
-      throw new Error("WebGPU not supported");
-    }
-
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) {
-      throw new Error("No WebGPU adapter found");
-    }
-
-    this.device = await adapter.requestDevice();
-    this.context = this.canvas.getContext("webgpu");
-    if (!this.context) {
-      throw new Error("Could not get WebGPU context");
-    }
-
-    this.context.configure({
-      device: this.device,
-      format: this.format,
-      alphaMode: "opaque",
-    });
-
-    this.materialManager = new MaterialManager(
-      this.device,
-      this.textureSettings,
-    );
-    this.lightManager = new LightManager(
-      this.device,
-      this.maxDirectionalLights,
-      this.maxSpotLights,
-    );
-    this.sceneUniforms = new SceneUniforms(this.device);
-
+    // Compute render resolution
+    const dpr = this.devicePixelRatio;
     const rect = this.canvas.getBoundingClientRect();
-    const dpr = this.devicePixelRatioOption;
     const canvasWidth = Math.round(rect.width * dpr);
     const canvasHeight = Math.round(rect.height * dpr);
 
@@ -204,33 +166,24 @@ export class Renderer {
       this.renderWidth = Math.round(canvasWidth * this.antiAliasingScale);
       this.renderHeight = Math.round(canvasHeight * this.antiAliasingScale);
     } else {
-      this.renderWidth = Math.round(
-        this.targetRenderWidth * this.antiAliasingScale,
-      );
-      this.renderHeight = Math.round(
-        this.targetRenderHeight * this.antiAliasingScale,
-      );
+      this.renderWidth = Math.round(this.targetRenderWidth * this.antiAliasingScale);
+      this.renderHeight = Math.round(this.targetRenderHeight * this.antiAliasingScale);
     }
 
-    this.setup();
+    this.context.configure({
+      device: this.device,
+      format: this.format,
+      alphaMode: this.alphaMode,
+    });
 
-    this.resize(rect.width, rect.height);
-  }
+    this.materialManager = new MaterialManager(this.device, this.textureSettings);
+    this.lightManager = new LightManager(this.device, this.maxDirectionalLights, this.maxSpotLights);
+    this.sceneUniforms = new SceneUniforms(this.device);
 
-  setup(): void {
-    this.geometryBuffer = new GeometryBuffer(
-      this.device,
-      this.renderWidth,
-      this.renderHeight,
-    );
-
+    this.geometryBuffer = new GeometryBuffer(this.device, this.renderWidth, this.renderHeight);
     this.cameraBindGroupLayout = createCameraBindGroupLayout(this.device);
 
-    this.geometryPass = new GeometryPass(
-      this.device,
-      this.geometryBuffer,
-      this.materialManager,
-    );
+    this.geometryPass = new GeometryPass(this.device, this.geometryBuffer, this.materialManager);
 
     this.lightingPass = new LightingPass(
       this.device,
@@ -242,7 +195,7 @@ export class Renderer {
       this.renderHeight,
     );
 
-    this.outputPass = new OutputPass(this.device);
+    this.outputPass = new OutputPass(this.device, this.format);
 
     const shadowMapSize = this.calculateShadowMapSize();
     this.shadowPassDirectionalLight = new ShadowPassDirectionalLight(
@@ -263,20 +216,17 @@ export class Renderer {
       this.device,
       this.materialManager,
       this.maxDirectionalLights,
-      512, // default occlusion resolution
+      this.occlusionMapSize,
     );
 
     this.occlusionPassSpotLight = new OcclusionPassSpotLight(
       this.device,
       this.materialManager,
       this.maxSpotLights,
-      512,
+      this.occlusionMapSize,
     );
 
-    this.particlesPass = new ParticlesPass(
-      this.device,
-      this.cameraBindGroupLayout,
-    );
+    this.particlesPass = new ParticlesPass(this.device, this.cameraBindGroupLayout);
 
     this.forwardPass = new ForwardPass(
       this.device,
@@ -286,11 +236,7 @@ export class Renderer {
       this.transparentSortEnabled,
     );
 
-    this.skyboxPass = new SkyboxPass(
-      this.device,
-      this.cameraBindGroupLayout,
-      this.geometryBuffer,
-    );
+    this.skyboxPass = new SkyboxPass(this.device, this.cameraBindGroupLayout, this.geometryBuffer);
 
     this.reflectionProbePass = new ReflectionProbePass(
       this.device,
@@ -302,44 +248,55 @@ export class Renderer {
       this.sceneUniforms,
       this.cameraBindGroupLayout,
     );
+
+    this.resize(rect.width, rect.height);
+  }
+
+  static async create(canvas: HTMLCanvasElement, options: RendererOptions = {}): Promise<Renderer> {
+    if (!navigator.gpu) {
+      throw new Error("WebGPU not supported");
+    }
+
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) {
+      throw new Error("No WebGPU adapter found");
+    }
+
+    const device = await adapter.requestDevice();
+    const context = canvas.getContext("webgpu");
+    if (!context) {
+      throw new Error("Could not get WebGPU context");
+    }
+
+    const format = navigator.gpu.getPreferredCanvasFormat();
+
+    return new Renderer(canvas, device, context, format, options);
   }
 
   resize(width: number, height: number): void {
     if (!this.device || !this.context) return;
 
-    const dpr = this.devicePixelRatioOption;
+    const dpr = this.devicePixelRatio;
     const w = Math.round(width * dpr);
     const h = Math.round(height * dpr);
 
     if (this.canvas.width === w && this.canvas.height === h) return;
 
-    this.canvas.width = Math.max(
-      1,
-      Math.min(w, this.device.limits.maxTextureDimension2D),
-    );
-    this.canvas.height = Math.max(
-      1,
-      Math.min(h, this.device.limits.maxTextureDimension2D),
-    );
+    this.canvas.width = Math.max(1, Math.min(w, this.device.limits.maxTextureDimension2D));
+    this.canvas.height = Math.max(1, Math.min(h, this.device.limits.maxTextureDimension2D));
 
     if (this.targetRenderWidth === 0 || this.targetRenderHeight === 0) {
       this.renderWidth = Math.round(this.canvas.width * this.antiAliasingScale);
-      this.renderHeight = Math.round(
-        this.canvas.height * this.antiAliasingScale,
-      );
+      this.renderHeight = Math.round(this.canvas.height * this.antiAliasingScale);
     } else {
-      this.renderWidth = Math.round(
-        this.targetRenderWidth * this.antiAliasingScale,
-      );
-      this.renderHeight = Math.round(
-        this.targetRenderHeight * this.antiAliasingScale,
-      );
+      this.renderWidth = Math.round(this.targetRenderWidth * this.antiAliasingScale);
+      this.renderHeight = Math.round(this.targetRenderHeight * this.antiAliasingScale);
     }
 
     this.context.configure({
       device: this.device,
       format: this.format,
-      alphaMode: "premultiplied",
+      alphaMode: this.alphaMode,
     });
 
     for (const camera of this.cameras) {
@@ -367,19 +324,6 @@ export class Renderer {
   }
 
   render(world: World, camera: Camera, time: Time): void {
-    if (
-      !this.device ||
-      !this.context ||
-      !this.geometryBuffer ||
-      !this.geometryPass ||
-      !this.lightingPass ||
-      !this.outputPass
-    ) {
-      return;
-    }
-
-    this.cameras.add(camera);
-
     camera.update();
 
     const meshes = this.collectVisibleMeshes(world, camera);
@@ -390,55 +334,36 @@ export class Renderer {
       }
     }
 
-    // Collect and render reflection probes BEFORE main scene rendering
-    const reflectionProbes = this.collectReflectionProbes(world);
-    const probesToUpdate = reflectionProbes.filter((probe) =>
-      probe.shouldUpdate(this.currentFrame),
-    );
-
-    for (const probe of probesToUpdate) {
-      // Render probe
-      this.reflectionProbePass.render(probe, world);
-
-      // Mark probe as updated
-      probe.markUpdated(this.currentFrame);
-    }
-
     // Separate meshes by alpha mode
-    // Opaque probe-affected meshes can use GeometryPass (proper back-face culling)
-    // Transparent probe-affected meshes must use ForwardPass (for blending)
-    const opaqueMeshes = meshes.filter(
-      (m) => m.material?.alphaMode === "opaque",
-    );
-    const alphaTestMeshes = meshes.filter(
-      (m) => m.material?.alphaMode === "mask",
-    );
-    const ditherMeshes = meshes.filter(
-      (m) => m.material?.alphaMode === "dither",
-    );
+    // Opaque/mask/dither use GeometryPass (deferred); blend uses ForwardPass
+    const opaqueMeshes = meshes.filter((m) => m.material?.alphaMode === "opaque");
+    const alphaTestMeshes = meshes.filter((m) => m.material?.alphaMode === "mask");
+    const ditherMeshes = meshes.filter((m) => m.material?.alphaMode === "dither");
     const blendMeshes = meshes.filter((m) => m.material?.alphaMode === "blend");
 
-    // Only transparent meshes with probe reflections need ForwardPass
-    const transparentProbeAffectedMeshes = [...blendMeshes].filter((m) => {
-      if (m.material?.type === "materialPBR") {
-        const pbrMaterial = m.material as any;
-        return pbrMaterial.environmentTexture instanceof CubeRenderTarget;
-      }
-      return false;
+    // Transparent PBR meshes with probe render targets need ForwardPass for up-to-date reflections
+    const transparentProbeAffectedMeshes = blendMeshes.filter((m) => {
+      return m.material?.type === MaterialType.PBR &&
+        (m.material as MaterialPBR).environmentTexture?.isRenderTarget === true;
     });
     const normalBlendMeshes = blendMeshes.filter((m) => {
-      if (m.material?.type === "materialPBR") {
-        const pbrMaterial = m.material as any;
-        return !(pbrMaterial.environmentTexture instanceof CubeRenderTarget);
-      }
-      return true;
+      return !(m.material?.type === MaterialType.PBR &&
+        (m.material as MaterialPBR).environmentTexture?.isRenderTarget === true);
     });
 
     const lights = this.collectLights(world);
+    const directionalLights = lights.filter(
+      (light) => light.type === EntityType.LightDirectional,
+    ) as DirectionalLight[];
+    const spotLights = lights.filter(
+      (light) => light.type === EntityType.LightSpot,
+    ) as SpotLight[];
+
+    this.renderReflectionProbes(world);
 
     const commandEncoder = this.device.createCommandEncoder();
 
-    // Geometry Pass (includes opaque, mask, and dither)
+    // Geometry Pass (deferred: opaque, mask, dither)
     const geometryPassMeshes = [...alphaTestMeshes, ...ditherMeshes];
     this.geometryPass.render(
       this.device,
@@ -455,101 +380,20 @@ export class Renderer {
       pass.render(commandEncoder, this.geometryBuffer, camera, time);
     }
 
-    const directionalLights = lights.filter(
-      (light) => light.type === EntityType.LightDirectional,
-    ) as DirectionalLight[];
     this.lightManager.update(directionalLights, camera);
-
-    const spotLights = lights.filter(
-      (light) => light.type === EntityType.LightSpot,
-    ) as SpotLight[];
     if (spotLights.length > 0) {
       this.lightManager.updateSpotLights(spotLights);
     }
 
-    // Shadow Pass - Directional Lights
-    if (directionalLights.length > 0) {
-      this.shadowPassDirectionalLight.render(
-        this.device,
-        directionalLights,
-        opaqueMeshes,
-        [...alphaTestMeshes, ...ditherMeshes],
-        blendMeshes,
-        camera,
-      );
-
-      // Set shadow texture and update lighting bind group
-      this.lightManager.setShadowTexture(
-        this.shadowPassDirectionalLight.getShadowTextureView(),
-        this.shadowPassDirectionalLight.getShadowTextureViews(),
-      );
-    } else {
-      this.lightManager.setShadowTexture(null, null);
-    }
-
-    // Shadow Pass - Spot Lights
-    if (spotLights.length > 0) {
-      this.shadowPassSpotLight.render(
-        this.device,
-        spotLights,
-        opaqueMeshes,
-        [...alphaTestMeshes, ...ditherMeshes],
-        blendMeshes,
-        camera,
-      );
-
-      this.lightManager.setSpotShadowTexture(
-        this.shadowPassSpotLight.getShadowTextureView(),
-      );
-    }
-
-    // Occlusion Pass - Directional Lights
-    const occlusionEnabledDirectionalLights = directionalLights.filter(
-      (l) => l.occlusionEnabled,
+    this.renderShadowAndOcclusion(
+      commandEncoder,
+      directionalLights,
+      spotLights,
+      opaqueMeshes,
+      [...alphaTestMeshes, ...ditherMeshes],
+      blendMeshes,
+      camera,
     );
-    if (occlusionEnabledDirectionalLights.length > 0) {
-      // Update occlusion matrices using frustum-based coverage
-      for (const light of occlusionEnabledDirectionalLights) {
-        light.updateOcclusionMatrixFromFrustum(
-          camera.transform.getWorldPosition(),
-          camera.transform.getWorldForward(),
-          camera.near,
-          camera.far,
-          camera.fov,
-          camera.aspect,
-        );
-      }
-
-      // Render occlusion depth maps
-      this.occlusionPassDirectionalLight.render(
-        this.device,
-        occlusionEnabledDirectionalLights,
-        opaqueMeshes,
-        [...alphaTestMeshes, ...ditherMeshes],
-        blendMeshes,
-        camera,
-      );
-
-      // Restore shadow matrices to shadow buffer (occlusion overwrote them)
-      for (const light of occlusionEnabledDirectionalLights) {
-        light.updateShadowBuffer();
-      }
-    }
-
-    // Occlusion Pass - Spot Lights
-    const occlusionEnabledSpotLights = spotLights.filter(
-      (l) => l.occlusionEnabled,
-    );
-    if (occlusionEnabledSpotLights.length > 0) {
-      this.occlusionPassSpotLight.render(
-        this.device,
-        occlusionEnabledSpotLights,
-        opaqueMeshes,
-        [...alphaTestMeshes, ...ditherMeshes],
-        blendMeshes,
-        camera,
-      );
-    }
 
     this.lightManager.updateLightingBindGroup(directionalLights, spotLights);
 
@@ -567,7 +411,7 @@ export class Renderer {
       this.sceneUniforms.bindGroup,
     );
 
-    // Skybox Pass - renders background where depth = 1
+    // Skybox renders into depth=1 regions
     if (this.skyboxTexture) {
       this.skyboxPass.setSkyboxTexture(this.skyboxTexture);
       this.skyboxPass.render(
@@ -577,12 +421,9 @@ export class Renderer {
       );
     }
 
-    // Forward Pass (transparent meshes, including transparent probe-affected meshes)
-    const forwardPassMeshes = [
-      ...normalBlendMeshes,
-      ...transparentProbeAffectedMeshes,
-    ];
-    if (this.forwardPass && forwardPassMeshes.length > 0) {
+    // Forward Pass (transparent meshes)
+    const forwardPassMeshes = [...normalBlendMeshes, ...transparentProbeAffectedMeshes];
+    if (forwardPassMeshes.length > 0) {
       this.forwardPass.render(
         commandEncoder,
         forwardPassMeshes,
@@ -597,7 +438,7 @@ export class Renderer {
     for (const emitter of emitters) {
       emitter.updateParticles(this.device, time.delta);
     }
-    if (this.particlesPass && emitters.length > 0) {
+    if (emitters.length > 0) {
       this.particlesPass.render(
         commandEncoder,
         camera,
@@ -607,61 +448,9 @@ export class Renderer {
       );
     }
 
-    // Post Passes (Low-Res)
-    let lastOutputView = this.lightingPass.outputView;
-    if (this.postPasses.length > 0) {
-      this.createPostPassTextures();
+    const lastOutputView = this.renderPostProcessing(camera);
 
-      const postContext: PostPassContext = {
-        geometryBuffer: this.geometryBuffer,
-        cameraBindGroup: camera.uniforms.bindGroup,
-        lightingBindGroup: this.lightManager.lightingBindGroup,
-        sceneBindGroup: this.sceneUniforms.bindGroup,
-        width: this.renderWidth,
-        height: this.renderHeight,
-      };
-
-      // Strict A/B ping-pong: pass 0 → B, pass 1 → A, pass 2 → B, ...
-      // lightingPass.outputView is the initial read source and is never written to.
-      // readView always points to the texture written by the previous pass.
-      let readView: GPUTextureView = this.lightingPass.outputView;
-
-      for (let i = 0; i < this.postPasses.length; i++) {
-        const writeView =
-          i % 2 === 0 ? this.postPassViewB! : this.postPassViewA!;
-        this.postPasses[i].render(readView, writeView, postContext);
-        readView = writeView;
-      }
-
-      lastOutputView = readView;
-    }
-
-    // Post Passes (High-Res - Canvas Resolution)
-    if (this.highResPostPasses.length > 0) {
-      this.createHighResTextures();
-
-      const highResContext: PostPassContext = {
-        geometryBuffer: this.geometryBuffer,
-        cameraBindGroup: camera.uniforms.bindGroup,
-        lightingBindGroup: this.lightManager.lightingBindGroup,
-        sceneBindGroup: this.sceneUniforms.bindGroup,
-        width: this.canvas.width,
-        height: this.canvas.height,
-      };
-
-      // Start with the output from low-res post-processing
-      let readView: GPUTextureView = lastOutputView;
-
-      for (let i = 0; i < this.highResPostPasses.length; i++) {
-        const writeView = i % 2 === 0 ? this.highResViewB! : this.highResViewA!;
-        this.highResPostPasses[i].render(readView, writeView, highResContext);
-        readView = writeView;
-      }
-
-      lastOutputView = readView;
-    }
-
-    // Output Pass
+    // Output Pass — blit to swap chain
     const swapChainView = this.context.getCurrentTexture().createView();
     this.outputPass.render(
       commandEncoder,
@@ -675,8 +464,156 @@ export class Renderer {
 
     this.device.queue.submit([commandEncoder.finish()]);
 
-    // Increment frame counter for reflection probe update frequency
     this.currentFrame++;
+  }
+
+  private renderReflectionProbes(world: World): void {
+    const reflectionProbes = this.collectReflectionProbes(world);
+    const probesToUpdate = reflectionProbes.filter((probe) =>
+      probe.shouldUpdate(this.currentFrame),
+    );
+
+    for (const probe of probesToUpdate) {
+      this.reflectionProbePass.render(probe, world);
+      probe.markUpdated(this.currentFrame);
+    }
+  }
+
+  private renderShadowAndOcclusion(
+    commandEncoder: GPUCommandEncoder,
+    directionalLights: DirectionalLight[],
+    spotLights: SpotLight[],
+    opaqueMeshes: Mesh[],
+    alphaMeshes: Mesh[],
+    blendMeshes: Mesh[],
+    camera: Camera,
+  ): void {
+    // Shadow Pass - Directional Lights
+    if (directionalLights.length > 0) {
+      this.shadowPassDirectionalLight.render(
+        this.device,
+        directionalLights,
+        opaqueMeshes,
+        alphaMeshes,
+        blendMeshes,
+        camera,
+      );
+      this.lightManager.setShadowTexture(
+        this.shadowPassDirectionalLight.getShadowTextureView(),
+        this.shadowPassDirectionalLight.getShadowTextureViews(),
+      );
+    } else {
+      this.lightManager.setShadowTexture(null, null);
+    }
+
+    // Shadow Pass - Spot Lights
+    if (spotLights.length > 0) {
+      this.shadowPassSpotLight.render(
+        this.device,
+        spotLights,
+        opaqueMeshes,
+        alphaMeshes,
+        blendMeshes,
+        camera,
+      );
+      this.lightManager.setSpotShadowTexture(
+        this.shadowPassSpotLight.getShadowTextureView(),
+      );
+    }
+
+    // Occlusion Pass - Directional Lights
+    const occlusionEnabledDirectionalLights = directionalLights.filter((l) => l.occlusionEnabled);
+    if (occlusionEnabledDirectionalLights.length > 0) {
+      for (const light of occlusionEnabledDirectionalLights) {
+        light.updateOcclusionMatrixFromFrustum(
+          camera.transform.getWorldPosition(),
+          camera.transform.getWorldForward(),
+          camera.near,
+          camera.far,
+          camera.fov,
+          camera.aspect,
+        );
+      }
+
+      this.occlusionPassDirectionalLight.render(
+        this.device,
+        occlusionEnabledDirectionalLights,
+        opaqueMeshes,
+        alphaMeshes,
+        blendMeshes,
+        camera,
+      );
+
+      // Restore shadow matrices overwritten by occlusion pass
+      for (const light of occlusionEnabledDirectionalLights) {
+        light.updateShadowBuffer();
+      }
+    }
+
+    // Occlusion Pass - Spot Lights
+    const occlusionEnabledSpotLights = spotLights.filter((l) => l.occlusionEnabled);
+    if (occlusionEnabledSpotLights.length > 0) {
+      this.occlusionPassSpotLight.render(
+        this.device,
+        occlusionEnabledSpotLights,
+        opaqueMeshes,
+        alphaMeshes,
+        blendMeshes,
+        camera,
+      );
+    }
+  }
+
+  private renderPostProcessing(camera: Camera): GPUTextureView {
+    let lastOutputView: GPUTextureView = this.lightingPass.outputView;
+
+    if (this.postPasses.length > 0) {
+      this.createPostPassTextures();
+
+      const postContext: PostPassContext = {
+        geometryBuffer: this.geometryBuffer,
+        cameraBindGroup: camera.uniforms.bindGroup,
+        lightingBindGroup: this.lightManager.lightingBindGroup,
+        sceneBindGroup: this.sceneUniforms.bindGroup,
+        width: this.renderWidth,
+        height: this.renderHeight,
+      };
+
+      // Strict A/B ping-pong: pass 0 → B, pass 1 → A, ...
+      // lightingPass.outputView is the initial read source and is never written to.
+      let readView: GPUTextureView = this.lightingPass.outputView;
+      for (let i = 0; i < this.postPasses.length; i++) {
+        const writeView = i % 2 === 0 ? this.postPassViewB! : this.postPassViewA!;
+        this.postPasses[i].render(readView, writeView, postContext);
+        readView = writeView;
+      }
+
+      lastOutputView = readView;
+    }
+
+    if (this.highResPostPasses.length > 0) {
+      this.createHighResTextures();
+
+      const highResContext: PostPassContext = {
+        geometryBuffer: this.geometryBuffer,
+        cameraBindGroup: camera.uniforms.bindGroup,
+        lightingBindGroup: this.lightManager.lightingBindGroup,
+        sceneBindGroup: this.sceneUniforms.bindGroup,
+        width: this.canvas.width,
+        height: this.canvas.height,
+      };
+
+      let readView: GPUTextureView = lastOutputView;
+      for (let i = 0; i < this.highResPostPasses.length; i++) {
+        const writeView = i % 2 === 0 ? this.highResViewB! : this.highResViewA!;
+        this.highResPostPasses[i].render(readView, writeView, highResContext);
+        readView = writeView;
+      }
+
+      lastOutputView = readView;
+    }
+
+    return lastOutputView;
   }
 
   public getDevice(): GPUDevice {
@@ -737,12 +674,8 @@ export class Renderer {
       return;
     }
 
-    if (this.postPassTextureA) {
-      this.postPassTextureA.destroy();
-    }
-    if (this.postPassTextureB) {
-      this.postPassTextureB.destroy();
-    }
+    this.postPassTextureA?.destroy();
+    this.postPassTextureB?.destroy();
 
     const createTexture = (label: string) =>
       this.device.createTexture({
@@ -775,12 +708,8 @@ export class Renderer {
       return;
     }
 
-    if (this.highResTextureA) {
-      this.highResTextureA.destroy();
-    }
-    if (this.highResTextureB) {
-      this.highResTextureB.destroy();
-    }
+    this.highResTextureA?.destroy();
+    this.highResTextureB?.destroy();
 
     const createTexture = (label: string) =>
       this.device.createTexture({
@@ -820,33 +749,13 @@ export class Renderer {
   }
 
   private recreateRenderTargets(): void {
-    this.geometryBuffer.resize(
-      this.device,
-      this.renderWidth,
-      this.renderHeight,
-    );
+    this.geometryBuffer.resize(this.device, this.renderWidth, this.renderHeight);
     this.lightingPass.resize(this.device, this.renderWidth, this.renderHeight);
 
     if (this.postPassTextureA) {
-      this.postPassTextureA.destroy();
-      this.postPassTextureB?.destroy();
-
-      const createTexture = (label: string) =>
-        this.device.createTexture({
-          label,
-          size: [this.renderWidth, this.renderHeight],
-          format: "rgba16float",
-          usage:
-            GPUTextureUsage.TEXTURE_BINDING |
-            GPUTextureUsage.RENDER_ATTACHMENT |
-            GPUTextureUsage.COPY_SRC |
-            GPUTextureUsage.COPY_DST,
-        });
-
-      this.postPassTextureA = createTexture("Post Pass Texture A");
-      this.postPassTextureB = createTexture("Post Pass Texture B");
-      this.postPassViewA = this.postPassTextureA.createView();
-      this.postPassViewB = this.postPassTextureB.createView();
+      this.postPassTextureA = null;
+      this.postPassTextureB = null;
+      this.createPostPassTextures();
     }
 
     for (const pass of this.postPasses) {
@@ -854,28 +763,9 @@ export class Renderer {
     }
 
     if (this.highResTextureA) {
-      this.highResTextureA.destroy();
-      this.highResTextureB?.destroy();
-
-      const canvasWidth = this.canvas.width;
-      const canvasHeight = this.canvas.height;
-
-      const createTexture = (label: string) =>
-        this.device.createTexture({
-          label,
-          size: [canvasWidth, canvasHeight],
-          format: "rgba16float",
-          usage:
-            GPUTextureUsage.TEXTURE_BINDING |
-            GPUTextureUsage.RENDER_ATTACHMENT |
-            GPUTextureUsage.COPY_SRC |
-            GPUTextureUsage.COPY_DST,
-        });
-
-      this.highResTextureA = createTexture("High Res Post Pass Texture A");
-      this.highResTextureB = createTexture("High Res Post Pass Texture B");
-      this.highResViewA = this.highResTextureA.createView();
-      this.highResViewB = this.highResTextureB.createView();
+      this.highResTextureA = null;
+      this.highResTextureB = null;
+      this.createHighResTextures();
     }
 
     for (const pass of this.highResPostPasses) {
@@ -887,21 +777,25 @@ export class Renderer {
     this.shadowPassSpotLight.resize(shadowMapSize);
   }
 
+  public destroy(): void {
+    this.postPassTextureA?.destroy();
+    this.postPassTextureB?.destroy();
+    this.highResTextureA?.destroy();
+    this.highResTextureB?.destroy();
+    this.geometryBuffer.destroy();
+  }
+
   // Update all scene caches atomically when scene version changes
   private updateSceneCaches(world: World): void {
     if (world.sceneVersion !== this.lastSceneVersion) {
-      // Clear all caches
       this.cachedMeshes = [];
       this.cachedLights = [];
       this.cachedEmitters = [];
       this.cachedReflectionProbes = [];
 
-      // Rebuild all caches together
       for (const scene of world.scenes) {
-        // Collect lights from scene.lights array
         this.cachedLights.push(...scene.lights);
 
-        // Collect other entities
         for (const entity of scene.entities) {
           if (entity.type === EntityType.Mesh) {
             this.cachedMeshes.push(entity as Mesh);
@@ -913,7 +807,6 @@ export class Renderer {
         }
       }
 
-      // Update version ONCE after all caches are rebuilt
       this.lastSceneVersion = world.sceneVersion;
     }
   }
@@ -930,16 +823,13 @@ export class Renderer {
       return allMeshes;
     }
 
-    // Update AABBs for meshes whose world matrices changed
     for (const mesh of allMeshes) {
       mesh.updateWorldAABB(); // no-ops if world matrix unchanged
     }
 
-    // Get camera frustum planes
     const cameraViewProjection = camera.viewProjectionMatrix;
     const frustumPlanes = frustumPlanesFromMatrix(cameraViewProjection);
 
-    // Filter meshes by frustum culling
     const visibleMeshes: Mesh[] = [];
     for (const mesh of allMeshes) {
       if (aabbInFrustum(mesh.worldAABB, frustumPlanes)) {
@@ -965,12 +855,8 @@ export class Renderer {
     return this.cachedReflectionProbes;
   }
 
-  public getDirectionalLightOcclusionView(
-    lightIndex: number,
-  ): GPUTextureView | null {
-    return this.occlusionPassDirectionalLight.getOcclusionTextureView(
-      lightIndex,
-    );
+  public getDirectionalLightOcclusionView(lightIndex: number): GPUTextureView | null {
+    return this.occlusionPassDirectionalLight.getOcclusionTextureView(lightIndex);
   }
 
   public getSpotLightOcclusionView(lightIndex: number): GPUTextureView | null {

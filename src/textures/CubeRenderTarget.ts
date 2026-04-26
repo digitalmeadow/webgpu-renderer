@@ -1,6 +1,7 @@
 import { generateCubeMipmaps } from "./MipmapGenerator";
 
 export class CubeRenderTarget {
+  readonly isRenderTarget = true as const;
   public gpuTexture: GPUTexture;
   public gpuTextureView: GPUTextureView;
   public gpuSampler: GPUSampler;

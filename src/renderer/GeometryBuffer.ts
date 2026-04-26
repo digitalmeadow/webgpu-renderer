@@ -9,56 +9,11 @@ export class GeometryBuffer {
   emissiveView: GPUTextureView;
   depthTexture: GPUTexture;
   depthView: GPUTextureView;
-  sampler: GPUSampler;
-  bindGroupLayout: GPUBindGroupLayout;
+  readonly sampler: GPUSampler;
+  readonly bindGroupLayout: GPUBindGroupLayout;
   bindGroup: GPUBindGroup;
 
   constructor(device: GPUDevice, width: number, height: number) {
-    this.albedoTexture = device.createTexture({
-      label: "G-Buffer Albedo Texture",
-      size: [width, height],
-      format: "rgba8unorm",
-      usage:
-        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    this.albedoView = this.albedoTexture.createView();
-
-    this.normalTexture = device.createTexture({
-      label: "G-Buffer Normal Texture",
-      size: [width, height],
-      format: "rgba16float",
-      usage:
-        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    this.normalView = this.normalTexture.createView();
-
-    this.metalRoughnessTexture = device.createTexture({
-      label: "G-Buffer Metal/Roughness Texture",
-      size: [width, height],
-      format: "rgba8unorm",
-      usage:
-        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    this.metalRoughnessView = this.metalRoughnessTexture.createView();
-
-    this.emissiveTexture = device.createTexture({
-      label: "G-Buffer Emissive Texture",
-      size: [width, height],
-      format: "rgba16float",
-      usage:
-        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    this.emissiveView = this.emissiveTexture.createView();
-
-    this.depthTexture = device.createTexture({
-      label: "G-Buffer Depth Texture",
-      size: [width, height],
-      format: "depth32float",
-      usage:
-        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    this.depthView = this.depthTexture.createView();
-
     this.sampler = device.createSampler({
       label: "G-Buffer Sampler",
       magFilter: "nearest",
@@ -104,34 +59,73 @@ export class GeometryBuffer {
       ],
     });
 
+    // Initialize to satisfy TS — immediately overwritten by createTextures
+    this.albedoTexture = null as unknown as GPUTexture;
+    this.albedoView = null as unknown as GPUTextureView;
+    this.normalTexture = null as unknown as GPUTexture;
+    this.normalView = null as unknown as GPUTextureView;
+    this.metalRoughnessTexture = null as unknown as GPUTexture;
+    this.metalRoughnessView = null as unknown as GPUTextureView;
+    this.emissiveTexture = null as unknown as GPUTexture;
+    this.emissiveView = null as unknown as GPUTextureView;
+    this.depthTexture = null as unknown as GPUTexture;
+    this.depthView = null as unknown as GPUTextureView;
+    this.bindGroup = null as unknown as GPUBindGroup;
+
+    this.createTextures(device, width, height);
+  }
+
+  private createTextures(device: GPUDevice, width: number, height: number): void {
+    this.albedoTexture = device.createTexture({
+      label: "G-Buffer Albedo Texture",
+      size: [width, height],
+      format: "rgba8unorm",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    this.albedoView = this.albedoTexture.createView();
+
+    this.normalTexture = device.createTexture({
+      label: "G-Buffer Normal Texture",
+      size: [width, height],
+      format: "rgba16float",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    this.normalView = this.normalTexture.createView();
+
+    this.metalRoughnessTexture = device.createTexture({
+      label: "G-Buffer Metal/Roughness Texture",
+      size: [width, height],
+      format: "rgba8unorm",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    this.metalRoughnessView = this.metalRoughnessTexture.createView();
+
+    this.emissiveTexture = device.createTexture({
+      label: "G-Buffer Emissive Texture",
+      size: [width, height],
+      format: "rgba16float",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    this.emissiveView = this.emissiveTexture.createView();
+
+    this.depthTexture = device.createTexture({
+      label: "G-Buffer Depth Texture",
+      size: [width, height],
+      format: "depth32float",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    this.depthView = this.depthTexture.createView();
+
     this.bindGroup = device.createBindGroup({
       label: "G-Buffer Bind Group",
       layout: this.bindGroupLayout,
       entries: [
-        {
-          binding: 0,
-          resource: this.sampler,
-        },
-        {
-          binding: 1,
-          resource: this.albedoView,
-        },
-        {
-          binding: 2,
-          resource: this.normalView,
-        },
-        {
-          binding: 3,
-          resource: this.metalRoughnessView,
-        },
-        {
-          binding: 4,
-          resource: this.depthView,
-        },
-        {
-          binding: 5,
-          resource: this.emissiveView,
-        },
+        { binding: 0, resource: this.sampler },
+        { binding: 1, resource: this.albedoView },
+        { binding: 2, resource: this.normalView },
+        { binding: 3, resource: this.metalRoughnessView },
+        { binding: 4, resource: this.depthView },
+        { binding: 5, resource: this.emissiveView },
       ],
     });
   }
@@ -143,80 +137,14 @@ export class GeometryBuffer {
     this.emissiveTexture.destroy();
     this.depthTexture.destroy();
 
-    this.albedoTexture = device.createTexture({
-      label: "G-Buffer Albedo Texture",
-      size: [width, height],
-      format: "rgba8unorm",
-      usage:
-        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    this.albedoView = this.albedoTexture.createView();
+    this.createTextures(device, width, height);
+  }
 
-    this.normalTexture = device.createTexture({
-      label: "G-Buffer Normal Texture",
-      size: [width, height],
-      format: "rgba16float",
-      usage:
-        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    this.normalView = this.normalTexture.createView();
-
-    this.metalRoughnessTexture = device.createTexture({
-      label: "G-Buffer Metal/Roughness Texture",
-      size: [width, height],
-      format: "rgba8unorm",
-      usage:
-        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    this.metalRoughnessView = this.metalRoughnessTexture.createView();
-
-    this.emissiveTexture = device.createTexture({
-      label: "G-Buffer Emissive Texture",
-      size: [width, height],
-      format: "rgba16float",
-      usage:
-        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    this.emissiveView = this.emissiveTexture.createView();
-
-    this.depthTexture = device.createTexture({
-      label: "G-Buffer Depth Texture",
-      size: [width, height],
-      format: "depth32float",
-      usage:
-        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    this.depthView = this.depthTexture.createView();
-
-    this.bindGroup = device.createBindGroup({
-      label: "G-Buffer Bind Group",
-      layout: this.bindGroupLayout,
-      entries: [
-        {
-          binding: 0,
-          resource: this.sampler,
-        },
-        {
-          binding: 1,
-          resource: this.albedoView,
-        },
-        {
-          binding: 2,
-          resource: this.normalView,
-        },
-        {
-          binding: 3,
-          resource: this.metalRoughnessView,
-        },
-        {
-          binding: 4,
-          resource: this.depthView,
-        },
-        {
-          binding: 5,
-          resource: this.emissiveView,
-        },
-      ],
-    });
+  destroy(): void {
+    this.albedoTexture.destroy();
+    this.normalTexture.destroy();
+    this.metalRoughnessTexture.destroy();
+    this.emissiveTexture.destroy();
+    this.depthTexture.destroy();
   }
 }

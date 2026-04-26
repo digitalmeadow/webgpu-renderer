@@ -20,7 +20,7 @@ export class OutputPass {
   private lastViewportHeight: number = 0;
   private lastInputView: GPUTextureView | null = null;
 
-  constructor(device: GPUDevice) {
+  constructor(device: GPUDevice, format: GPUTextureFormat) {
     this.device = device;
     const shaderModule = device.createShaderModule({
       code: shader,
@@ -72,7 +72,7 @@ export class OutputPass {
         entryPoint: "fs_main",
         targets: [
           {
-            format: "rgba16float",
+            format,
           },
         ],
       },

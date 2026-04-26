@@ -1,5 +1,20 @@
 # webgpu-renderer — Deferred Work
 
+## Full Renderer teardown / `destroy()`
+
+**Problem:** `Renderer.destroy()` currently does not exist. Switching rendering modes (e.g. data viz platform swapping pipelines) requires destroying the old instance and spinning up a new one. Without `destroy()`, all GPU resources (textures, buffers, pipelines, bind groups) leak.
+
+**Desired solution:** Add `destroy()` to every class that owns GPU resources, then cascade from `Renderer.destroy()` down through all passes, managers, and the geometry buffer.
+
+**Scope of change:**
+- `GeometryBuffer.destroy()` — destroy 5 G-buffer textures
+- `Renderer.destroy()` — destroy post-pass/high-res textures, call `destroy()` on all sub-objects
+- All passes (`GeometryPass`, `LightingPass`, `ShadowPass*`, `OcclusionPass*`, `ForwardPass`, `ParticlesPass`, `SkyboxPass`, `OutputPass`, `ReflectionProbePass`) — destroy pipelines, textures, buffers, bind groups
+- `MaterialManager`, `LightManager`, `SceneUniforms` — destroy owned GPU buffers and textures
+- External passes (`GBufferPass`, `PostPass` interfaces) — define optional `destroy()` in interface so `Renderer` can call it
+
+---
+
 ## Separate environment textures from SceneUniforms bind group
 
 **Problem:** `SceneUniforms` currently bundles environment texture bindings (slots 3–4) into the scene bind group. During reflection probe rendering, the probe's own `CubeRenderTarget` may be bound as environment texture 1 while simultaneously being written to as a render attachment — a WebGPU sync error. The workaround is `getProbeBindGroup()`, which substitutes the skybox into slot 3–4 during probe passes.

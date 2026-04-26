@@ -8,6 +8,7 @@ interface LoadedFace {
 }
 
 export class CubeTexture {
+  readonly isRenderTarget = false as const;
   private readonly device: GPUDevice;
   readonly folderPath: string;
   readonly extension: string;
