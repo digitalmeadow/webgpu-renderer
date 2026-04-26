@@ -1,28 +1,42 @@
 import { Entity, EntityType } from "../scene/Entity";
-import { Transform } from "../scene/Transform";
-import { VertexParticle, VERTEX_PARTICLE_FLOAT_COUNT, ParticleInstance, ParticleInstanceGPU } from ".";
-import { Vec3 } from "../math";
+import {
+  PARTICLE_QUAD_VERTEX_DATA,
+  PARTICLE_QUAD_INDEX_DATA,
+} from "./VertexParticle";
+import { ParticleInstance } from "./ParticleInstance";
+import {
+  PARTICLE_INSTANCE_STRIDE,
+  PARTICLE_INSTANCE_FLOAT_COUNT,
+} from "./ParticleInstanceLayout";
+import { Vec3, Quat } from "../math";
 import { MaterialParticle } from "../materials";
+import { GpuFloats, byteSize } from "../utils";
 
 export interface ParticleEmitterDesc {
   spawnCount: number;
   spawnRate: number;
-  spawnPositions: [number, number, number][];
+  spawnPositions: Vec3[];
   spawnScales: number[];
-  spawnRotations: [number, number, number, number][];
-  spawnVelocities: [number, number, number][];
+  spawnRotations: Quat[];
+  spawnVelocities: Vec3[];
   spawnLifetimes: number[];
   spawnAlphas: number[];
   spawnBillboards: number[];
 }
 
+// Mesh uniforms: atlas regions
+const MESH_UNIFORMS_FLOAT_COUNT = GpuFloats.vec4;
+const MESH_UNIFORMS_BUFFER_SIZE = byteSize(MESH_UNIFORMS_FLOAT_COUNT);
+
+// Material uniforms: gradient map settings
+const MATERIAL_UNIFORMS_FLOAT_COUNT = GpuFloats.vec4;
+const MATERIAL_UNIFORMS_BUFFER_SIZE = byteSize(MATERIAL_UNIFORMS_FLOAT_COUNT);
+
 export class ParticleEmitter extends Entity {
   readonly type = EntityType.ParticleEmitter;
-  private device: GPUDevice;
   public maxInstances: number;
   public instances: ParticleInstance[];
   private deadPool: ParticleInstance[] = [];
-  public aliveCount: number = 0;
 
   public material: MaterialParticle;
 
@@ -38,12 +52,20 @@ export class ParticleEmitter extends Entity {
 
   public desc: ParticleEmitterDesc;
 
+  // Pre-allocated staging arrays for uniform updates
+  private meshUniformsData = new Float32Array(MESH_UNIFORMS_FLOAT_COUNT);
+  private materialUniformsData = new Uint32Array(MATERIAL_UNIFORMS_FLOAT_COUNT);
+
+  // floatView and uintView alias the same ArrayBuffer — both index by
+  // float32/uint32 slots (4 bytes each), so the same numeric offset works for both.
   private instanceBufferData: ArrayBuffer;
   private floatView: Float32Array;
   private uintView: Uint32Array;
 
+  // Scratch for spawn transforms
   private tempPos: Vec3 = new Vec3();
   private tempVel: Vec3 = new Vec3();
+  private tempRot: Quat = Quat.create();
 
   constructor(
     device: GPUDevice,
@@ -53,110 +75,122 @@ export class ParticleEmitter extends Entity {
     material?: MaterialParticle,
   ) {
     super(name);
-    this.needsUpdate = true; // Particles always need per-frame updates
-    this.device = device;
     this.desc = desc;
     this.maxInstances = maxInstances;
     this.instances = [];
     this.material = material ?? new MaterialParticle();
 
-    const vertices = VertexParticle.createQuad();
-    const indices = VertexParticle.getIndexArray();
-
-    const vertexData = new Float32Array(
-      vertices.length * VERTEX_PARTICLE_FLOAT_COUNT,
-    );
-    for (let i = 0; i < vertices.length; i++) {
-      const vertexArray = vertices[i].toArray();
-      vertexData.set(vertexArray, i * VERTEX_PARTICLE_FLOAT_COUNT);
-    }
+    // Validate desc arrays
+    this.validateDesc();
 
     this.vertexBuffer = device.createBuffer({
       label: `${name} Vertex Buffer`,
-      size: vertexData.byteLength,
+      size: PARTICLE_QUAD_VERTEX_DATA.byteLength,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
       mappedAtCreation: true,
     });
-    new Float32Array(this.vertexBuffer.getMappedRange()).set(vertexData);
+    new Float32Array(this.vertexBuffer.getMappedRange()).set(
+      PARTICLE_QUAD_VERTEX_DATA,
+    );
     this.vertexBuffer.unmap();
 
     this.indexBuffer = device.createBuffer({
       label: `${name} Index Buffer`,
-      size: indices.byteLength,
+      size: PARTICLE_QUAD_INDEX_DATA.byteLength,
       usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
       mappedAtCreation: true,
     });
-    new Uint32Array(this.indexBuffer.getMappedRange()).set(indices);
+    new Uint32Array(this.indexBuffer.getMappedRange()).set(
+      PARTICLE_QUAD_INDEX_DATA,
+    );
     this.indexBuffer.unmap();
 
-    this.indexCount = indices.length;
+    this.indexCount = PARTICLE_QUAD_INDEX_DATA.length;
 
     this.instanceBuffer = device.createBuffer({
       label: `${name} Instance Buffer`,
-      size: maxInstances * ParticleInstanceGPU.stride,
+      size: maxInstances * PARTICLE_INSTANCE_STRIDE,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
 
     this.instanceBufferData = new ArrayBuffer(
-      maxInstances * ParticleInstanceGPU.stride,
+      maxInstances * PARTICLE_INSTANCE_STRIDE,
     );
     this.floatView = new Float32Array(this.instanceBufferData);
     this.uintView = new Uint32Array(this.instanceBufferData);
 
     this.meshUniformsBuffer = device.createBuffer({
       label: `${name} Mesh Uniforms Buffer`,
-      size: 16,
+      size: MESH_UNIFORMS_BUFFER_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
     this.materialUniformsBuffer = device.createBuffer({
       label: `${name} Material Uniforms Buffer`,
-      size: 16,
+      size: MATERIAL_UNIFORMS_BUFFER_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.updateMeshUniforms();
-    this.updateMaterialUniforms();
+    this.updateMeshUniforms(device);
+    this.updateMaterialUniforms(device);
   }
 
-  private updateMeshUniforms(): void {
-    const atlasRegions = new Float32Array([
-      this.material.atlasRegionsX,
-      this.material.atlasRegionsY,
-      this.material.atlasRegionsTotal,
-      0,
-    ]);
-    this.device.queue.writeBuffer(this.meshUniformsBuffer, 0, atlasRegions);
+  private validateDesc(): void {
+    if (
+      this.desc.spawnPositions.length !== this.desc.spawnCount ||
+      this.desc.spawnScales.length !== this.desc.spawnCount ||
+      this.desc.spawnRotations.length !== this.desc.spawnCount ||
+      this.desc.spawnVelocities.length !== this.desc.spawnCount ||
+      this.desc.spawnLifetimes.length !== this.desc.spawnCount ||
+      this.desc.spawnAlphas.length !== this.desc.spawnCount ||
+      this.desc.spawnBillboards.length !== this.desc.spawnCount
+    ) {
+      throw new Error(
+        `ParticleEmitter "${this.name}": desc arrays have mismatched lengths`,
+      );
+    }
   }
 
-  private updateMaterialUniforms(): void {
-    const gradientMapEnabled = this.material.gradientMapEnabled ? 1 : 0;
-    const materialUniforms = new Uint32Array([
-      gradientMapEnabled,
-      this.material.gradientMapCount,
-      0,
-      0,
-    ]);
-    this.device.queue.writeBuffer(
+  private updateMeshUniforms(device: GPUDevice): void {
+    this.meshUniformsData[0] = this.material.atlasRegionsX;
+    this.meshUniformsData[1] = this.material.atlasRegionsY;
+    this.meshUniformsData[2] = this.material.atlasRegionsTotal;
+    this.meshUniformsData[3] = 0;
+    device.queue.writeBuffer(this.meshUniformsBuffer, 0, this.meshUniformsData);
+  }
+
+  private updateMaterialUniforms(device: GPUDevice): void {
+    this.materialUniformsData[0] = this.material.gradientMapEnabled ? 1 : 0;
+    this.materialUniformsData[1] = this.material.gradientMapCount;
+    this.materialUniformsData[2] = 0;
+    this.materialUniformsData[3] = 0;
+    device.queue.writeBuffer(
       this.materialUniformsBuffer,
       0,
-      materialUniforms,
+      this.materialUniformsData,
     );
   }
 
-  public updateMaterial(): void {
-    this.updateMeshUniforms();
-    this.updateMaterialUniforms();
-  }
+  updateParticles(device: GPUDevice, delta: number = 0): void {
+    this.updateMeshUniforms(device);
+    this.updateMaterialUniforms(device);
+    this.validateDesc();
 
-  update(delta: number = 0): void {
     this.timeSinceLastSpawn += delta;
 
-    const spawnInterval = 1.0 / this.desc.spawnRate;
-
-    while (this.timeSinceLastSpawn >= spawnInterval) {
-      this.timeSinceLastSpawn -= spawnInterval;
-      this.spawn();
+    if (this.desc.spawnRate <= 0) {
+      this.timeSinceLastSpawn = 0;
+    } else {
+      const spawnInterval = 1.0 / this.desc.spawnRate;
+      while (this.timeSinceLastSpawn >= spawnInterval) {
+        this.timeSinceLastSpawn -= spawnInterval;
+        this.spawn();
+      }
+      // Clamp residual so a rate increase doesn't trigger a burst
+      this.timeSinceLastSpawn = Math.min(
+        this.timeSinceLastSpawn,
+        spawnInterval,
+      );
     }
 
     for (let i = this.instances.length - 1; i >= 0; i--) {
@@ -170,8 +204,7 @@ export class ParticleEmitter extends Entity {
       }
     }
 
-    this.aliveCount = this.instances.length;
-    this.updateInstanceBuffer();
+    this.updateInstanceBuffer(device);
   }
 
   private spawn(): void {
@@ -186,29 +219,23 @@ export class ParticleEmitter extends Entity {
       const spawnIndex = i % this.desc.spawnPositions.length;
 
       const localPos = this.desc.spawnPositions[spawnIndex];
-      const worldPos = Vec3.transformMat4(
-        this.tempPos.set(localPos[0], localPos[1], localPos[2]),
-        worldMatrix,
-        this.tempPos,
-      );
+      Vec3.transformMat4(localPos, worldMatrix, this.tempPos);
 
       const localVel = this.desc.spawnVelocities[spawnIndex];
-      const worldVel = Vec3.transformQuat(
-        this.tempVel.set(localVel[0], localVel[1], localVel[2]),
-        rotation,
-        this.tempVel,
-      );
+      Vec3.transformQuat(localVel, rotation, this.tempVel);
 
       const rot = this.desc.spawnRotations[spawnIndex];
+      Quat.copy(rot, this.tempRot);
+
       let instance: ParticleInstance;
 
       if (this.deadPool.length > 0) {
         instance = this.deadPool.pop()!;
         instance.reset(
-          [worldPos.x, worldPos.y, worldPos.z],
+          this.tempPos,
           this.desc.spawnScales[spawnIndex],
-          [rot[0], rot[1], rot[2], rot[3]],
-          [worldVel.x, worldVel.y, worldVel.z],
+          this.tempRot,
+          this.tempVel,
           this.desc.spawnLifetimes[spawnIndex],
           0,
           0,
@@ -218,10 +245,10 @@ export class ParticleEmitter extends Entity {
         );
       } else {
         instance = new ParticleInstance(
-          [worldPos.x, worldPos.y, worldPos.z],
+          this.tempPos.copy(),
           this.desc.spawnScales[spawnIndex],
-          [rot[0], rot[1], rot[2], rot[3]],
-          [worldVel.x, worldVel.y, worldVel.z],
+          this.tempRot.copy(),
+          this.tempVel.copy(),
           this.desc.spawnLifetimes[spawnIndex],
           0,
           0,
@@ -236,20 +263,20 @@ export class ParticleEmitter extends Entity {
     }
   }
 
-  private updateInstanceBuffer(): void {
+  private updateInstanceBuffer(device: GPUDevice): void {
     for (let i = 0; i < this.instances.length; i++) {
       const instance = this.instances[i];
-      const offset = i * 13;
+      const offset = i * PARTICLE_INSTANCE_FLOAT_COUNT;
 
-      this.floatView[offset + 0] = instance.position[0];
-      this.floatView[offset + 1] = instance.position[1];
-      this.floatView[offset + 2] = instance.position[2];
+      this.floatView[offset + 0] = instance.position.data[0];
+      this.floatView[offset + 1] = instance.position.data[1];
+      this.floatView[offset + 2] = instance.position.data[2];
       this.floatView[offset + 3] = instance.scale;
 
-      this.floatView[offset + 4] = instance.rotation[0];
-      this.floatView[offset + 5] = instance.rotation[1];
-      this.floatView[offset + 6] = instance.rotation[2];
-      this.floatView[offset + 7] = instance.rotation[3];
+      this.floatView[offset + 4] = instance.rotation.data[0];
+      this.floatView[offset + 5] = instance.rotation.data[1];
+      this.floatView[offset + 6] = instance.rotation.data[2];
+      this.floatView[offset + 7] = instance.rotation.data[3];
 
       this.uintView[offset + 8] = instance.atlasRegionIndex;
       this.uintView[offset + 9] = instance.gradientMapIndex;
@@ -261,12 +288,12 @@ export class ParticleEmitter extends Entity {
       this.floatView[offset + 12] = instance.frameLerp;
     }
 
-    this.device.queue.writeBuffer(
+    device.queue.writeBuffer(
       this.instanceBuffer,
       0,
       this.instanceBufferData,
       0,
-      this.instances.length * ParticleInstanceGPU.stride,
+      this.instances.length * PARTICLE_INSTANCE_STRIDE,
     );
   }
 
@@ -283,10 +310,10 @@ export function createDefaultParticleEmitterDesc(): ParticleEmitterDesc {
   return {
     spawnCount: 1,
     spawnRate: 10,
-    spawnPositions: [[0, 0, 0]],
+    spawnPositions: [new Vec3()],
     spawnScales: [0.5],
-    spawnRotations: [[0, 0, 0, 1]],
-    spawnVelocities: [[0, 1, 0]],
+    spawnRotations: [Quat.create()],
+    spawnVelocities: [new Vec3(0, 1, 0)],
     spawnLifetimes: [2.0],
     spawnAlphas: [1.0],
     spawnBillboards: [1],

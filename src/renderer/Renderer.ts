@@ -386,7 +386,7 @@ export class Renderer {
 
     for (const mesh of meshes) {
       if (mesh.skinData) {
-        mesh.updateJointMatrices();
+        mesh.updateJointMatrices(this.device);
       }
     }
 
@@ -594,7 +594,7 @@ export class Renderer {
     // Particles Pass
     const emitters = this.collectParticleEmitters(world);
     for (const emitter of emitters) {
-      emitter.update(time.delta);
+      emitter.updateParticles(this.device, time.delta);
     }
     if (this.particlesPass && emitters.length > 0) {
       this.particlesPass.render(
@@ -931,9 +931,7 @@ export class Renderer {
 
     // Update AABBs for meshes whose world matrices changed
     for (const mesh of allMeshes) {
-      if (mesh.needsAABBUpdate()) {
-        mesh.updateWorldAABB();
-      }
+      mesh.updateWorldAABB(); // no-ops if world matrix unchanged
     }
 
     // Get camera frustum planes

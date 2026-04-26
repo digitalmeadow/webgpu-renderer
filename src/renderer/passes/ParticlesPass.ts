@@ -1,7 +1,7 @@
 import { ParticleEmitter } from "../../particles/ParticleEmitter";
 import { Camera } from "../../camera";
-import { VertexParticle } from "../../particles";
-import { ParticleInstanceGPU } from "../../particles";
+import { getParticleVertexBufferLayout } from "../../particles/VertexParticle";
+import { getParticleInstanceBufferLayout } from "../../particles/ParticleInstanceLayout";
 import { Texture } from "../../textures";
 import shader from "./ParticlesPass.wgsl?raw";
 import { createCameraBindGroupLayout } from "../../camera/CameraUniforms";
@@ -91,8 +91,8 @@ export class ParticlesPass {
         module: shaderModule,
         entryPoint: "vs_main",
         buffers: [
-          VertexParticle.getBufferLayout(),
-          ParticleInstanceGPU.getBufferLayout(),
+          getParticleVertexBufferLayout(),
+          getParticleInstanceBufferLayout(),
         ],
       },
       fragment: {
@@ -160,7 +160,7 @@ export class ParticlesPass {
     passEncoder.setBindGroup(0, camera.uniforms.bindGroup);
 
     for (const emitter of emitters) {
-      if (emitter.aliveCount === 0) {
+      if (emitter.instances.length === 0) {
         continue;
       }
 
@@ -204,7 +204,7 @@ export class ParticlesPass {
       passEncoder.setVertexBuffer(1, emitter.instanceBuffer);
       passEncoder.setIndexBuffer(emitter.indexBuffer, "uint32");
 
-      passEncoder.drawIndexed(emitter.indexCount, emitter.aliveCount);
+      passEncoder.drawIndexed(emitter.indexCount, emitter.instances.length);
     }
 
     passEncoder.end();

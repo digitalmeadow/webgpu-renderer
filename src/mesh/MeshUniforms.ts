@@ -1,47 +1,49 @@
 import { Mat4 } from "../math";
 import { MAX_JOINTS } from "../skinning";
+import { GpuFloats, byteSize, alignVec4 } from "../utils";
+
+const OFFSET_MODEL_MATRIX = 0;
+const OFFSET_JOINT_MATRICES = OFFSET_MODEL_MATRIX + GpuFloats.mat4;
+const OFFSET_APPLY_SKINNING =
+  OFFSET_JOINT_MATRICES + GpuFloats.mat4 * MAX_JOINTS;
+const OFFSET_BILLBOARD_AXIS = OFFSET_APPLY_SKINNING + 1; // packed in same vec4
+
+const FLOAT_COUNT = alignVec4(OFFSET_BILLBOARD_AXIS + 1);
+const BUFFER_SIZE = byteSize(FLOAT_COUNT);
+
+let _meshBindGroupLayout: GPUBindGroupLayout | null = null;
 
 export function createMeshBindGroupLayout(
   device: GPUDevice,
 ): GPUBindGroupLayout {
-  return device.createBindGroupLayout({
-    label: "Mesh Uniforms Bind Group Layout",
-    entries: [
-      {
-        binding: 0,
-        visibility: GPUShaderStage.VERTEX,
-        buffer: { type: "uniform" },
-      },
-    ],
-  });
+  if (!_meshBindGroupLayout) {
+    _meshBindGroupLayout = device.createBindGroupLayout({
+      label: "Mesh Uniforms Bind Group Layout",
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: { type: "uniform" },
+        },
+      ],
+    });
+  }
+  return _meshBindGroupLayout;
 }
 
 export class MeshUniforms {
-  buffer: GPUBuffer;
-  bindGroup: GPUBindGroup;
-  bindGroupLayout: GPUBindGroupLayout;
-  modelMatrix: Mat4;
-  jointMatrices: Float32Array;
-  applySkinning: boolean;
+  readonly buffer: GPUBuffer;
+  readonly bindGroup: GPUBindGroup;
+  readonly bindGroupLayout: GPUBindGroupLayout;
 
-  private jointMatricesData: Float32Array;
-  private applySkinningValue: Uint32Array;
-  private billboardAxisValue: Uint32Array;
+  private uniformData = new Float32Array(FLOAT_COUNT);
+  // Separate typed array for the u32 fields — Float32Array can't represent them faithfully
+  private skinningData = new Uint32Array(2);
 
   constructor(device: GPUDevice) {
-    this.modelMatrix = Mat4.create();
-    this.jointMatrices = new Float32Array(MAX_JOINTS * 16);
-    this.applySkinning = false;
-
-    this.jointMatricesData = new Float32Array(MAX_JOINTS * 16);
-    this.applySkinningValue = new Uint32Array([0]);
-    this.billboardAxisValue = new Uint32Array([0]);
-
-    const bufferSize = 64 + MAX_JOINTS * 64 + 16;
-
     this.buffer = device.createBuffer({
       label: "Mesh Uniforms Buffer",
-      size: bufferSize,
+      size: BUFFER_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -50,12 +52,7 @@ export class MeshUniforms {
     this.bindGroup = device.createBindGroup({
       label: "Mesh Uniforms Bind Group",
       layout: this.bindGroupLayout,
-      entries: [
-        {
-          binding: 0,
-          resource: { buffer: this.buffer },
-        },
-      ],
+      entries: [{ binding: 0, resource: { buffer: this.buffer } }],
     });
   }
 
@@ -64,39 +61,52 @@ export class MeshUniforms {
     modelMatrix: Mat4,
     billboardAxis: number = 0,
   ): void {
-    device.queue.writeBuffer(this.buffer, 0, modelMatrix.data as any);
-
-    // 0 = disabled, 1 = x, 2 = y, 3 = z
-    // Write at offset after modelMatrix + joint_matrices + applySkinning
-    // modelMatrix (64) + joint_matrices (MAX_JOINTS * 64) + apply_skinning (4) = 4164 for MAX_JOINTS=64
-    this.billboardAxisValue[0] = billboardAxis;
-    const billboardOffset = 64 + MAX_JOINTS * 64 + 4;
+    this.uniformData.set(modelMatrix.data, OFFSET_MODEL_MATRIX);
     device.queue.writeBuffer(
       this.buffer,
-      billboardOffset,
-      this.billboardAxisValue.buffer,
+      0,
+      this.uniformData,
+      OFFSET_MODEL_MATRIX,
+      GpuFloats.mat4,
+    );
+
+    // applySkinning and billboardAxis are u32; write as raw bytes at their offsets
+    this.skinningData[0] = this.skinningData[0]; // preserve applySkinning
+    this.skinningData[1] = billboardAxis;
+    device.queue.writeBuffer(
+      this.buffer,
+      byteSize(OFFSET_APPLY_SKINNING),
+      this.skinningData,
     );
   }
 
-  updateJointMatrices(device: GPUDevice, matrices: Mat4[]): void {
-    const count = Math.min(matrices.length, MAX_JOINTS);
-    for (let i = 0; i < count; i++) {
-      this.jointMatricesData.set(matrices[i].data, i * 16);
+  updateJointMatrices(
+    device: GPUDevice,
+    matrices: Mat4[],
+    count: number,
+  ): void {
+    const n = Math.min(count, MAX_JOINTS);
+    for (let i = 0; i < n; i++) {
+      this.uniformData.set(
+        matrices[i].data,
+        OFFSET_JOINT_MATRICES + i * GpuFloats.mat4,
+      );
     }
     device.queue.writeBuffer(
       this.buffer,
-      64,
-      this.jointMatricesData.subarray(0, count * 16) as any,
+      byteSize(OFFSET_JOINT_MATRICES),
+      this.uniformData,
+      OFFSET_JOINT_MATRICES,
+      n * GpuFloats.mat4,
     );
   }
 
   setApplySkinning(device: GPUDevice, value: boolean): void {
-    this.applySkinning = value;
-    this.applySkinningValue[0] = value ? 1 : 0;
+    this.skinningData[0] = value ? 1 : 0;
     device.queue.writeBuffer(
       this.buffer,
-      64 + MAX_JOINTS * 64,
-      this.applySkinningValue.buffer,
+      byteSize(OFFSET_APPLY_SKINNING),
+      this.skinningData,
     );
   }
 }

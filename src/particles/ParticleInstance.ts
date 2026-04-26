@@ -1,8 +1,10 @@
+import { Vec3, Quat } from "../math";
+
 export class ParticleInstance {
-  public position: [number, number, number];
+  public position: Vec3;
   public scale: number;
-  public rotation: [number, number, number, number];
-  public velocity: [number, number, number];
+  public rotation: Quat;
+  public velocity: Vec3;
   public lifetime: number;
   public maxLifetime: number;
   public atlasRegionIndex: number;
@@ -13,10 +15,10 @@ export class ParticleInstance {
   public spawnIndex: number;
 
   constructor(
-    position: [number, number, number] = [0, 0, 0],
+    position: Vec3 = new Vec3(),
     scale: number = 1.0,
-    rotation: [number, number, number, number] = [0, 0, 0, 1],
-    velocity: [number, number, number] = [0, 0, 0],
+    rotation: Quat = Quat.create(),
+    velocity: Vec3 = new Vec3(),
     lifetime: number = 1.0,
     atlasRegionIndex: number = 0,
     gradientMapIndex: number = 0,
@@ -39,8 +41,14 @@ export class ParticleInstance {
     this.spawnIndex = spawnIndex;
   }
 
+  /** 1.0 = just spawned, 0.0 = expired */
   get lifeRatio(): number {
     return this.lifetime / this.maxLifetime;
+  }
+
+  /** 0.0 = just spawned, 1.0 = expired */
+  get lifeProgress(): number {
+    return 1.0 - this.lifeRatio;
   }
 
   isAlive(): boolean {
@@ -48,10 +56,10 @@ export class ParticleInstance {
   }
 
   reset(
-    position: [number, number, number],
+    position: Vec3,
     scale: number,
-    rotation: [number, number, number, number],
-    velocity: [number, number, number],
+    rotation: Quat,
+    velocity: Vec3,
     lifetime: number,
     atlasRegionIndex: number = 0,
     gradientMapIndex: number = 0,
@@ -59,31 +67,24 @@ export class ParticleInstance {
     billboard: number = 1,
     spawnIndex: number = 0,
   ): void {
-    this.position[0] = position[0];
-    this.position[1] = position[1];
-    this.position[2] = position[2];
+    Vec3.copy(position, this.position);
     this.scale = scale;
-    this.rotation[0] = rotation[0];
-    this.rotation[1] = rotation[1];
-    this.rotation[2] = rotation[2];
-    this.rotation[3] = rotation[3];
-    this.velocity[0] = velocity[0];
-    this.velocity[1] = velocity[1];
-    this.velocity[2] = velocity[2];
+    Quat.copy(rotation, this.rotation);
+    Vec3.copy(velocity, this.velocity);
     this.lifetime = lifetime;
     this.maxLifetime = lifetime;
     this.atlasRegionIndex = atlasRegionIndex;
     this.gradientMapIndex = gradientMapIndex;
     this.alpha = alpha;
     this.billboard = billboard;
-    this.frameLerp = 0.0;
+    this.frameLerp = 0.0; // Always reset to 0 — animation frame interpolation restarts
     this.spawnIndex = spawnIndex;
   }
 
   update(delta: number): void {
-    this.position[0] += this.velocity[0] * delta;
-    this.position[1] += this.velocity[1] * delta;
-    this.position[2] += this.velocity[2] * delta;
+    this.position.data[0] += this.velocity.data[0] * delta;
+    this.position.data[1] += this.velocity.data[1] * delta;
+    this.position.data[2] += this.velocity.data[2] * delta;
     this.lifetime -= delta;
   }
 }

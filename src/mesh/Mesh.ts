@@ -3,14 +3,14 @@ import { MeshUniforms } from "./MeshUniforms";
 import { Entity, EntityType } from "../scene/Entity";
 import { Geometry } from "../geometries";
 import { Mat4, AABBWorld } from "../math";
-import { SkinData } from "../skinning";
+import { SkinData, MAX_JOINTS } from "../skinning";
 import { InstanceData, DEFAULT_INSTANCE_DATA } from "../scene/InstanceData";
 
 export class Mesh extends Entity {
   readonly type = EntityType.Mesh;
   public geometry: Geometry;
-  // NOTE: uniforms are kept for skinning support, but not used in instanced rendering
-  // TODO: Implement skinning support for instanced rendering
+  // Uniforms kept for skinning; not used in instanced rendering
+  // TODO: skinning support for instanced rendering
   public uniforms: MeshUniforms;
   public material: MaterialBase | null = null;
   public skinData: SkinData | null = null;
@@ -19,8 +19,13 @@ export class Mesh extends Entity {
   public instanceData: InstanceData = DEFAULT_INSTANCE_DATA;
   public sortByDepth: boolean = false;
   public readonly worldAABB: AABBWorld = new AABBWorld();
-  private device: GPUDevice;
-  private _lastWorldMatrixVersion: number = -1;
+
+  // Pre-allocated scratch to avoid per-frame allocation in updateJointMatrices
+  private readonly jointMatrixScratch: Mat4[] = Array.from(
+    { length: MAX_JOINTS },
+    () => Mat4.create(),
+  );
+  private lastWorldMatrixVersion: number = -1;
 
   constructor(
     device: GPUDevice,
@@ -29,40 +34,35 @@ export class Mesh extends Entity {
     material: MaterialBase,
   ) {
     super(name);
-    this.device = device;
     this.uniforms = new MeshUniforms(device);
     this.geometry = geometry;
     this.material = material;
   }
 
   public updateWorldAABB(): void {
-    const worldMatrix = this.transform.getWorldMatrix();
-    this.worldAABB.update(this.geometry.aabb, worldMatrix);
-    this._lastWorldMatrixVersion = this.transform.worldMatrixVersion;
+    if (!this.needsAABBUpdate()) return;
+    this.worldAABB.update(this.geometry.aabb, this.transform.getWorldMatrix());
+    this.lastWorldMatrixVersion = this.transform.worldMatrixVersion;
   }
 
   public needsAABBUpdate(): boolean {
-    return this.transform.worldMatrixVersion !== this._lastWorldMatrixVersion;
+    return this.transform.worldMatrixVersion !== this.lastWorldMatrixVersion;
   }
 
-  public updateJointMatrices(): void {
+  public updateJointMatrices(device: GPUDevice): void {
     if (!this.skinData || !this.uniforms) return;
 
-    const matrices: Mat4[] = [];
-    for (let i = 0; i < this.skinData.joints.length; i++) {
-      const jointEntity = this.skinData.joints[i];
-      const ibm = this.skinData.inverseBindMatrices[i];
-
-      const worldMatrix = jointEntity.transform.getWorldMatrix();
-      const jointMatrix = Mat4.multiply(worldMatrix, ibm);
-      matrices.push(jointMatrix);
+    const count = this.skinData.joints.length;
+    for (let i = 0; i < count; i++) {
+      const worldMatrix = this.skinData.joints[i].transform.getWorldMatrix();
+      Mat4.multiply(
+        worldMatrix,
+        this.skinData.inverseBindMatrices[i],
+        this.jointMatrixScratch[i],
+      );
     }
 
-    this.uniforms.updateJointMatrices(this.device, matrices);
-    this.uniforms.setApplySkinning(this.device, true);
-  }
-
-  public getDevice(): GPUDevice {
-    return this.device;
+    this.uniforms.updateJointMatrices(device, this.jointMatrixScratch, count);
+    this.uniforms.setApplySkinning(device, true);
   }
 }
