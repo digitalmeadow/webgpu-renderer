@@ -1,4 +1,5 @@
 import { Vec3 } from "../math";
+import { GpuFloats, byteSize, alignVec4 } from "../utils";
 import { CubeTexture, CubeRenderTarget } from "../textures";
 
 const FOG_COLOR_BASE_DEFAULT = new Vec3(72 / 255, 73 / 255, 75 / 255);
@@ -6,39 +7,56 @@ const FOG_COLOR_SUN_DEFAULT = new Vec3(252 / 255, 199 / 255, 122 / 255);
 const FOG_EXTINCTION_DEFAULT = new Vec3(0.001, 0.001, 0.001);
 const FOG_INSCATTERING_DEFAULT = new Vec3(0.0015, 0.0015, 0.0015);
 
+const OFFSET_AMBIENT_LIGHT_COLOR = 0;
+const OFFSET_IBL_INTENSITY = OFFSET_AMBIENT_LIGHT_COLOR + GpuFloats.vec3; // w of first vec4
+const OFFSET_FOG_COLOR_BASE = OFFSET_AMBIENT_LIGHT_COLOR + GpuFloats.vec4;
+const OFFSET_FOG_COLOR_SUN = OFFSET_FOG_COLOR_BASE + GpuFloats.vec4;
+const OFFSET_FOG_EXTINCTION = OFFSET_FOG_COLOR_SUN + GpuFloats.vec4;
+const OFFSET_FOG_INSCATTERING = OFFSET_FOG_EXTINCTION + GpuFloats.vec4;
+const OFFSET_FOG_SUN_EXPONENT = OFFSET_FOG_INSCATTERING + GpuFloats.vec3; // w of last fog vec4
+const OFFSET_FOG_ENABLED = OFFSET_FOG_INSCATTERING + GpuFloats.vec4; // u32
+
+const FLOAT_COUNT = alignVec4(OFFSET_FOG_ENABLED + GpuFloats.f32); // = 24
+const BUFFER_SIZE = byteSize(FLOAT_COUNT); // = 96
+
+let _layout: GPUBindGroupLayout | null = null;
+
 export function createSceneBindGroupLayout(
   device: GPUDevice,
 ): GPUBindGroupLayout {
-  return device.createBindGroupLayout({
-    label: "Scene Uniforms Bind Group Layout",
-    entries: [
-      {
-        binding: 0,
-        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-        buffer: { type: "uniform" },
-      },
-      {
-        binding: 1,
-        visibility: GPUShaderStage.FRAGMENT,
-        texture: { viewDimension: "cube" },
-      },
-      {
-        binding: 2,
-        visibility: GPUShaderStage.FRAGMENT,
-        sampler: { type: "filtering" },
-      },
-      {
-        binding: 3,
-        visibility: GPUShaderStage.FRAGMENT,
-        texture: { viewDimension: "cube" },
-      },
-      {
-        binding: 4,
-        visibility: GPUShaderStage.FRAGMENT,
-        sampler: { type: "filtering" },
-      },
-    ],
-  });
+  if (!_layout) {
+    _layout = device.createBindGroupLayout({
+      label: "Scene Bind Group Layout",
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" },
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { viewDimension: "cube" },
+        },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "filtering" },
+        },
+        {
+          binding: 3,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { viewDimension: "cube" },
+        },
+        {
+          binding: 4,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: "filtering" },
+        },
+      ],
+    });
+  }
+  return _layout;
 }
 
 export class SceneUniforms {
@@ -56,24 +74,21 @@ export class SceneUniforms {
   public fogEnabled: boolean = true;
 
   private device: GPUDevice;
-  private data: Float32Array;
-  private dataU32: Uint32Array;
+  private uniformData = new Float32Array(FLOAT_COUNT);
+  // u32 view — fogEnabled must not be written as float32
+  private u32Data = new Uint32Array(1);
   private skyboxTexture: CubeTexture | null = null;
   private placeholderTextureView: GPUTextureView;
   private placeholderSampler: GPUSampler;
   private environmentTextures: Array<CubeTexture | CubeRenderTarget | null> =
-    []; // Environment texture array for per-material environments
-  private probeBindGroup: GPUBindGroup | null = null; // Cached bind group for probe rendering
+    [];
+  private probeBindGroup: GPUBindGroup | null = null;
 
   constructor(device: GPUDevice) {
     this.device = device;
 
-    const bufferSize = 96;
-    this.data = new Float32Array(bufferSize / 4);
-    this.dataU32 = new Uint32Array(this.data.buffer);
-
     const placeholderTexture = device.createTexture({
-      label: "Placeholder Cube Texture",
+      label: "Scene Uniforms Placeholder Cube Texture",
       size: { width: 1, height: 1, depthOrArrayLayers: 6 },
       format: "rgba8unorm",
       usage: GPUTextureUsage.TEXTURE_BINDING,
@@ -82,114 +97,80 @@ export class SceneUniforms {
       dimension: "cube",
     });
     this.placeholderSampler = device.createSampler({
-      label: "Placeholder Sampler",
+      label: "Scene Uniforms Placeholder Sampler",
       minFilter: "linear",
       magFilter: "linear",
     });
 
     this.buffer = device.createBuffer({
       label: "Scene Uniforms Buffer",
-      size: this.data.byteLength,
+      size: BUFFER_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
     this.bindGroupLayout = createSceneBindGroupLayout(device);
 
-    this.bindGroup = device.createBindGroup({
-      label: "Scene Uniforms Bind Group",
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: { buffer: this.buffer } },
-        { binding: 1, resource: this.placeholderTextureView },
-        { binding: 2, resource: this.placeholderSampler },
-        { binding: 3, resource: this.placeholderTextureView },
-        { binding: 4, resource: this.placeholderSampler },
-      ],
-    });
-
+    // bindGroup is assigned by updateBindGroup()
+    this.bindGroup = null!;
     this.updateBindGroup();
     this.update();
   }
 
   update(): void {
-    // float32 view of the buffer
-    this.data.set(
-      [
-        this.ambientLightColor.x,
-        this.ambientLightColor.y,
-        this.ambientLightColor.z,
-      ],
-      0,
-    );
-    this.data[3] = this.iblIntensity;
+    this.uniformData[OFFSET_AMBIENT_LIGHT_COLOR] = this.ambientLightColor.x;
+    this.uniformData[OFFSET_AMBIENT_LIGHT_COLOR + 1] = this.ambientLightColor.y;
+    this.uniformData[OFFSET_AMBIENT_LIGHT_COLOR + 2] = this.ambientLightColor.z;
+    this.uniformData[OFFSET_IBL_INTENSITY] = this.iblIntensity;
 
-    this.data.set(
-      [this.fogColorBase.x, this.fogColorBase.y, this.fogColorBase.z],
-      4,
-    );
-    this.data.set(
-      [this.fogColorSun.x, this.fogColorSun.y, this.fogColorSun.z],
-      8,
-    );
-    this.data.set(
-      [this.fogExtinction.x, this.fogExtinction.y, this.fogExtinction.z],
-      12,
-    );
-    this.data.set(
-      [this.fogInscattering.x, this.fogInscattering.y, this.fogInscattering.z],
-      16,
-    );
+    this.uniformData[OFFSET_FOG_COLOR_BASE] = this.fogColorBase.x;
+    this.uniformData[OFFSET_FOG_COLOR_BASE + 1] = this.fogColorBase.y;
+    this.uniformData[OFFSET_FOG_COLOR_BASE + 2] = this.fogColorBase.z;
 
-    this.data[19] = this.fogSunExponent;
-    this.dataU32[20] = this.fogEnabled ? 1 : 0;
+    this.uniformData[OFFSET_FOG_COLOR_SUN] = this.fogColorSun.x;
+    this.uniformData[OFFSET_FOG_COLOR_SUN + 1] = this.fogColorSun.y;
+    this.uniformData[OFFSET_FOG_COLOR_SUN + 2] = this.fogColorSun.z;
 
-    this.device.queue.writeBuffer(this.buffer, 0, this.data.buffer);
-  }
+    this.uniformData[OFFSET_FOG_EXTINCTION] = this.fogExtinction.x;
+    this.uniformData[OFFSET_FOG_EXTINCTION + 1] = this.fogExtinction.y;
+    this.uniformData[OFFSET_FOG_EXTINCTION + 2] = this.fogExtinction.z;
 
-  setFogEnabled(value: boolean): void {
-    this.fogEnabled = value;
-    this.update();
+    this.uniformData[OFFSET_FOG_INSCATTERING] = this.fogInscattering.x;
+    this.uniformData[OFFSET_FOG_INSCATTERING + 1] = this.fogInscattering.y;
+    this.uniformData[OFFSET_FOG_INSCATTERING + 2] = this.fogInscattering.z;
+
+    this.uniformData[OFFSET_FOG_SUN_EXPONENT] = this.fogSunExponent;
+
+    this.device.queue.writeBuffer(this.buffer, 0, this.uniformData);
+
+    this.u32Data[0] = this.fogEnabled ? 1 : 0;
+    this.device.queue.writeBuffer(
+      this.buffer,
+      byteSize(OFFSET_FOG_ENABLED),
+      this.u32Data,
+    );
   }
 
   updateBindGroup(): void {
     const skyboxView = this.skyboxTexture?.gpuTextureView;
     const skyboxSampler = this.skyboxTexture?.gpuSampler;
 
-    // Get environment texture 1 (first custom environment map)
+    // Index 0 is reserved for the global skybox (set via setSkyboxTexture).
+    // Custom environment textures (e.g. reflection probes) start at index 1.
     const env1 =
       this.environmentTextures.length > 1 ? this.environmentTextures[1] : null;
     const env1View = env1?.gpuTextureView;
     const env1Sampler = env1?.gpuSampler;
 
-    const entries: GPUBindGroupEntry[] = [
-      {
-        binding: 0,
-        resource: {
-          buffer: this.buffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: skyboxView ?? this.placeholderTextureView!,
-      },
-      {
-        binding: 2,
-        resource: skyboxSampler ?? this.placeholderSampler!,
-      },
-      {
-        binding: 3,
-        resource: env1View ?? this.placeholderTextureView!,
-      },
-      {
-        binding: 4,
-        resource: env1Sampler ?? this.placeholderSampler!,
-      },
-    ];
-
     this.bindGroup = this.device.createBindGroup({
       label: "Scene Uniforms Bind Group",
       layout: this.bindGroupLayout,
-      entries,
+      entries: [
+        { binding: 0, resource: { buffer: this.buffer } },
+        { binding: 1, resource: skyboxView ?? this.placeholderTextureView },
+        { binding: 2, resource: skyboxSampler ?? this.placeholderSampler },
+        { binding: 3, resource: env1View ?? this.placeholderTextureView },
+        { binding: 4, resource: env1Sampler ?? this.placeholderSampler },
+      ],
     });
   }
 
@@ -218,16 +199,11 @@ export class SceneUniforms {
     return this.placeholderSampler;
   }
 
-  /**
-   * Creates a bind group for reflection probe rendering that excludes custom environment textures
-   * to prevent texture usage conflicts. Only includes the global skybox at bindings 1-2 and 3-4.
-   *
-   * This ensures that when a probe renders the scene to its cube texture, that same cube texture
-   * isn't simultaneously bound as a texture binding (which would cause a WebGPU synchronization error).
-   */
+  // During probe rendering, the probe's cubeRenderTarget is the render attachment.
+  // If it's also bound as environmentTextures[1], WebGPU throws a sync error.
+  // This bind group substitutes the skybox into slot 3–4 to avoid the conflict.
+  // Deferred: see TODO.md for a proper fix via a separate EnvironmentBindGroup.
   private createProbeRenderingBindGroup(): GPUBindGroup {
-    // Use the global skybox texture for both binding slots (1-2 and 3-4)
-    // This ensures probes only reflect the skybox, not other custom environments
     const skyboxView =
       this.skyboxTexture?.gpuTextureView ?? this.placeholderTextureView;
     const skyboxSampler =
@@ -240,17 +216,12 @@ export class SceneUniforms {
         { binding: 0, resource: { buffer: this.buffer } },
         { binding: 1, resource: skyboxView },
         { binding: 2, resource: skyboxSampler },
-        { binding: 3, resource: skyboxView }, // Use skybox instead of custom env to avoid conflicts
+        { binding: 3, resource: skyboxView },
         { binding: 4, resource: skyboxSampler },
       ],
     });
   }
 
-  /**
-   * Gets the bind group for reflection probe rendering.
-   * This bind group only includes the skybox (not custom environment textures) to prevent
-   * texture usage synchronization errors when the probe's cube texture is being rendered to.
-   */
   getProbeBindGroup(): GPUBindGroup {
     if (!this.probeBindGroup) {
       this.probeBindGroup = this.createProbeRenderingBindGroup();
