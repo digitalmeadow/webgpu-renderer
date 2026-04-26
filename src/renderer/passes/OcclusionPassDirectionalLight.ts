@@ -6,8 +6,7 @@ import {
 } from "../../lights";
 import { Vertex } from "../../geometries";
 import { MaterialManager } from "../../materials";
-import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
-import { Camera } from "../../camera";
+import { InstanceGroup, InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
 
 export class OcclusionPassDirectionalLight {
   private device: GPUDevice;
@@ -99,6 +98,8 @@ export class OcclusionPassDirectionalLight {
         depthWriteEnabled: true,
         depthCompare: "less-equal",
         format: "depth32float",
+        depthBias: 5000,
+        depthBiasSlopeScale: 1.5,
       },
     });
 
@@ -129,6 +130,8 @@ export class OcclusionPassDirectionalLight {
         depthWriteEnabled: true,
         depthCompare: "less-equal",
         format: "depth32float",
+        depthBias: 5000,
+        depthBiasSlopeScale: 1.5,
       },
     });
   }
@@ -138,29 +141,40 @@ export class OcclusionPassDirectionalLight {
     this.createOcclusionResources();
   }
 
+  private drawMaskedGroups(
+    passEncoder: GPURenderPassEncoder,
+    groups: InstanceGroup[],
+  ): void {
+    for (const group of groups) {
+      if (!group.instanceBuffer || group.instanceCount === 0) continue;
+      const materialBindGroup = this.materialManager.getBindGroup(group.material);
+      if (!materialBindGroup) continue;
+      passEncoder.setBindGroup(1, materialBindGroup);
+      passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
+      passEncoder.setVertexBuffer(1, group.instanceBuffer);
+      passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
+      passEncoder.drawIndexed(group.geometry.indexCount, group.instanceCount);
+    }
+  }
+
   public render(
-    device: GPUDevice,
     directionalLights: DirectionalLight[],
     opaqueMeshes: Mesh[],
     alphaTestMeshes: Mesh[] = [],
     transparentMeshes: Mesh[] = [],
-    camera: Camera,
   ): void {
     this.instanceGroupManager.beginFrame();
     const opaqueGroups = this.instanceGroupManager.buildGroups(
-      device,
+      this.device,
       opaqueMeshes,
-      camera.transform.getWorldPosition(),
     );
     const alphaTestGroups = this.instanceGroupManager.buildGroups(
-      device,
+      this.device,
       alphaTestMeshes,
-      camera.transform.getWorldPosition(),
     );
     const transparentGroups = this.instanceGroupManager.buildGroups(
-      device,
+      this.device,
       transparentMeshes,
-      camera.transform.getWorldPosition(),
     );
 
     for (
@@ -170,12 +184,7 @@ export class OcclusionPassDirectionalLight {
     ) {
       const light = directionalLights[lightIndex];
 
-      // For occlusion, we don't need frustum culling (render everything)
-      const visibleOpaqueGroups = opaqueGroups;
-      const visibleAlphaTestGroups = alphaTestGroups;
-      const visibleTransparentGroups = transparentGroups;
-
-      const encoder = device.createCommandEncoder({
+      const encoder = this.device.createCommandEncoder({
         label: `Occlusion Pass Encoder Light ${lightIndex}`,
       });
 
@@ -194,7 +203,7 @@ export class OcclusionPassDirectionalLight {
       passEncoder.setPipeline(this.pipeline);
       passEncoder.setBindGroup(0, light.shadowBindGroup);
 
-      for (const group of visibleOpaqueGroups) {
+      for (const group of opaqueGroups) {
         if (!group.instanceBuffer || group.instanceCount === 0) continue;
 
         passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
@@ -204,56 +213,22 @@ export class OcclusionPassDirectionalLight {
       }
 
       // Render alpha-tested meshes (with fragment shader for alpha discard)
-      if (visibleAlphaTestGroups.length > 0) {
+      if (alphaTestGroups.length > 0) {
         passEncoder.setPipeline(this.transparentPipeline);
-
-        for (const group of visibleAlphaTestGroups) {
-          if (!group.instanceBuffer || group.instanceCount === 0) continue;
-
-          const materialBindGroup = this.materialManager.getBindGroup(
-            group.material,
-          );
-          if (!materialBindGroup) continue;
-
-          passEncoder.setBindGroup(0, light.shadowBindGroup);
-          passEncoder.setBindGroup(1, materialBindGroup);
-          passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
-          passEncoder.setVertexBuffer(1, group.instanceBuffer);
-          passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
-          passEncoder.drawIndexed(
-            group.geometry.indexCount,
-            group.instanceCount,
-          );
-        }
+        passEncoder.setBindGroup(0, light.shadowBindGroup);
+        this.drawMaskedGroups(passEncoder, alphaTestGroups);
       }
 
       // Render transparent meshes (with fragment shader for alpha discard)
-      if (visibleTransparentGroups.length > 0) {
+      if (transparentGroups.length > 0) {
         passEncoder.setPipeline(this.transparentPipeline);
-
-        for (const group of visibleTransparentGroups) {
-          if (!group.instanceBuffer || group.instanceCount === 0) continue;
-
-          const materialBindGroup = this.materialManager.getBindGroup(
-            group.material,
-          );
-          if (!materialBindGroup) continue;
-
-          passEncoder.setBindGroup(0, light.shadowBindGroup);
-          passEncoder.setBindGroup(1, materialBindGroup);
-          passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
-          passEncoder.setVertexBuffer(1, group.instanceBuffer);
-          passEncoder.setIndexBuffer(group.geometry.indexBuffer, "uint32");
-          passEncoder.drawIndexed(
-            group.geometry.indexCount,
-            group.instanceCount,
-          );
-        }
+        passEncoder.setBindGroup(0, light.shadowBindGroup);
+        this.drawMaskedGroups(passEncoder, transparentGroups);
       }
 
       passEncoder.end();
 
-      device.queue.submit([encoder.finish()]);
+      this.device.queue.submit([encoder.finish()]);
     }
   }
 

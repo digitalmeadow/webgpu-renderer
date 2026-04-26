@@ -605,12 +605,10 @@ export class Renderer {
       }
 
       this.occlusionPassDirectionalLight.render(
-        this.device,
         occlusionEnabledDirectionalLights,
         opaqueMeshes,
         alphaMeshes,
         blendMeshes,
-        camera,
       );
 
       // Restore shadow matrices overwritten by occlusion pass
@@ -625,12 +623,10 @@ export class Renderer {
     );
     if (occlusionEnabledSpotLights.length > 0) {
       this.occlusionPassSpotLight.render(
-        this.device,
         occlusionEnabledSpotLights,
         opaqueMeshes,
         alphaMeshes,
         blendMeshes,
-        camera,
       );
     }
   }

@@ -1,5 +1,3 @@
-const MAX_JOINTS: u32 = 64u;
-
 struct MaterialUniforms {
   color: vec4<f32>,
   opacity: f32,
@@ -104,7 +102,6 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
     
     let local_pos = in.position.xyz;
     let mesh_pos = model_matrix[3].xyz;
-    var final_local_pos = local_pos;
 
     if (instance.billboard_axis != 0u) {
         let axisVec = get_billboard_axis(instance.billboard_axis);
@@ -116,7 +113,7 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
         return output;
     }
 
-    let model_position = model_matrix * vec4<f32>(final_local_pos, 1.0);
+    let model_position = model_matrix * vec4<f32>(local_pos, 1.0);
     let clip_position = light_spot_uniforms.view_projection_matrix * model_position;
     output.position = clip_position;
     output.uv = in.uv;
@@ -125,10 +122,9 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @builtin(frag_depth) f32 {
+fn fs_main(in: VertexOutput) {
     let albedo = textureSample(albedoTexture, nearestSampler, in.uv);
-    if (albedo.a == 0.0) {
+    if (albedo.a < material.alpha_cutoff) {
         discard;
     }
-    return in.position.z / in.position.w;
 }

@@ -1,5 +1,3 @@
-const MAX_JOINTS: u32 = 64u;
-
 struct MaterialUniforms {
   color: vec4<f32>,
   opacity: f32,
@@ -51,7 +49,7 @@ fn get_billboard_axis(axis: u32) -> vec3<f32> {
     );
 }
 
-fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat3x3<f32> {
+fn compute_billboard_orientation(axisVec: vec3<f32>) -> mat3x3<f32> {
     let forward = normalize(light_directional_uniforms.direction.xyz);
 
     let forwardDotAxis = dot(forward, axisVec);
@@ -99,11 +97,10 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
     
     let local_pos = in.position.xyz;
     let mesh_pos = model_matrix[3].xyz;
-    var final_local_pos = local_pos;
 
     if (instance.billboard_axis != 0u) {
         let axisVec = get_billboard_axis(instance.billboard_axis);
-        let billboard_matrix = compute_billboard_orientation(mesh_pos, axisVec);
+        let billboard_matrix = compute_billboard_orientation(axisVec);
         let billboarded_pos = billboard_matrix * local_pos;
         // Use view_projection_matrices[0] which will contain the occlusion matrix
         let clip_position = light_directional_uniforms.view_projection_matrices[0] * vec4<f32>(mesh_pos + billboarded_pos, 1.0);
@@ -112,7 +109,7 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
         return output;
     }
 
-    let model_position = model_matrix * vec4<f32>(final_local_pos, 1.0);
+    let model_position = model_matrix * vec4<f32>(local_pos, 1.0);
     // Use view_projection_matrices[0] which will contain the occlusion matrix
     let clip_position = light_directional_uniforms.view_projection_matrices[0] * model_position;
     output.position = clip_position;
@@ -122,10 +119,9 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @builtin(frag_depth) f32 {
+fn fs_main(in: VertexOutput) {
     let albedo = textureSample(albedoTexture, nearestSampler, in.uv);
-    if (albedo.a == 0.0) {
+    if (albedo.a < material.alpha_cutoff) {
         discard;
     }
-    return in.position.z / in.position.w;
 }

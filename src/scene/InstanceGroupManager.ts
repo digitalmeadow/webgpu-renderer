@@ -31,7 +31,7 @@ export class InstanceGroupManager {
   buildGroups(
     device: GPUDevice,
     meshes: Mesh[],
-    cameraPosition: Vec3,
+    cameraPosition?: Vec3,
   ): InstanceGroup[] {
     const groups = new Map<string, InstanceGroup>();
 
@@ -56,8 +56,8 @@ export class InstanceGroupManager {
     }
 
     for (const group of groups.values()) {
-      if (group.sortByDepth) {
-        this.sortInstancesByDepth(group, cameraPosition);
+      if (group.sortByDepth && cameraPosition) {
+        this.sortInstancesByDepth(group, cameraPosition!);
       }
     }
 
