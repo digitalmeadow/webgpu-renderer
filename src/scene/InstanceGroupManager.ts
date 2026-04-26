@@ -75,8 +75,8 @@ export class InstanceGroupManager {
     cameraPosition: Vec3,
   ): void {
     group.meshes.sort((a, b) => {
-      const posA = a.transform.getWorldMatrix();
-      const posB = b.transform.getWorldMatrix();
+      const posA = a.transform.worldMatrix;
+      const posB = b.transform.worldMatrix;
 
       // Extract position from matrix column 3
       const worldPosA = new Vec3(posA.data[12], posA.data[13], posA.data[14]);
@@ -132,7 +132,7 @@ export class InstanceGroupManager {
       const mesh = group.meshes[i];
       const offset = i * FLOAT_COUNT;
 
-      const matrix = mesh.transform.getWorldMatrix();
+      const matrix = mesh.transform.worldMatrix;
       group.instanceBufferData.set(matrix.data, offset + OFFSET_MATRIX);
 
       uintView[offset + OFFSET_BILLBOARD] = this.getBillboardValue(mesh.billboard);

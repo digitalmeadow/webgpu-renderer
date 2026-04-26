@@ -29,7 +29,7 @@ export class Transform {
   }
 
   setRotation(x: number, y: number, z: number): this {
-    this.rotation = Quat.fromEuler(x, y, z);
+    Quat.fromEuler(x, y, z, this.rotation);
     this.updateLocalMatrix();
     this.markNeedsUpdate();
     return this;
@@ -51,7 +51,7 @@ export class Transform {
 
   markNeedsUpdate(): void {
     this.needsUpdate = true;
-    // Mark all children as needing update since parent changed
+    // parent change invalidates descendants
     for (const child of this.children) {
       child.markNeedsUpdate();
     }
@@ -75,12 +75,11 @@ export class Transform {
     }
   }
 
-  updateLocalMatrix(): void {
+  private updateLocalMatrix(): void {
     Mat4.compose(this.translation, this.rotation, this.scale, this.localMatrix);
   }
 
   updateWorldMatrix(parentWorldMatrix?: Mat4): void {
-    // Only update if this transform or any ancestor needs update
     if (this.needsUpdate) {
       if (parentWorldMatrix) {
         Mat4.multiply(parentWorldMatrix, this.localMatrix, this.worldMatrix);
@@ -88,10 +87,9 @@ export class Transform {
         Mat4.copy(this.localMatrix, this.worldMatrix);
       }
       this.needsUpdate = false;
-      this._worldMatrixVersion++; // Increment version when world matrix changes
+      this._worldMatrixVersion++;
     }
 
-    // Always traverse children to propagate updates
     for (const child of this.children) {
       child.updateWorldMatrix(this.worldMatrix);
     }
@@ -101,91 +99,51 @@ export class Transform {
     return this._worldMatrixVersion;
   }
 
-  public getForward(): Vec3 {
-    const forward = new Vec3(0, 0, 1);
-    Vec3.transformQuat(forward, this.rotation, forward);
-    return forward;
+  getForward(out?: Vec3): Vec3 {
+    const forward = Vec3.create(0, 0, 1);
+    return Vec3.transformQuat(forward, this.rotation, out ?? forward);
   }
 
-  public lookAt(target: Vec3): this {
-    const direction = new Vec3(
-      target.data[0] - this.translation.data[0],
-      target.data[1] - this.translation.data[1],
-      target.data[2] - this.translation.data[2],
-    );
-
-    const len = Math.sqrt(
-      direction.data[0] ** 2 + direction.data[1] ** 2 + direction.data[2] ** 2,
-    );
-    if (len > 0) {
-      direction.data[0] /= len;
-      direction.data[1] /= len;
-      direction.data[2] /= len;
-    }
+  lookAt(target: Vec3): this {
+    const dir = Vec3.sub(target, this.translation);
+    Vec3.normalize(dir, dir);
 
     let up = new Vec3(0, 1, 0);
-    if (Math.abs(direction.data[1]) > 0.9999) {
-      up = new Vec3(1, 0, 0);
-    }
+    if (Math.abs(dir.y) > 0.9999) up = new Vec3(1, 0, 0);
 
-    // up × direction = right, forming RH-det basis {right, up, dir} required by getRotation
-    let right = new Vec3();
-    right.data[0] =
-      up.data[1] * direction.data[2] - up.data[2] * direction.data[1];
-    right.data[1] =
-      up.data[2] * direction.data[0] - up.data[0] * direction.data[2];
-    right.data[2] =
-      up.data[0] * direction.data[1] - up.data[1] * direction.data[0];
-
-    const rightLen = Math.sqrt(
-      right.data[0] ** 2 + right.data[1] ** 2 + right.data[2] ** 2,
-    );
-    if (rightLen > 0) {
-      right.data[0] /= rightLen;
-      right.data[1] /= rightLen;
-      right.data[2] /= rightLen;
-    }
-
-    // direction × right = newUp, completing the RH-det orthonormal basis
-    const newUp = new Vec3(
-      direction.data[1] * right.data[2] - direction.data[2] * right.data[1],
-      direction.data[2] * right.data[0] - direction.data[0] * right.data[2],
-      direction.data[0] * right.data[1] - direction.data[1] * right.data[0],
-    );
+    // up × dir = right; dir × right = corrected up
+    const right = Vec3.cross(up, dir);
+    Vec3.normalize(right, right);
+    const newUp = Vec3.cross(dir, right);
 
     const rotMatrix = Mat4.create();
-    rotMatrix.data[0] = right.data[0];
-    rotMatrix.data[1] = right.data[1];
-    rotMatrix.data[2] = right.data[2];
-    rotMatrix.data[4] = newUp.data[0];
-    rotMatrix.data[5] = newUp.data[1];
-    rotMatrix.data[6] = newUp.data[2];
-    rotMatrix.data[8] = direction.data[0];
-    rotMatrix.data[9] = direction.data[1];
-    rotMatrix.data[10] = direction.data[2];
+    rotMatrix.data[0] = right.x;
+    rotMatrix.data[1] = right.y;
+    rotMatrix.data[2] = right.z;
+    rotMatrix.data[4] = newUp.x;
+    rotMatrix.data[5] = newUp.y;
+    rotMatrix.data[6] = newUp.z;
+    rotMatrix.data[8] = dir.x;
+    rotMatrix.data[9] = dir.y;
+    rotMatrix.data[10] = dir.z;
 
-    this.rotation = Mat4.getRotation(rotMatrix, this.rotation);
+    Mat4.getRotation(rotMatrix, this.rotation);
     this.updateLocalMatrix();
     this.markNeedsUpdate();
     return this;
   }
 
-  getWorldMatrix(): Mat4 {
-    return this.worldMatrix;
+  getWorldPosition(out?: Vec3): Vec3 {
+    return Mat4.getTranslation(this.worldMatrix, out);
   }
 
-  public getWorldPosition(): Vec3 {
-    return Mat4.getTranslation(this.worldMatrix);
+  getWorldRotation(out?: Quat): Quat {
+    return Mat4.getRotation(this.worldMatrix, out);
   }
 
-  public getWorldRotation(): Quat {
-    return Mat4.getRotation(this.worldMatrix);
-  }
-
-  public getWorldForward(): Vec3 {
-    const worldRot = this.getWorldRotation();
-    const forward = new Vec3(0, 0, 1);
-    Vec3.transformQuat(forward, worldRot, forward);
-    return forward;
+  getWorldForward(out?: Vec3): Vec3 {
+    const worldRot = Mat4.getRotation(this.worldMatrix);
+    const forward = Vec3.create(0, 0, 1);
+    return Vec3.transformQuat(forward, worldRot, out ?? forward);
   }
 }

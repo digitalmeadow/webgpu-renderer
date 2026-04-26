@@ -41,7 +41,7 @@ export class Mesh extends Entity {
 
   public updateWorldAABB(): void {
     if (!this.needsAABBUpdate()) return;
-    this.worldAABB.update(this.geometry.aabb, this.transform.getWorldMatrix());
+    this.worldAABB.update(this.geometry.aabb, this.transform.worldMatrix);
     this.lastWorldMatrixVersion = this.transform.worldMatrixVersion;
   }
 
@@ -54,7 +54,7 @@ export class Mesh extends Entity {
 
     const count = this.skinData.joints.length;
     for (let i = 0; i < count; i++) {
-      const worldMatrix = this.skinData.joints[i].transform.getWorldMatrix();
+      const worldMatrix = this.skinData.joints[i].transform.worldMatrix;
       Mat4.multiply(
         worldMatrix,
         this.skinData.inverseBindMatrices[i],

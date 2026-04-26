@@ -208,7 +208,7 @@ export class ParticleEmitter extends Entity {
   }
 
   private spawn(): void {
-    const worldMatrix = this.transform.getWorldMatrix();
+    const worldMatrix = this.transform.worldMatrix;
     const rotation = this.transform.rotation;
 
     for (let i = 0; i < this.desc.spawnCount; i++) {
