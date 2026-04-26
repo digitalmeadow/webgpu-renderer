@@ -822,7 +822,7 @@ export class Renderer {
       this.renderWidth,
       this.renderHeight,
     );
-    this.lightingPass.resize(this.device, this.renderWidth, this.renderHeight);
+    this.lightingPass.resize(this.renderWidth, this.renderHeight);
 
     if (this.postPassTextureA) {
       this.postPassTextureA = null;

@@ -38,6 +38,7 @@ export class LightingPass {
     this.pipeline = device.createRenderPipeline({
       label: "Lighting Pass Pipeline",
       layout: device.createPipelineLayout({
+        label: "Lighting Pass Pipeline Layout",
         bindGroupLayouts: [
           geometryBuffer.bindGroupLayout,
           cameraBindGroupLayout,
@@ -64,9 +65,9 @@ export class LightingPass {
     });
   }
 
-  resize(device: GPUDevice, width: number, height: number): void {
+  resize(width: number, height: number): void {
     this.outputTexture.destroy();
-    this.outputTexture = device.createTexture({
+    this.outputTexture = this.device.createTexture({
       label: "Lighting Pass Output Texture",
       size: [width, height],
       format: "rgba16float",
@@ -77,6 +78,10 @@ export class LightingPass {
         GPUTextureUsage.COPY_DST,
     });
     this.outputView = this.outputTexture.createView();
+  }
+
+  destroy(): void {
+    this.outputTexture.destroy();
   }
 
   render(

@@ -74,22 +74,12 @@ struct LightSpotUniformsArray {
 struct SceneUniforms {
     ambient_light_color: vec3<f32>,
     ibl_intensity: f32,
-    
     fog_color_base: vec3<f32>,
-    // 16 byte alignment
-    
     fog_color_sun: vec3<f32>,
-    // 16 byte alignment
-    
     fog_extinction: vec3<f32>,
-    // 16 byte alignment
-    
     fog_inscattering: vec3<f32>,
-    // 16 byte alignment
-    
     fog_sun_exponent: f32,
     fog_enabled: u32,
-    // 16 byte alignment
 }
 
 
@@ -130,21 +120,6 @@ fn position_from_depth(uv: vec2<f32>, depth: f32) -> vec3<f32> {
     let view_pos = camera_uniforms.projection_matrix_inverse * clip_pos;
 
     return view_pos.xyz / view_pos.w;
-}
-
-// Select cascade based on view-space depth
-fn select_cascade(view_space_z: f32, splits: vec4<f32>) -> u32 {
-    // Convert view-space Z to positive depth distance
-    // In left-handed view space, camera looks down +Z, so objects in front have positive Z
-    let depth = abs(view_space_z);
-    
-    if depth < splits.y {
-        return 0u;
-    } else if depth < splits.z {
-        return 1u;
-    } else {
-        return 2u;
-    }
 }
 
 // Vogel disk sampling for shadow smoothing
@@ -217,7 +192,7 @@ fn fetch_light_directional_shadow_blended(
     view_space_z: f32,
     frag_coord: vec2<f32>
 ) -> f32 {
-    const BLEND_WIDTH: f32 = 0.3; // 10% blend zone at cascade boundaries
+    const BLEND_WIDTH: f32 = 0.3; // 30% blend zone at cascade boundaries
     
     // Convert negative view-space Z to positive depth distance
     let depth = abs(view_space_z);
@@ -225,7 +200,7 @@ fn fetch_light_directional_shadow_blended(
     
     // Determine primary cascade and check for blend zone
     var cascade0: u32;
-    var cascade1: u32;
+    var cascade1: u32 = cascade0;
     var blend_factor: f32 = 0.0;
     var in_blend_zone = false;
     
@@ -428,19 +403,8 @@ fn sample_environment_reflection(world_pos: vec3<f32>, world_normal: vec3<f32>, 
     let dielectric_F0 = vec3<f32>(0.04);
     let F0 = mix(dielectric_F0, albedo, metalness);
     
-    // Apply physically-based BRDF approximation (accounts for roughness and fresnel)
     let brdf = environment_brdf_lazanyi(NdotV, roughness, F0);
-    
-    // Additional roughness-based attenuation to further reduce reflections on very rough surfaces
-    // Rough surfaces scatter light in many directions, reducing mirror-like reflections
-    let roughness_attenuation = 1.0 - (roughness * roughness * roughness);
-    
-    // Final reflection: environment color modulated by BRDF and roughness
-    // The Lazanyi approximation includes:
-    // - Fresnel (view angle dependent reflectivity)
-    // - Roughness attenuation (rough surfaces have much dimmer reflections)
-    // - Metalness (via F0 affecting the BRDF curve)
-    return env_color * brdf * roughness_attenuation;
+    return env_color * brdf;
 }
 
 // ============================================================================
@@ -655,45 +619,24 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     color += emissive;
 
     // Fog: https://iquilezles.org/articles/fog/
-    // Distance from camera to fragment
-    let dist = length(view_pos);
-
-    // View direction (camera → point in world space)
-    let view_dir = normalize(world_pos - camera_uniforms.position.xyz);
-
-    // Sun direction (use first directional light)
-    // For fog sun glow, we need direction TOWARD the sun (opposite of where light points)
-    // light.direction points where light faces (down), we want direction to sun (up), so negate
-    var has_sun = light_directional_uniforms.light_count > 0u;
-    var sun_dir = vec3<f32>(0.0, 1.0, 0.0);
-    if (has_sun) {
-        let light0 = light_directional_uniforms.lights[0];
-        sun_dir = normalize(-light0.direction.xyz);
-    }
-
-    // Sun tint factor based on view direction alignment with sun
-    var sun_amount = 1.0;
-    var fog_color = scene_uniforms.fog_color_base.rgb;
-    if (bool(scene_uniforms.fog_enabled) && has_sun) {
-        sun_amount = max(dot(view_dir, sun_dir), 0.0);
-        let sun_tint = pow(sun_amount, scene_uniforms.fog_sun_exponent);
-        fog_color = mix(scene_uniforms.fog_color_base.rgb, scene_uniforms.fog_color_sun.rgb, sun_tint);
-    }
-
-    // Full scattering model (per-channel extinction + inscattering)
     if (bool(scene_uniforms.fog_enabled)) {
+        let dist = length(view_pos);
+        let view_dir = normalize(world_pos - camera_uniforms.position.xyz);
+
+        var fog_color = scene_uniforms.fog_color_base.rgb;
+        let has_sun = light_directional_uniforms.light_count > 0u;
+        if (has_sun) {
+            let sun_dir = normalize(-light_directional_uniforms.lights[0].direction.xyz);
+            let sun_tint = pow(max(dot(view_dir, sun_dir), 0.0), scene_uniforms.fog_sun_exponent);
+            fog_color = mix(scene_uniforms.fog_color_base.rgb, scene_uniforms.fog_color_sun.rgb, sun_tint);
+        }
+
         let be = scene_uniforms.fog_extinction;
         let bi = scene_uniforms.fog_inscattering;
-
         let extinction = exp(-dist * be);
-        let ins = vec3<f32>(
-            exp(-dist * bi.x),
-            exp(-dist * bi.y),
-            exp(-dist * bi.z)
-        );
+        let ins = vec3<f32>(exp(-dist * bi.x), exp(-dist * bi.y), exp(-dist * bi.z));
 
-        // Final color: (pixel * extinction) + (fog_color * ins)
-        // This is: light that survived + light scattered in from fog
+        // light that survived + light scattered in from fog
         color = color * extinction + fog_color * (vec3<f32>(1.0) - ins);
     }
     
