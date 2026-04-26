@@ -595,27 +595,14 @@ export class MaterialManager {
     );
 
     if (mipLevelCount > 1) {
-      this.generateMipmaps(gpuTexture, width, height, mipLevelCount, format);
+      const encoder = this.device.createCommandEncoder({
+        label: `2D Mipmap Encoder: ${width}x${height} ${format}`,
+      });
+      generate2DMipmaps(encoder, this.device, gpuTexture, width, height, mipLevelCount, format);
+      this.device.queue.submit([encoder.finish()]);
     }
 
     this.textureCache.set(texture, gpuTexture);
-  }
-
-  private generateMipmaps(
-    texture: GPUTexture,
-    baseWidth: number,
-    baseHeight: number,
-    mipLevelCount: number,
-    format: GPUTextureFormat,
-  ): void {
-    generate2DMipmaps(
-      this.device,
-      texture,
-      baseWidth,
-      baseHeight,
-      mipLevelCount,
-      format,
-    );
   }
 
   getOrCreateCubeTexture(
@@ -675,8 +662,6 @@ export class MaterialManager {
       );
       pbrMaterial.environmentTextureId = envTextureId;
 
-      (window as any).DEBUG_MATERIAL = pbrMaterial;
-      (window as any).DEBUG_UNIFORMS = pbrMaterial.uniforms;
       pbrMaterial.uniforms.update(pbrMaterial);
 
       const envView =

@@ -252,9 +252,7 @@ export class ReflectionProbePass {
       // TODO: Add forward pass rendering for transparent objects in probes
     }
 
-    // TODO: Implement proper mipmap generation using a blit shader or compute shader
-    // For now, we skip mipmap generation to avoid texture usage synchronization errors
-    // cubeRenderTarget.generateMipmaps(encoder);
+    cubeRenderTarget.generateMipmaps(encoder);
 
     // Submit all rendering commands
     this.device.queue.submit([encoder.finish()]);

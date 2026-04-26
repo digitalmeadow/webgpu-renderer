@@ -8,9 +8,9 @@ interface LoadedFace {
 }
 
 export class CubeTexture {
-  private device: GPUDevice;
-  folderPath: string;
-  extension: string;
+  private readonly device: GPUDevice;
+  readonly folderPath: string;
+  readonly extension: string;
   loaded: boolean = false;
   gpuTexture: GPUTexture | null = null;
   gpuTextureView: GPUTextureView | null = null;
@@ -28,13 +28,11 @@ export class CubeTexture {
   }
 
   async load(): Promise<void> {
-    // Load base faces only (px.jpg, nx.jpg, py.jpg, ny.jpg, pz.jpg, nz.jpg)
     const loadPromises: Promise<LoadedFace>[] = [];
 
     for (let faceIndex = 0; faceIndex < FACE_ORDER.length; faceIndex++) {
       const face = FACE_ORDER[faceIndex];
-      const filename = `${face}${this.extension}`;
-      const url = `${this.folderPath}/${filename}`;
+      const url = `${this.folderPath}/${face}${this.extension}`;
 
       loadPromises.push(
         (async () => {
@@ -68,7 +66,6 @@ export class CubeTexture {
     const baseSize = loadedFaces[0].bitmap.width;
     const baseHeight = loadedFaces[0].bitmap.height;
 
-    // Validate all faces are square and same size
     if (baseSize !== baseHeight) {
       throw new Error(
         `CubeTexture faces must be square, got ${baseSize}x${baseHeight}`,
@@ -84,10 +81,8 @@ export class CubeTexture {
       }
     }
 
-    // Calculate full mip chain
     this.mipLevelCount = calculateMipLevelCount(baseSize);
 
-    // Create GPU texture with full mip chain and RENDER_ATTACHMENT for mipmap generation
     this.gpuTexture = this.device.createTexture({
       label: `CubeTexture: ${this.folderPath}`,
       size: { width: baseSize, height: baseSize, depthOrArrayLayers: 6 },
@@ -99,13 +94,11 @@ export class CubeTexture {
         GPUTextureUsage.TEXTURE_BINDING |
         GPUTextureUsage.COPY_DST |
         GPUTextureUsage.RENDER_ATTACHMENT,
-      viewFormats: [],
     });
 
-    // Upload base faces (mip level 0)
+    // Promise.all preserves insertion order, so loadedFaces[i].face === i
     for (let faceIndex = 0; faceIndex < FACE_ORDER.length; faceIndex++) {
-      const loadedFace = loadedFaces.find((f) => f.face === faceIndex)!;
-
+      const loadedFace = loadedFaces[faceIndex];
       this.device.queue.copyExternalImageToTexture(
         { source: loadedFace.bitmap },
         {
@@ -117,16 +110,19 @@ export class CubeTexture {
       );
     }
 
-    // Generate mipmaps on GPU
+    const encoder = this.device.createCommandEncoder({
+      label: `CubeTexture Mipmap Encoder: ${this.folderPath}`,
+    });
     generateCubeMipmaps(
+      encoder,
       this.device,
       this.gpuTexture,
       baseSize,
       this.mipLevelCount,
       "rgba8unorm-srgb",
     );
+    this.device.queue.submit([encoder.finish()]);
 
-    // Create texture view and sampler
     this.gpuTextureView = this.gpuTexture.createView({
       label: `CubeTextureView: ${this.folderPath}`,
       dimension: "cube",
@@ -141,5 +137,12 @@ export class CubeTexture {
       addressModeV: "clamp-to-edge",
       addressModeW: "clamp-to-edge",
     });
+  }
+
+  destroy(): void {
+    this.gpuTexture?.destroy();
+    this.gpuTexture = null;
+    this.gpuTextureView = null;
+    this.gpuSampler = null;
   }
 }
