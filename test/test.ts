@@ -1,8 +1,10 @@
 import {
   Camera,
+  CubeTexture,
   DirectionalLight,
   FlyControls,
   MaterialBasic,
+  MaterialCustom,
   MaterialParticle,
   MaterialPBR,
   Mesh,
@@ -19,6 +21,7 @@ import {
   createPlaneGeometry,
   createSphereGeometry,
   mapRange,
+  RendererOptions,
 } from "../src";
 
 const UV_DEBUG_ALBEDO_HOOK = `fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
@@ -53,6 +56,115 @@ const HOOK_SHOWCASE_VERTEX = `fn vertex_post_process(world_pos: vec3<f32>, uv: v
   return world_pos + local_normal * displacement;
 }`;
 
+// CustomMaterial sphere — time-driven vertex displacement + hue cycling via a raw geometry-pass shader
+const CUSTOM_MATERIAL_SHADER = `
+struct TimeUniforms {
+    elapsed: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
+}
+
+struct CameraUniforms {
+    view_matrix: mat4x4<f32>,
+    projection_matrix: mat4x4<f32>,
+    view_projection_matrix: mat4x4<f32>,
+    view_matrix_inverse: mat4x4<f32>,
+    projection_matrix_inverse: mat4x4<f32>,
+    position: vec4<f32>,
+    near: f32,
+    far: f32,
+}
+
+struct InstanceInput {
+    @location(6) model_matrix_0: vec4<f32>,
+    @location(7) model_matrix_1: vec4<f32>,
+    @location(8) model_matrix_2: vec4<f32>,
+    @location(9) model_matrix_3: vec4<f32>,
+    @location(10) billboard_axis: u32,
+    @location(11) custom_data_0: vec4<f32>,
+    @location(12) custom_data_1: vec4<f32>,
+}
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv_coords: vec2<f32>,
+    @location(1) world_normal: vec3<f32>,
+    @location(2) world_position: vec3<f32>,
+    @location(3) world_tangent: vec4<f32>,
+}
+
+struct GBufferOutput {
+    @location(0) albedo: vec4<f32>,
+    @location(1) normal: vec4<f32>,
+    @location(2) metal_rough: vec4<f32>,
+    @location(3) emissive: vec4<f32>,
+}
+
+@group(0) @binding(0) var<uniform> camera: CameraUniforms;
+@group(1) @binding(0) var<uniform> time_uniforms: TimeUniforms;
+
+@vertex
+fn vs_main(
+    @location(0) position: vec4<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) uv: vec2<f32>,
+    @location(3) joint_indices: vec4<f32>,
+    @location(4) joint_weights: vec4<f32>,
+    @location(5) tangent: vec4<f32>,
+    instance: InstanceInput,
+) -> VertexOutput {
+    var out: VertexOutput;
+
+    let model_matrix = mat4x4<f32>(
+        instance.model_matrix_0,
+        instance.model_matrix_1,
+        instance.model_matrix_2,
+        instance.model_matrix_3,
+    );
+
+    let t = time_uniforms.elapsed;
+    let local_pos = position.xyz;
+
+    // Multi-frequency displacement along local normal — morphing blob effect
+    let d = sin(t * 1.1 + local_pos.y * 6.0) * 0.12
+          + sin(t * 0.7 + local_pos.x * 5.0 + local_pos.z * 3.0) * 0.08
+          + sin(t * 1.7 + local_pos.z * 8.0) * 0.05;
+
+    let displaced = local_pos + normalize(normal) * d;
+
+    let world_pos = (model_matrix * vec4<f32>(displaced, 1.0)).xyz;
+    out.world_position = world_pos;
+    out.world_normal = normalize((model_matrix * vec4<f32>(normal, 0.0)).xyz);
+    out.world_tangent = vec4<f32>((model_matrix * vec4<f32>(tangent.xyz, 0.0)).xyz, tangent.w);
+    out.uv_coords = uv;
+
+    let view_pos = camera.view_matrix * vec4<f32>(world_pos, 1.0);
+    out.position = camera.projection_matrix * view_pos;
+
+    return out;
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> GBufferOutput {
+    var out: GBufferOutput;
+
+    let t = time_uniforms.elapsed;
+
+    // Hue cycling: R/G/B channels offset by 2π/3
+    let r = sin(t * 0.5) * 0.5 + 0.5;
+    let g = sin(t * 0.5 + 2.094) * 0.5 + 0.5;
+    let b = sin(t * 0.5 + 4.189) * 0.5 + 0.5;
+
+    out.albedo = vec4<f32>(r, g, b, 1.0);
+    out.normal = vec4<f32>(normalize(in.world_normal), 1.0);
+    out.metal_rough = vec4<f32>(0.0, 0.4, 0.0, 0.0);
+    out.emissive = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+
+    return out;
+}
+`;
+
 async function main() {
   const canvas = document.getElementById("gpu-canvas") as HTMLCanvasElement;
   if (!canvas) {
@@ -60,8 +172,18 @@ async function main() {
     return;
   }
 
-  const renderer = await Renderer.create(canvas);
+  const rendererOptions: RendererOptions = {
+    shadowDirectionalDepthBias: 50000,
+    shadowSpotDepthBiasSlopeScale: 2.0,
+  };
+  const renderer = await Renderer.create(canvas, rendererOptions);
   const device = renderer.getDevice();
+
+  // 16-byte uniform buffer holding elapsed time (f32 + 12 bytes padding)
+  const timeBuffer = device.createBuffer({
+    size: 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
   const materialManager = renderer.getMaterialManager();
 
   const world = new World();
@@ -159,6 +281,39 @@ async function main() {
   hookShowcaseSphere.transform.setPosition(7, 1, 0);
   scene.add(hookShowcaseSphere);
 
+  // CustomMaterial sphere — step 4: bind group layout
+  const customBindGroupLayout = device.createBindGroupLayout({
+    entries: [
+      {
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        buffer: { type: "uniform" },
+      },
+    ],
+  });
+
+  // step 5: bind group
+  const customBindGroup = device.createBindGroup({
+    layout: customBindGroupLayout,
+    entries: [{ binding: 0, resource: { buffer: timeBuffer } }],
+  });
+
+  // step 6: MaterialCustom
+  const customMat = new MaterialCustom(device, "custom-time", {
+    name: "custom-time",
+    passes: { geometry: CUSTOM_MATERIAL_SHADER },
+    bindGroupLayout: customBindGroupLayout,
+    bindGroup: customBindGroup,
+  });
+
+  // step 7: load
+  await materialManager.loadMaterial(customMat);
+
+  // step 8: sphere mesh
+  const customSphere = new Mesh(device, "custom-sphere", sphereGeo, customMat);
+  customSphere.transform.setPosition(10.5, 1, 0);
+  scene.add(customSphere);
+
   // Directional light — cascading shadow maps
   const sun = new DirectionalLight("sun");
   sun.transform.setPosition(-4, 8, 10);
@@ -224,6 +379,14 @@ async function main() {
   fog.fogSunExponent = 12.0;
   fog.update();
 
+  // Skybox
+  const skybox = new CubeTexture(
+    device,
+    "./assets/environment/default",
+    ".jpg",
+  );
+  await skybox.load();
+  renderer.setSkyboxTexture(skybox);
   world.addScene(scene);
 
   let probeAttached = false;
@@ -272,6 +435,13 @@ async function main() {
         ),
       );
     }
+
+    // step 9: upload elapsed time to GPU each frame
+    device.queue.writeBuffer(
+      timeBuffer,
+      0,
+      new Float32Array([time.elapsed, 0, 0, 0]),
+    );
 
     renderer.render(world, camera, time);
     requestAnimationFrame(loop);

@@ -1,10 +1,4 @@
 
-Critique clean up all files
-Simplify and restructure
-
-Go back and knock off TODOs eg: instances mesh skinning
-Explore deduping shared logic, skinning, billboarding between pass shaders
-
 --- Visuals ---
 
   Spot light shadows broken
@@ -24,3 +18,32 @@ Explore deduping shared logic, skinning, billboarding between pass shaders
   High-Performance pipeline for reflection probe
   Skip CPU sorting for transparent
   Other common optimisations.
+
+
+
+Custom Materials, morphing meshes in the vertex shadow to come through to shadow pass:
+
+ What would need to change to fix it
+
+ For displaced custom-material shadows to be correct, the
+ shadow pass would need to:
+
+ 1. Detect MaterialCustom meshes in the opaque group loop
+ 2. Compile a per-material shadow pipeline using the
+ custom material's vertex shader (but with a
+ shadow-compatible fragment stage and the light's bind
+ group layout at group 0, and the custom material's bind
+ group layout at group 1)
+ 3. Bind the custom bind group (i.e. timeBuffer) at group
+ 1 during shadow draw calls
+
+ This is non-trivial: it means the shadow pass becomes
+ material-aware, custom shadow pipelines proliferate, and
+ the stripped-down "no fragment shader" fast path can no
+ longer be used for displaced geometry.
+
+ Most engines (Unity, Unreal, three.js) handle this via
+ an explicit "shadow caster" pass that each material must
+ opt into with its own matching vertex shader. The
+ renderer doesn't currently have that concept —
+ MaterialCustom has no shadow variant of its shader.

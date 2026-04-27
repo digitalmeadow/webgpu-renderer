@@ -574,8 +574,7 @@ export class Renderer {
     // submitted and fully committed before the main encoder is even created.
     // The GPU queue's FIFO ordering then guarantees the main encoder's lighting
     // pass sees the completed shadow maps without any cross-buffer hazard.
-    const hasShadowWork =
-      directionalLights.length > 0 || spotLights.length > 0;
+    const hasShadowWork = directionalLights.length > 0 || spotLights.length > 0;
     const occlusionEnabledDirectionalLights = directionalLights.filter(
       (l) => l.occlusionEnabled,
     );
@@ -753,8 +752,10 @@ export class Renderer {
 
   public setSkyboxTexture(texture: CubeTexture | null): void {
     this.skyboxTexture = texture;
+    this.skyboxPass.setSkyboxTexture(texture);
     this.sceneUniforms.setSkyboxTexture(texture);
     this.reflectionProbePass.setSkyboxTexture(texture);
+    this.skyboxPass.setSkyboxTexture(texture);
     // Reserve environment texture ID 0 for the global skybox
     this.materialManager.setGlobalSkybox(texture);
   }
