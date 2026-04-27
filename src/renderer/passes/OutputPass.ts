@@ -1,10 +1,32 @@
 import shader from "./OutputPass.wgsl?raw";
 
-interface OutputUniforms {
-  renderWidth: number;
-  renderHeight: number;
-  viewportWidth: number;
-  viewportHeight: number;
+const _layouts = new Map<GPUSamplerBindingType, GPUBindGroupLayout>();
+
+export function createOutputPassBindGroupLayout(
+  device: GPUDevice,
+  samplerType: GPUSamplerBindingType,
+): GPUBindGroupLayout {
+  const cached = _layouts.get(samplerType);
+  if (cached) return cached;
+
+  const layout = device.createBindGroupLayout({
+    label: "Output Pass Bind Group Layout",
+    entries: [
+      {
+        binding: 0,
+        visibility: GPUShaderStage.FRAGMENT,
+        sampler: { type: samplerType },
+      },
+      {
+        binding: 1,
+        visibility: GPUShaderStage.FRAGMENT,
+        texture: { sampleType: "float", viewDimension: "2d" },
+      },
+    ],
+  });
+
+  _layouts.set(samplerType, layout);
+  return layout;
 }
 
 export class OutputPass {
@@ -12,50 +34,30 @@ export class OutputPass {
   private pipeline: GPURenderPipeline;
   private bindGroupLayout: GPUBindGroupLayout;
   private sampler: GPUSampler;
-  private uniformsBuffer: GPUBuffer;
-  private uniformsBindGroup: GPUBindGroup | null = null;
-  private lastRenderWidth: number = 0;
-  private lastRenderHeight: number = 0;
-  private lastViewportWidth: number = 0;
-  private lastViewportHeight: number = 0;
+  private bindGroup: GPUBindGroup | null = null;
   private lastInputView: GPUTextureView | null = null;
 
-  constructor(device: GPUDevice, format: GPUTextureFormat) {
+  constructor(
+    device: GPUDevice,
+    format: GPUTextureFormat,
+    filterMode: "nearest" | "linear" = "nearest",
+  ) {
     this.device = device;
-    const shaderModule = device.createShaderModule({
-      code: shader,
-    });
+
+    const samplerType: GPUSamplerBindingType =
+      filterMode === "linear" ? "filtering" : "non-filtering";
 
     this.sampler = device.createSampler({
-      magFilter: "nearest",
-      minFilter: "nearest",
+      label: "Output Pass Sampler",
+      magFilter: filterMode,
+      minFilter: filterMode,
     });
 
-    this.bindGroupLayout = device.createBindGroupLayout({
-      label: "Output Pass Bind Group Layout",
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.FRAGMENT,
-          sampler: { type: "filtering" },
-        },
-        {
-          binding: 1,
-          visibility: GPUShaderStage.FRAGMENT,
-          texture: { sampleType: "float", viewDimension: "2d" },
-        },
-        {
-          binding: 2,
-          visibility: GPUShaderStage.FRAGMENT,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
+    this.bindGroupLayout = createOutputPassBindGroupLayout(device, samplerType);
 
-    this.uniformsBuffer = device.createBuffer({
-      label: "Output Pass Uniforms",
-      size: 16,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    const shaderModule = device.createShaderModule({
+      label: "Output Pass Shader",
+      code: shader,
     });
 
     this.pipeline = device.createRenderPipeline({
@@ -70,11 +72,7 @@ export class OutputPass {
       fragment: {
         module: shaderModule,
         entryPoint: "fs_main",
-        targets: [
-          {
-            format,
-          },
-        ],
+        targets: [{ format }],
       },
       primitive: {
         topology: "triangle-list",
@@ -86,59 +84,16 @@ export class OutputPass {
     encoder: GPUCommandEncoder,
     inputView: GPUTextureView,
     outputView: GPUTextureView,
-    renderWidth: number,
-    renderHeight: number,
-    viewportWidth: number,
-    viewportHeight: number,
   ): void {
-    if (
-      this.uniformsBindGroup === null ||
-      this.lastInputView !== inputView ||
-      this.lastRenderWidth !== renderWidth ||
-      this.lastRenderHeight !== renderHeight ||
-      this.lastViewportWidth !== viewportWidth ||
-      this.lastViewportHeight !== viewportHeight
-    ) {
-      const uniforms: OutputUniforms = {
-        renderWidth,
-        renderHeight,
-        viewportWidth,
-        viewportHeight,
-      };
-      this.device.queue.writeBuffer(
-        this.uniformsBuffer,
-        0,
-        new Float32Array([
-          uniforms.renderWidth,
-          uniforms.renderHeight,
-          uniforms.viewportWidth,
-          uniforms.viewportHeight,
-        ]),
-      );
-
-      this.uniformsBindGroup = this.device.createBindGroup({
+    if (this.bindGroup === null || this.lastInputView !== inputView) {
+      this.bindGroup = this.device.createBindGroup({
         label: "Output Pass Bind Group",
         layout: this.bindGroupLayout,
         entries: [
-          {
-            binding: 0,
-            resource: this.sampler,
-          },
-          {
-            binding: 1,
-            resource: inputView,
-          },
-          {
-            binding: 2,
-            resource: { buffer: this.uniformsBuffer },
-          },
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: inputView },
         ],
       });
-
-      this.lastRenderWidth = renderWidth;
-      this.lastRenderHeight = renderHeight;
-      this.lastViewportWidth = viewportWidth;
-      this.lastViewportHeight = viewportHeight;
       this.lastInputView = inputView;
     }
 
@@ -155,7 +110,7 @@ export class OutputPass {
     });
 
     passEncoder.setPipeline(this.pipeline);
-    passEncoder.setBindGroup(0, this.uniformsBindGroup);
+    passEncoder.setBindGroup(0, this.bindGroup);
     passEncoder.draw(3);
     passEncoder.end();
   }

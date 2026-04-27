@@ -1,10 +1,10 @@
 struct MaterialUniforms {
-  color: vec4<f32>,
-  opacity: f32,
-  environment_texture_id: f32,
-  @align(16) emissive: vec4<f32>,
-  alpha_cutoff: f32,
-  use_dithering: f32,
+    color: vec4<f32>,
+    opacity: f32,
+    environment_texture_id: f32,
+    @align(16) emissive: vec4<f32>,
+    alpha_cutoff: f32,
+    use_dithering: f32,
 };
 
 struct VertexInput {
@@ -59,7 +59,7 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
     let is_edge_case = abs(forwardDotAxis) > 0.995;
 
     var safe_forward = forward;
-    if (is_edge_case) {
+    if is_edge_case {
         let axis_component = select(0.0, 1.0, abs(axisVec.x) > 0.5);
         let default_fwd = select(
             vec3<f32>(0.0, 0.0, 1.0),
@@ -89,7 +89,7 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
 @vertex
 fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
     var output: VertexOutput;
-    
+
     // Reconstruct model matrix from instance data
     let model_matrix = mat4x4<f32>(
         instance.model_matrix_0,
@@ -97,14 +97,14 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
         instance.model_matrix_2,
         instance.model_matrix_3,
     );
-    
+
     // Note: Skinning removed for instanced rendering
     let local_pos = in.position.xyz;
 
     let mesh_pos = model_matrix[3].xyz;
     var final_local_pos = local_pos;
 
-    if (instance.billboard_axis != 0u) {
+    if instance.billboard_axis != 0u {
         let axisVec = get_billboard_axis(instance.billboard_axis);
         let billboard_matrix = compute_billboard_orientation(mesh_pos, axisVec);
         let billboarded_pos = billboard_matrix * local_pos;
@@ -121,14 +121,14 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
     let clip_position = light_directional_uniforms.view_projection_matrices[light_directional_uniforms.active_view_projection_index] * model_position;
     output.position = clip_position;
     output.uv = in.uv;
-    
+
     return output;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) {
     let albedo = textureSample(albedoTexture, nearestSampler, in.uv);
-    if (albedo.a < material.alpha_cutoff) {
+    if albedo.a < material.alpha_cutoff {
         discard;
     }
 }

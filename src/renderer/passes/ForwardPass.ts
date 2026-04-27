@@ -1,5 +1,11 @@
 import { Mesh } from "../../mesh";
-import { MaterialManager, MaterialBasic, MaterialPBR, MaterialCustom, MaterialType } from "../../materials";
+import {
+  MaterialManager,
+  MaterialBasic,
+  MaterialPBR,
+  MaterialCustom,
+  MaterialType,
+} from "../../materials";
 import { LightManager } from "../../lights/LightManager";
 import { SceneUniforms } from "../../uniforms";
 import { Camera } from "../../camera";
@@ -194,15 +200,19 @@ export class ForwardPass {
           },
           {
             binding: 5,
-            resource: spotShadowView || this.lightManager.dummyShadowTextureView,
+            resource:
+              spotShadowView || this.lightManager.dummyShadowTextureView,
           },
           {
             binding: 6,
-            resource: skyboxTextureView || this.sceneUniforms.getPlaceholderTextureView(),
+            resource:
+              skyboxTextureView ||
+              this.sceneUniforms.getPlaceholderTextureView(),
           },
           {
             binding: 7,
-            resource: skyboxSampler || this.sceneUniforms.getPlaceholderSampler(),
+            resource:
+              skyboxSampler || this.sceneUniforms.getPlaceholderSampler(),
           },
         ],
       });
@@ -235,11 +245,17 @@ export class ForwardPass {
       instanceGroups.sort((a, b) => {
         const distA =
           a.meshes.length > 0
-            ? Vec3.distanceSquared(a.meshes[0].transform.getWorldPosition(), cameraPos)
+            ? Vec3.distanceSquared(
+                a.meshes[0].transform.getWorldPosition(),
+                cameraPos,
+              )
             : 0;
         const distB =
           b.meshes.length > 0
-            ? Vec3.distanceSquared(b.meshes[0].transform.getWorldPosition(), cameraPos)
+            ? Vec3.distanceSquared(
+                b.meshes[0].transform.getWorldPosition(),
+                cameraPos,
+              )
             : 0;
         return distB - distA;
       });
@@ -257,7 +273,9 @@ export class ForwardPass {
         const mat = group.material as MaterialCustom;
         if (!mat.passes.forward) continue;
         const pipeline = this.materialManager.getCustomPipeline(
-          mat, "forward", this.cameraBindGroupLayout,
+          mat,
+          "forward",
+          this.cameraBindGroupLayout,
         );
         if (!pipeline) continue;
 
@@ -278,14 +296,16 @@ export class ForwardPass {
       // Hook or default material — lightScene at group 1, material at group 2
       let pipeline: GPURenderPipeline;
       if (
-        (group.material.type === MaterialType.Basic || group.material.type === MaterialType.PBR) &&
+        (group.material.type === MaterialType.Basic ||
+          group.material.type === MaterialType.PBR) &&
         (group.material as MaterialBasic | MaterialPBR).hasHooks
       ) {
-        pipeline = this.materialManager.getForwardInstancedHookPipeline(
-          group.material as MaterialBasic | MaterialPBR,
-          this.cameraBindGroupLayout,
-          this.lightSceneBindGroupLayout,
-        ) ?? this.pipeline;
+        pipeline =
+          this.materialManager.getForwardInstancedHookPipeline(
+            group.material as MaterialBasic | MaterialPBR,
+            this.cameraBindGroupLayout,
+            this.lightSceneBindGroupLayout,
+          ) ?? this.pipeline;
       } else {
         pipeline = this.pipeline;
       }
@@ -301,7 +321,9 @@ export class ForwardPass {
         lightSceneAtGroup1 = true;
       }
 
-      const materialBindGroup = this.materialManager.getBindGroup(group.material);
+      const materialBindGroup = this.materialManager.getBindGroup(
+        group.material,
+      );
       if (!materialBindGroup) continue;
 
       passEncoder.setBindGroup(2, materialBindGroup);

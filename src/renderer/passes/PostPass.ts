@@ -12,6 +12,7 @@ export interface PostPassContext {
 
 export abstract class PostPass {
   abstract render(
+    encoder: GPUCommandEncoder,
     input: GPUTextureView,
     output: GPUTextureView,
     context: PostPassContext,

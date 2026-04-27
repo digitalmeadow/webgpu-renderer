@@ -56,6 +56,7 @@ export interface RendererOptions {
   shadowSpotDepthBias?: number;
   shadowSpotDepthBiasSlopeScale?: number;
   skyboxFilter?: "nearest" | "linear";
+  outputFilter?: "nearest" | "linear";
 }
 
 const DEFAULT_MAX_DIRECTIONAL_LIGHTS = 1;
@@ -221,7 +222,11 @@ export class Renderer {
       this.renderHeight,
     );
 
-    this.outputPass = new OutputPass(this.device, this.format);
+    this.outputPass = new OutputPass(
+      this.device,
+      this.format,
+      options.outputFilter ?? "nearest",
+    );
 
     const shadowMapSize = this.calculateShadowMapSize();
     this.shadowPassDirectionalLight = new ShadowPassDirectionalLight(
@@ -428,7 +433,8 @@ export class Renderer {
 
     // Single G-buffer render pass shared by GeometryPass and all GBufferPasses —
     // avoids per-pass tile flushes on tile-based GPUs (Apple Silicon).
-    const gBufferPassEncoder = this.geometryBuffer.beginRenderPass(commandEncoder);
+    const gBufferPassEncoder =
+      this.geometryBuffer.beginRenderPass(commandEncoder);
 
     this.geometryPass.draw(
       this.device,
@@ -517,19 +523,11 @@ export class Renderer {
       );
     }
 
-    const lastOutputView = this.renderPostProcessing(camera);
+    const lastOutputView = this.renderPostProcessing(commandEncoder, camera);
 
     // Output Pass — blit to swap chain
     const swapChainView = this.context.getCurrentTexture().createView();
-    this.outputPass.render(
-      commandEncoder,
-      lastOutputView,
-      swapChainView,
-      this.renderWidth,
-      this.renderHeight,
-      this.canvas.width,
-      this.canvas.height,
-    );
+    this.outputPass.render(commandEncoder, lastOutputView, swapChainView);
 
     this.device.queue.submit([commandEncoder.finish()]);
 
@@ -633,7 +631,10 @@ export class Renderer {
     }
   }
 
-  private renderPostProcessing(camera: Camera): GPUTextureView {
+  private renderPostProcessing(
+    encoder: GPUCommandEncoder,
+    camera: Camera,
+  ): GPUTextureView {
     let lastOutputView: GPUTextureView = this.lightingPass.outputView;
 
     if (this.postPasses.length > 0) {
@@ -654,7 +655,7 @@ export class Renderer {
       for (let i = 0; i < this.postPasses.length; i++) {
         const writeView =
           i % 2 === 0 ? this.postPassViewB! : this.postPassViewA!;
-        this.postPasses[i].render(readView, writeView, postContext);
+        this.postPasses[i].render(encoder, readView, writeView, postContext);
         readView = writeView;
       }
 
@@ -676,7 +677,12 @@ export class Renderer {
       let readView: GPUTextureView = lastOutputView;
       for (let i = 0; i < this.highResPostPasses.length; i++) {
         const writeView = i % 2 === 0 ? this.highResViewB! : this.highResViewA!;
-        this.highResPostPasses[i].render(readView, writeView, highResContext);
+        this.highResPostPasses[i].render(
+          encoder,
+          readView,
+          writeView,
+          highResContext,
+        );
         readView = writeView;
       }
 

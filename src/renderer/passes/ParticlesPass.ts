@@ -22,7 +22,11 @@ export class ParticlesPass {
   private particlesPassBindGroup: GPUBindGroup | null = null;
   private emitterBindGroupCache: WeakMap<
     ParticleEmitter,
-    { meshBG: GPUBindGroup; spriteTexture: Texture | null; gradientTexture: Texture | null }
+    {
+      meshBG: GPUBindGroup;
+      spriteTexture: Texture | null;
+      gradientTexture: Texture | null;
+    }
   > = new WeakMap();
 
   constructor(device: GPUDevice, cameraBindGroupLayout: GPUBindGroupLayout) {
@@ -193,14 +197,24 @@ export class ParticlesPass {
           layout: this.meshBindGroupLayout,
           entries: [
             { binding: 0, resource: { buffer: emitter.meshUniformsBuffer } },
-            { binding: 1, resource: { buffer: emitter.materialUniformsBuffer } },
+            {
+              binding: 1,
+              resource: { buffer: emitter.materialUniformsBuffer },
+            },
             { binding: 2, resource: this.getTextureView(spriteTexture) },
             { binding: 3, resource: this.getTextureView(gradientTexture) },
           ],
         });
-        this.emitterBindGroupCache.set(emitter, { meshBG, spriteTexture, gradientTexture });
+        this.emitterBindGroupCache.set(emitter, {
+          meshBG,
+          spriteTexture,
+          gradientTexture,
+        });
       }
-      passEncoder.setBindGroup(1, this.emitterBindGroupCache.get(emitter)!.meshBG);
+      passEncoder.setBindGroup(
+        1,
+        this.emitterBindGroupCache.get(emitter)!.meshBG,
+      );
 
       passEncoder.setVertexBuffer(0, emitter.vertexBuffer);
       passEncoder.setVertexBuffer(1, emitter.instanceBuffer);

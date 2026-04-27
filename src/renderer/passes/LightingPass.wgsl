@@ -82,8 +82,6 @@ struct SceneUniforms {
     fog_enabled: u32,
 }
 
-
-
 @group(3) @binding(0) var<uniform> scene_uniforms: SceneUniforms;
 @group(3) @binding(1) var skyboxTexture: texture_cube<f32>;
 @group(3) @binding(2) var skyboxSampler: sampler;
@@ -186,24 +184,24 @@ fn fetch_light_directional_shadow(light_index: u32, cascade_id: u32, homogeneous
 // Fetch directional shadow with cascade blending
 // Blends between adjacent cascades in transition zones to eliminate hard edges
 fn fetch_light_directional_shadow_blended(
-    light_index: u32, 
+    light_index: u32,
     light_uniforms: LightDirectionalUniforms,
-    world_pos: vec3<f32>, 
+    world_pos: vec3<f32>,
     view_space_z: f32,
     frag_coord: vec2<f32>
 ) -> f32 {
     const BLEND_WIDTH: f32 = 0.3; // 30% blend zone at cascade boundaries
-    
+
     // Convert negative view-space Z to positive depth distance
     let depth = abs(view_space_z);
     let splits = light_uniforms.cascade_splits;
-    
+
     // Determine primary cascade and check for blend zone
     var cascade0: u32;
     var cascade1: u32 = cascade0;
     var blend_factor: f32 = 0.0;
     var in_blend_zone = false;
-    
+
     if depth < splits.y {
         cascade0 = 0u;
         // Check if we're near the boundary with cascade 1
@@ -228,21 +226,21 @@ fn fetch_light_directional_shadow_blended(
         cascade0 = 2u;
         // Last cascade, no blending needed
     }
-    
+
     // Sample primary cascade
     let shadow_matrix0 = light_uniforms.view_projection_matrices[cascade0];
     let shadow_coords0 = shadow_matrix0 * vec4<f32>(world_pos, 1.0);
     let shadow0 = fetch_light_directional_shadow(light_index, cascade0, shadow_coords0, frag_coord);
-    
+
     // If in blend zone, sample next cascade and blend
     if in_blend_zone {
         let shadow_matrix1 = light_uniforms.view_projection_matrices[cascade1];
         let shadow_coords1 = shadow_matrix1 * vec4<f32>(world_pos, 1.0);
         let shadow1 = fetch_light_directional_shadow(light_index, cascade1, shadow_coords1, frag_coord);
-        
+
         return mix(shadow0, shadow1, blend_factor);
     }
-    
+
     return shadow0;
 }
 
@@ -296,9 +294,9 @@ fn fetch_light_spot_shadow(light_index: u32, world_pos: vec3<f32>, view_matrix: 
 // Returns 0 for X-dominant, 1 for Y-dominant, 2 for Z-dominant
 fn get_dominant_axis(direction: vec3<f32>) -> u32 {
     let abs_dir = abs(direction);
-    if (abs_dir.x >= abs_dir.y && abs_dir.x >= abs_dir.z) {
+    if abs_dir.x >= abs_dir.y && abs_dir.x >= abs_dir.z {
         return 0u; // X-dominant
-    } else if (abs_dir.y >= abs_dir.z) {
+    } else if abs_dir.y >= abs_dir.z {
         return 1u; // Y-dominant
     }
     return 2u; // Z-dominant
@@ -308,11 +306,11 @@ fn get_dominant_axis(direction: vec3<f32>) -> u32 {
 // Mirrors the direction vector based on which cube face will be sampled
 fn apply_reflection_mirror(direction: vec3<f32>) -> vec3<f32> {
     let dominant = get_dominant_axis(direction);
-    
-    if (dominant == 0u) {
+
+    if dominant == 0u {
         // X-dominant (±X faces): flip Z axis
         return vec3<f32>(direction.x, direction.y, -direction.z);
-    } else if (dominant == 1u) {
+    } else if dominant == 1u {
         // Y-dominant (±Y faces): flip X axis
         return vec3<f32>(-direction.x, direction.y, direction.z);
     } else {
@@ -326,9 +324,9 @@ fn apply_reflection_mirror(direction: vec3<f32>) -> vec3<f32> {
 // Sample at high mip level for blurry/diffuse response (not view-dependent)
 fn sample_diffuse_ibl(normal: vec3<f32>, env_id: f32) -> vec3<f32> {
     let env_id_int = u32(env_id);
-    
+
     // Select environment texture based on ID
-    if (env_id_int == 1u) {
+    if env_id_int == 1u {
         // Reflection probe: apply mirror transformation
         let mirrored_normal = apply_reflection_mirror(normal);
         // Sample at middle mip level for diffuse response
@@ -336,7 +334,7 @@ fn sample_diffuse_ibl(normal: vec3<f32>, env_id: f32) -> vec3<f32> {
         let diffuse_mip = clamp(num_mips * 0.4, 0.0, num_mips - 1.0);
         return textureSampleLevel(environmentTexture1, environmentSampler1, mirrored_normal, diffuse_mip).rgb;
     }
-    
+
     // Default: use global skybox (ID 0) - no mirroring
     // Sample at middle mip level for diffuse response
     let num_mips = f32(textureNumLevels(skyboxTexture));
@@ -354,17 +352,17 @@ fn sample_diffuse_ibl(normal: vec3<f32>, env_id: f32) -> vec3<f32> {
 fn environment_brdf_lazanyi(NdotV: f32, roughness: f32, F0: vec3<f32>) -> vec3<f32> {
     let r2 = roughness * roughness;
     let r4 = r2 * r2;
-    
+
     // Improved polynomial fits designed for rough dielectrics
     // Scale term: handles Fresnel with proper roughness attenuation
     let scale = F0 + (max(vec3<f32>(1.0 - r2) - F0, vec3<f32>(0.0))) * 
                 pow(clamp(1.0 - NdotV, 0.0, 1.0), 5.0) * (1.0 - r4);
-    
+
     // Bias term: minimal correction for rough surfaces
     // Reduced coefficient (1.0 instead of 50.0) to prevent over-brightening dielectrics
     // Primarily benefits metallic surfaces with higher F0 values
     let bias = clamp(F0.g, 0.0, 1.0) * r2 * 0.1;
-    
+
     return scale + bias;
 }
 
@@ -380,8 +378,8 @@ fn sample_environment_reflection(world_pos: vec3<f32>, world_normal: vec3<f32>, 
     // Select environment texture based on ID
     let env_id_int = u32(env_id);
     var env_color: vec3<f32>;
-    
-    if (env_id_int == 1u) {
+
+    if env_id_int == 1u {
         // Reflection probe: apply mirror transformation
         let mirrored_R = apply_reflection_mirror(R);
         // Roughness-based mip selection (rougher = blurrier reflection)
@@ -402,7 +400,7 @@ fn sample_environment_reflection(world_pos: vec3<f32>, world_normal: vec3<f32>, 
     // Dielectrics (plastic, glass) use 0.04, metals use their albedo color
     let dielectric_F0 = vec3<f32>(0.04);
     let F0 = mix(dielectric_F0, albedo, metalness);
-    
+
     let brdf = environment_brdf_lazanyi(NdotV, roughness, F0);
     return env_color * brdf;
 }
@@ -419,7 +417,7 @@ fn distribution_ggx(NdotH: f32, roughness: f32) -> f32 {
     let NdotH2 = NdotH * NdotH;
     let denom = (NdotH2 * (a2 - 1.0) + 1.0);
     let denom2 = denom * denom;
-    
+
     // Epsilon protection prevents division by zero when NdotH ≈ 1.0 and roughness ≈ 0.0
     let epsilon = 0.0001;
     return a2 / (3.14159265359 * max(denom2, epsilon));
@@ -430,7 +428,7 @@ fn geometry_schlick_ggx(NdotV: f32, roughness: f32) -> f32 {
     let r = roughness + 1.0;
     let k = (r * r) / 8.0;
     let denom = NdotV * (1.0 - k) + k;
-    
+
     // Epsilon protection prevents division by near-zero
     let epsilon = 0.0001;
     return NdotV / max(denom, epsilon);
@@ -474,7 +472,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
     // Fallback to up vector if normal is invalid (all zeros or NaN)
     let normal_mag = dot(world_normal, world_normal);
-    if (normal_mag < 0.001 || normal_mag != normal_mag) {
+    if normal_mag < 0.001 || normal_mag != normal_mag {
         world_normal = vec3<f32>(0.0, 1.0, 0.0);
     }
 
@@ -495,7 +493,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     // Pre-calculate vectors needed for specular lighting
     let V = normalize(camera_uniforms.position.xyz - world_pos);
     let NdotV = max(dot(world_normal, V), 0.0);
-    
+
     // F0: Base reflectivity at normal incidence
     // Dielectrics (plastic, glass) use ~0.04, metals use their albedo color
     let F0 = mix(vec3<f32>(0.04), albedo, metalness);
@@ -508,7 +506,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
             // For lighting, we need direction TO light (scene → light), so negate
             let light_dir = normalize(-light_uniforms.direction.xyz);
             let H = normalize(V + light_dir);  // Halfway vector for specular
-            
+
             let NdotL = max(dot(world_normal, light_dir), 0.0);
             let NdotH = max(dot(world_normal, H), 0.0);
             let HdotV = max(dot(H, V), 0.0);
@@ -519,18 +517,18 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
             // Diffuse contribution
             color += diffuse_albedo * light_uniforms.color.rgb * light_uniforms.color.a * shadow * NdotL;
-            
+
             // Specular contribution (Cook-Torrance GGX BRDF)
-            if (NdotL > 0.0) {
+            if NdotL > 0.0 {
                 // Cook-Torrance BRDF: D * G * F / (4 * NdotV * NdotL)
                 let D = distribution_ggx(NdotH, roughness);
                 let G = geometry_smith(NdotV, NdotL, roughness);
                 let F = fresnel_schlick(HdotV, F0);
-                
+
                 let numerator = D * G * F;
                 let denominator = max(4.0 * NdotV * NdotL, 0.001);
                 let specular_brdf = numerator / denominator;
-                
+
                 // Add specular highlight
                 color += specular_brdf * light_uniforms.color.rgb * light_uniforms.color.a * shadow * NdotL;
             }
@@ -597,17 +595,17 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
             // Diffuse contribution
             color += diffuse_albedo * light_spot.color_intensity.rgb * light_spot.color_intensity.a * NdotL * attenuation;
-            
+
             // Specular contribution (Cook-Torrance GGX BRDF)
-            if (NdotL > 0.0) {
+            if NdotL > 0.0 {
                 let D = distribution_ggx(NdotH, roughness);
                 let G = geometry_smith(NdotV, NdotL, roughness);
                 let F = fresnel_schlick(HdotV, F0);
-                
+
                 let numerator = D * G * F;
                 let denominator = max(4.0 * NdotV * NdotL, 0.001);
                 let specular_brdf = numerator / denominator;
-                
+
                 // Add specular highlight
                 color += specular_brdf * light_spot.color_intensity.rgb * light_spot.color_intensity.a * NdotL * attenuation;
             }
@@ -619,13 +617,13 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     color += emissive;
 
     // Fog: https://iquilezles.org/articles/fog/
-    if (bool(scene_uniforms.fog_enabled)) {
+    if bool(scene_uniforms.fog_enabled) {
         let dist = length(view_pos);
         let view_dir = normalize(world_pos - camera_uniforms.position.xyz);
 
         var fog_color = scene_uniforms.fog_color_base.rgb;
         let has_sun = light_directional_uniforms.light_count > 0u;
-        if (has_sun) {
+        if has_sun {
             let sun_dir = normalize(-light_directional_uniforms.lights[0].direction.xyz);
             let sun_tint = pow(max(dot(view_dir, sun_dir), 0.0), scene_uniforms.fog_sun_exponent);
             fog_color = mix(scene_uniforms.fog_color_base.rgb, scene_uniforms.fog_color_sun.rgb, sun_tint);
@@ -639,7 +637,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         // light that survived + light scattered in from fog
         color = color * extinction + fog_color * (vec3<f32>(1.0) - ins);
     }
-    
+
     output.color = vec4<f32>(color, 1.0);
     return output;
 }

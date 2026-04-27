@@ -1,14 +1,14 @@
 struct MeshParticleUniforms {
-  regions_x: f32,
-  regions_y: f32,
-  regions_total: f32,
-  _padding: f32,
+    regions_x: f32,
+    regions_y: f32,
+    regions_total: f32,
+    _padding: f32,
 };
 
 struct MaterialParticleUniforms {
-  gradient_map_enabled: u32,
-  gradient_map_count: u32,
-  _padding: vec2<f32>,
+    gradient_map_enabled: u32,
+    gradient_map_count: u32,
+    _padding: vec2<f32>,
 };
 
 struct CameraUniforms {
@@ -85,7 +85,7 @@ fn vs_main(
 
     var local_pos = vertex.position.xyz;
 
-    if (instance.billboard == 1u) {
+    if instance.billboard == 1u {
         let forward = normalize(camera.position.xyz - instance_position);
         let right = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), forward));
         let up = cross(forward, right);
@@ -147,7 +147,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let luminance = clamp(dot(color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
     let gradient_selection = f32(in.gradient_map_index) / max(1.0, f32(material_particle_uniforms.gradient_map_count));
-    
+
     let gradient_map_uv = vec2<f32>(luminance, gradient_selection);
     let color_mapped = textureSample(gradient_map_texture, texture_sampler, gradient_map_uv);
 

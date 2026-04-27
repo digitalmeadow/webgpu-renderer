@@ -81,7 +81,14 @@ export class GeometryPass {
     groupManager?: InstanceGroupManager,
   ): void {
     const passEncoder = geometryBuffer.beginRenderPass(encoder);
-    this.draw(device, passEncoder, meshes, camera, materialManager, groupManager);
+    this.draw(
+      device,
+      passEncoder,
+      meshes,
+      camera,
+      materialManager,
+      groupManager,
+    );
     passEncoder.end();
   }
 

@@ -4,7 +4,9 @@ import { GeometryBuffer } from "../GeometryBuffer";
 
 let _skyboxBindGroupLayout: GPUBindGroupLayout | null = null;
 
-export function createSkyboxBindGroupLayout(device: GPUDevice): GPUBindGroupLayout {
+export function createSkyboxBindGroupLayout(
+  device: GPUDevice,
+): GPUBindGroupLayout {
   if (!_skyboxBindGroupLayout) {
     _skyboxBindGroupLayout = device.createBindGroupLayout({
       label: "Skybox Bind Group Layout",

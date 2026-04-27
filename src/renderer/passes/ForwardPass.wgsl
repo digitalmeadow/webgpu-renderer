@@ -38,19 +38,14 @@ struct InstanceInput {
 struct SceneUniforms {
     ambient_light_color: vec3<f32>,
     ibl_intensity: f32,
-
     fog_color_base: vec3<f32>,
     // 16 byte alignment
-
     fog_color_sun: vec3<f32>,
     // 16 byte alignment
-
     fog_extinction: vec3<f32>,
     // 16 byte alignment
-
     fog_inscattering: vec3<f32>,
     // 16 byte alignment
-
     fog_sun_exponent: f32,
     fog_enabled: u32,
     // 16 byte alignment
@@ -143,7 +138,7 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
     let is_edge_case = abs(forwardDotAxis) > 0.995;
 
     var safe_forward = forward;
-    if (is_edge_case) {
+    if is_edge_case {
         let axis_component = select(0.0, 1.0, abs(axisVec.x) > 0.5);
         let default_fwd = select(
             vec3<f32>(0.0, 0.0, 1.0),
@@ -188,7 +183,7 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
 
     let mesh_pos = model_matrix[3].xyz;
 
-    if (instance.billboard_axis != 0u) {
+    if instance.billboard_axis != 0u {
         let axisVec = get_billboard_axis(instance.billboard_axis);
         let billboard_matrix = compute_billboard_orientation(mesh_pos, axisVec);
 
@@ -423,7 +418,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     var world_normal = normalize(in.world_normal);
     let normal_sample = normal_tex.rgb;
     let normal_mag = dot(normal_sample, normal_sample);
-    if (normal_mag > 0.001) {
+    if normal_mag > 0.001 {
         let N = normalize(in.world_normal);
         let T = normalize(in.world_tangent.xyz - dot(in.world_tangent.xyz, N) * N);
         let B = cross(N, T) * in.world_tangent.w;
@@ -436,7 +431,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     }
 
     let nmag = dot(world_normal, world_normal);
-    if (nmag < 0.001 || nmag != nmag) {
+    if nmag < 0.001 || nmag != nmag {
         world_normal = vec3<f32>(0.0, 1.0, 0.0);
     }
 
@@ -513,20 +508,20 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
     var has_sun = light_directional_uniforms.light_count > 0u;
     var sun_dir = vec3<f32>(0.0, 1.0, 0.0);
-    if (has_sun) {
+    if has_sun {
         let light0 = light_directional_uniforms.lights[0];
         sun_dir = normalize(-light0.direction.xyz);
     }
 
     var sun_amount = 1.0;
     var fog_color = scene_uniforms.fog_color_base.rgb;
-    if (bool(scene_uniforms.fog_enabled) && has_sun) {
+    if bool(scene_uniforms.fog_enabled) && has_sun {
         sun_amount = max(dot(view_dir, sun_dir), 0.0);
         let sun_tint = pow(sun_amount, scene_uniforms.fog_sun_exponent);
         fog_color = mix(scene_uniforms.fog_color_base.rgb, scene_uniforms.fog_color_sun.rgb, sun_tint);
     }
 
-    if (bool(scene_uniforms.fog_enabled)) {
+    if bool(scene_uniforms.fog_enabled) {
         let be = scene_uniforms.fog_extinction;
         let bi = scene_uniforms.fog_inscattering;
 

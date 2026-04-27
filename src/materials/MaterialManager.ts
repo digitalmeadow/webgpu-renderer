@@ -483,6 +483,9 @@ export class MaterialManager {
           pbrMaterial.albedoTexture,
           TextureType.COLOR,
         );
+        if (pbrMaterial.albedoTexture.url.startsWith("blob:")) {
+          URL.revokeObjectURL(pbrMaterial.albedoTexture.url);
+        }
       }
 
       // Load normal texture (DATA type - preserve raw tangent-space vectors)
@@ -495,6 +498,9 @@ export class MaterialManager {
           pbrMaterial.normalTexture,
           TextureType.DATA,
         );
+        if (pbrMaterial.normalTexture.url.startsWith("blob:")) {
+          URL.revokeObjectURL(pbrMaterial.normalTexture.url);
+        }
       }
 
       // Load metalness/roughness texture (DATA type - preserve raw data values)
@@ -507,6 +513,9 @@ export class MaterialManager {
           pbrMaterial.metalnessRoughnessTexture,
           TextureType.DATA,
         );
+        if (pbrMaterial.metalnessRoughnessTexture.url.startsWith("blob:")) {
+          URL.revokeObjectURL(pbrMaterial.metalnessRoughnessTexture.url);
+        }
       }
 
       // Load emissive texture (COLOR type - needs sRGB→linear for HDR)
@@ -519,6 +528,9 @@ export class MaterialManager {
           pbrMaterial.emissiveTexture,
           TextureType.COLOR,
         );
+        if (pbrMaterial.emissiveTexture.url.startsWith("blob:")) {
+          URL.revokeObjectURL(pbrMaterial.emissiveTexture.url);
+        }
       }
 
       if (pbrMaterial.environmentTexture) {

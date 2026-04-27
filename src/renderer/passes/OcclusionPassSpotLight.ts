@@ -3,7 +3,11 @@ import { Mesh } from "../../mesh";
 import { SpotLight, getSpotLightShadowBindGroupLayout } from "../../lights";
 import { Vertex } from "../../geometries";
 import { MaterialManager } from "../../materials";
-import { InstanceGroup, InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
+import {
+  InstanceGroup,
+  InstanceGroupManager,
+  getInstanceBufferLayout,
+} from "../../scene";
 
 export class OcclusionPassSpotLight {
   private device: GPUDevice;
@@ -136,7 +140,9 @@ export class OcclusionPassSpotLight {
   ): void {
     for (const group of groups) {
       if (!group.instanceBuffer || group.instanceCount === 0) continue;
-      const materialBindGroup = this.materialManager.getBindGroup(group.material);
+      const materialBindGroup = this.materialManager.getBindGroup(
+        group.material,
+      );
       if (!materialBindGroup) continue;
       passEncoder.setBindGroup(1, materialBindGroup);
       passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
