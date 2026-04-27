@@ -207,7 +207,7 @@ async function main() {
   // Floor
   const floorGeo = createPlaneGeometry(device, 30, 30);
   const floorMat = new MaterialBasic(device, "floor", {
-    color: [0.28, 0.36, 0.22, 1.0],
+    color: [0.5, 0.5, 0.5, 1.0],
   });
   const floor = new Mesh(device, "floor", floorGeo, floorMat);
   scene.add(floor);
@@ -237,7 +237,7 @@ async function main() {
 
   // Reflection probe sphere — probe is attached after first render
   const probeMat = new MaterialPBR(device, "pbr-probe", {
-    baseColorFactor: [0.9, 0.9, 0.9, 1.0],
+    baseColorFactor: [0.0, 0.0, 0.0, 1.0],
   });
   await materialManager.loadMaterial(probeMat);
   const probeSphere = new Mesh(device, "probe-sphere", sphereGeo, probeMat);
@@ -315,7 +315,7 @@ async function main() {
   scene.add(customSphere);
 
   const sceneUniforms = renderer.getSceneUniforms();
-  const ambient = 0.95;
+  const ambient = 0.25;
   sceneUniforms.ambientLightColor = new Vec3(ambient, ambient, ambient);
   sceneUniforms.iblIntensity = 0.0;
   // Directional light — cascading shadow maps
@@ -392,8 +392,6 @@ async function main() {
   renderer.setSkyboxTexture(skybox);
   world.addScene(scene);
 
-  let probeAttached = false;
-
   function resize() {
     const rect = canvas.getBoundingClientRect();
     renderer.resize(rect.width, rect.height);
@@ -407,14 +405,11 @@ async function main() {
     time.update();
 
     flyControls.update(time.delta);
+    pbrSphere.transform.setRotation(0, time.elapsed * 0.2, 0);
     world.step(time.delta);
     world.updateWorldMatrices();
 
-    // Attach probe cube render target to material after the probe has been rendered once
-    if (!probeAttached && probe.cubeRenderTarget) {
-      probeMat.environmentTexture = probe.cubeRenderTarget;
-      probeAttached = true;
-    }
+    probeMat.environmentTexture = probe.cubeRenderTarget;
 
     smokeEmitter.updateParticles(device, time.delta);
 
@@ -439,7 +434,6 @@ async function main() {
       );
     }
 
-    // step 9: upload elapsed time to GPU each frame
     device.queue.writeBuffer(
       timeBuffer,
       0,

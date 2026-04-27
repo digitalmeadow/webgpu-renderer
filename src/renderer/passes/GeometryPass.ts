@@ -47,7 +47,7 @@ export class GeometryPass {
         module: shaderModule,
         entryPoint: "fs_main",
         targets: [
-          { format: "rgba8unorm" }, // Albedo
+          { format: "rgba8unorm-srgb" }, // Albedo — linear in, sRGB stored, auto-decoded on sample
           { format: "rgba16float" }, // Normal
           { format: "rgba8unorm" }, // Metal/Roughness
           { format: "rgba16float" }, // Emissive (HDR)

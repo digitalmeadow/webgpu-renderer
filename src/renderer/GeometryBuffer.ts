@@ -83,7 +83,9 @@ export class GeometryBuffer {
     this.albedoTexture = device.createTexture({
       label: "G-Buffer Albedo Texture",
       size: [width, height],
-      format: "rgba8unorm",
+      // sRGB: geometry pass writes linear → GPU encodes to sRGB for storage (better dark precision).
+      // Lighting pass samples and auto-decodes back to linear.
+      format: "rgba8unorm-srgb",
       usage:
         GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });

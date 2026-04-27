@@ -302,7 +302,7 @@ export class MaterialManager {
         module: shaderModule,
         entryPoint: "fs_main",
         targets: [
-          { format: "rgba8unorm" }, // Albedo
+          { format: "rgba8unorm-srgb" }, // Albedo — linear in, sRGB stored, auto-decoded on sample
           { format: "rgba16float" }, // Normal
           { format: "rgba8unorm" }, // Metal/Roughness
           { format: "rgba16float" }, // Emissive (HDR)
@@ -428,7 +428,7 @@ export class MaterialManager {
         entryPoint: "fs_main",
         targets: isOpaque
           ? [
-              { format: "rgba8unorm" }, // Albedo
+              { format: "rgba8unorm-srgb" }, // Albedo — linear in, sRGB stored, auto-decoded on sample
               { format: "rgba16float" }, // Normal
               { format: "rgba8unorm" }, // Metal/Roughness
               { format: "rgba16float" }, // Emissive (HDR)
