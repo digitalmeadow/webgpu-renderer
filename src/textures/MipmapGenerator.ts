@@ -141,6 +141,7 @@ export function generate2DMipmaps(
       cache.srcViews[mi] = srcView;
       cache.dstViews[mi] = dstView;
       cache.bindGroups[mi] = device.createBindGroup({
+        label: `Mipmap Bind Group 2D mip${m}`,
         layout: pipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: srcView },
@@ -207,6 +208,7 @@ export function generateCubeMipmaps(
         cache.srcViews[mi][f] = srcView;
         cache.dstViews[mi][f] = dstView;
         cache.bindGroups[mi][f] = device.createBindGroup({
+          label: `Mipmap Bind Group Cube mip${m} face${f}`,
           layout: pipeline.getBindGroupLayout(0),
           entries: [
             { binding: 0, resource: srcView },

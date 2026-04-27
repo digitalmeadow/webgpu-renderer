@@ -40,9 +40,9 @@ export class MeshUniforms {
   // Separate typed array for the u32 fields — Float32Array can't represent them faithfully
   private skinningData = new Uint32Array(2);
 
-  constructor(device: GPUDevice) {
+  constructor(device: GPUDevice, name: string) {
     this.buffer = device.createBuffer({
-      label: "Mesh Uniforms Buffer",
+      label: `Mesh Uniforms Buffer: ${name}`,
       size: BUFFER_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
@@ -50,7 +50,7 @@ export class MeshUniforms {
     this.bindGroupLayout = createMeshBindGroupLayout(device);
 
     this.bindGroup = device.createBindGroup({
-      label: "Mesh Uniforms Bind Group",
+      label: `Mesh Uniforms Bind Group: ${name}`,
       layout: this.bindGroupLayout,
       entries: [{ binding: 0, resource: { buffer: this.buffer } }],
     });

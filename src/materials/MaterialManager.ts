@@ -679,6 +679,7 @@ export class MaterialManager {
         : this.placeholderEmissiveTexture.createView();
 
       const bindGroup = this.device.createBindGroup({
+        label: `PBR Material Bind Group: ${pbrMaterial.name}`,
         layout: this.materialBindGroupLayout,
         entries: [
           { binding: 0, resource: this.nearestSampler },
@@ -704,6 +705,7 @@ export class MaterialManager {
       basicMaterial.uniforms.update(basicMaterial);
 
       const bindGroup = this.device.createBindGroup({
+        label: `Basic Material Bind Group: ${basicMaterial.name}`,
         layout: this.materialBindGroupLayout,
         entries: [
           { binding: 0, resource: this.nearestSampler },

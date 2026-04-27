@@ -34,7 +34,7 @@ export class Mesh extends Entity {
     material: MaterialBase,
   ) {
     super(name);
-    this.uniforms = new MeshUniforms(device);
+    this.uniforms = new MeshUniforms(device, name);
     this.geometry = geometry;
     this.material = material;
   }

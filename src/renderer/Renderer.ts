@@ -498,7 +498,6 @@ export class Renderer {
 
     // Skybox renders into depth=1 regions
     if (this.skyboxTexture) {
-      this.skyboxPass.setSkyboxTexture(this.skyboxTexture);
       this.skyboxPass.render(
         commandEncoder,
         camera.uniforms.bindGroup,
