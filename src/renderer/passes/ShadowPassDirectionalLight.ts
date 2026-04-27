@@ -164,7 +164,7 @@ export class ShadowPassDirectionalLight {
   }
 
   public render(
-    device: GPUDevice,
+    encoder: GPUCommandEncoder,
     directionalLights: DirectionalLight[],
     opaqueMeshes: Mesh[],
     alphaTestMeshes: Mesh[] = [],
@@ -186,7 +186,8 @@ export class ShadowPassDirectionalLight {
         cascadeIndex < SHADOW_MAP_CASCADES_COUNT;
         cascadeIndex++
       ) {
-        light.setActiveCascadeIndex(cascadeIndex);
+        // No setActiveCascadeIndex needed — each cascade has its own GPU buffer
+        // with the correct active_view_projection_index pre-baked in.
 
         const frustumPlanes = frustumPlanesFromMatrix(
           light.viewProjectionMatrices[cascadeIndex],
@@ -206,27 +207,23 @@ export class ShadowPassDirectionalLight {
         });
 
         const visibleOpaqueGroups = this.instanceGroupManager.buildGroups(
-          device,
+          this.device,
           visibleOpaqueMeshes,
           cameraPos,
         );
         const visibleAlphaTestGroups = this.instanceGroupManager.buildGroups(
-          device,
+          this.device,
           visibleAlphaTestMeshes,
           cameraPos,
         );
         const visibleTransparentGroups = this.instanceGroupManager.buildGroups(
-          device,
+          this.device,
           visibleTransparentMeshes,
           cameraPos,
         );
 
         const textureLayerIndex =
           lightIndex * SHADOW_MAP_CASCADES_COUNT + cascadeIndex;
-
-        const encoder = device.createCommandEncoder({
-          label: `Shadow Pass Encoder Light ${lightIndex} Cascade ${cascadeIndex}`,
-        });
 
         const passEncoder = encoder.beginRenderPass({
           label: `Shadow Pass Light ${lightIndex} Cascade ${cascadeIndex}`,
@@ -241,7 +238,7 @@ export class ShadowPassDirectionalLight {
 
         // Render opaque meshes (no fragment shader)
         passEncoder.setPipeline(this.pipeline);
-        passEncoder.setBindGroup(0, light.shadowBindGroup);
+        passEncoder.setBindGroup(0, light.shadowBindGroups[cascadeIndex]);
 
         for (const group of visibleOpaqueGroups) {
           if (!group.instanceBuffer || group.instanceCount === 0) continue;
@@ -267,7 +264,7 @@ export class ShadowPassDirectionalLight {
             );
             if (!materialBindGroup) continue;
 
-            passEncoder.setBindGroup(0, light.shadowBindGroup);
+            passEncoder.setBindGroup(0, light.shadowBindGroups[cascadeIndex]);
             passEncoder.setBindGroup(1, materialBindGroup);
             passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
             passEncoder.setVertexBuffer(1, group.instanceBuffer);
@@ -291,7 +288,7 @@ export class ShadowPassDirectionalLight {
             );
             if (!materialBindGroup) continue;
 
-            passEncoder.setBindGroup(0, light.shadowBindGroup);
+            passEncoder.setBindGroup(0, light.shadowBindGroups[cascadeIndex]);
             passEncoder.setBindGroup(1, materialBindGroup);
             passEncoder.setVertexBuffer(0, group.geometry.vertexBuffer);
             passEncoder.setVertexBuffer(1, group.instanceBuffer);
@@ -304,8 +301,6 @@ export class ShadowPassDirectionalLight {
         }
 
         passEncoder.end();
-
-        device.queue.submit([encoder.finish()]);
       }
     }
   }

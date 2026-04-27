@@ -802,9 +802,10 @@ export class Mat4 {
       x2 *= len;
     }
 
-    const y0 = x1 * z2 - x2 * z1;
-    const y1 = x2 * z0 - x0 * z2;
-    const y2 = x0 * z1 - x1 * z0;
+    // LH: up = forward × right  (= cross(z, x))
+    const y0 = z1 * x2 - z2 * x1;
+    const y1 = z2 * x0 - z0 * x2;
+    const y2 = z0 * x1 - z1 * x0;
 
     out.data[0] = x0;
     out.data[1] = y0;

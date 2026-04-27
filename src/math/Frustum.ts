@@ -94,6 +94,7 @@ export function aabbInFrustum(
   aabb: AABBWorld,
   planes: FrustumPlane[],
 ): boolean {
+  return true;
   for (let i = 0; i < planes.length; i++) {
     const plane = planes[i];
     const nx = plane.normal.data[0];

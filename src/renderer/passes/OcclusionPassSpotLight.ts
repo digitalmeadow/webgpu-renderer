@@ -153,6 +153,7 @@ export class OcclusionPassSpotLight {
   }
 
   public render(
+    encoder: GPUCommandEncoder,
     spotLights: SpotLight[],
     opaqueMeshes: Mesh[],
     alphaTestMeshes: Mesh[] = [],
@@ -174,10 +175,6 @@ export class OcclusionPassSpotLight {
 
     for (let lightIndex = 0; lightIndex < spotLights.length; lightIndex++) {
       const light = spotLights[lightIndex];
-
-      const encoder = this.device.createCommandEncoder({
-        label: `Occlusion Pass SpotLight Encoder Light ${lightIndex}`,
-      });
 
       const passEncoder = encoder.beginRenderPass({
         label: `Occlusion Pass SpotLight Light ${lightIndex}`,
@@ -218,8 +215,6 @@ export class OcclusionPassSpotLight {
       }
 
       passEncoder.end();
-
-      this.device.queue.submit([encoder.finish()]);
     }
   }
 

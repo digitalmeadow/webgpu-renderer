@@ -132,8 +132,7 @@ export class SkyboxPass {
       ],
       depthStencilAttachment: {
         view: this.geometryBuffer.depthView,
-        depthLoadOp: "load",
-        depthStoreOp: "store",
+        depthReadOnly: true,
       },
     });
 

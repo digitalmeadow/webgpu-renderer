@@ -429,6 +429,43 @@ export class Renderer {
 
     this.renderReflectionProbes(world);
 
+    // ── Light matrix update ───────────────────────────────────────────────────
+    // Must happen before shadow passes (which read light matrices) and before
+    // the main encoder is created.
+    this.lightManager.update(directionalLights, camera);
+    if (spotLights.length > 0) {
+      this.lightManager.updateSpotLights(spotLights);
+    }
+
+    // ── Shadow & Occlusion passes ─────────────────────────────────────────────
+    // Submitted in their own dedicated encoder that is FULLY COMMITTED before
+    // the main encoder is created.  On Safari/Metal, a texture used as a render
+    // attachment cannot also appear as a shader resource in the same command
+    // buffer — consolidating into the main encoder would move shadow textures
+    // from "render attachment" to "texture binding" inside one buffer and fail.
+    // Pre-submitting avoids that entirely: from the main encoder's perspective
+    // the shadow maps are already committed read-only data.
+    this.renderShadowAndOcclusion(
+      directionalLights,
+      spotLights,
+      opaqueMeshes,
+      [...alphaTestMeshes, ...ditherMeshes],
+      blendMeshes,
+      camera,
+    );
+
+    // Lighting bind group is built after shadow textures are fully committed.
+    this.lightManager.updateLightingBindGroup(directionalLights, spotLights);
+
+    if (this.materialManager.environmentTexturesNeedsUpdate) {
+      this.sceneUniforms.setEnvironmentTextures(
+        this.materialManager.getEnvironmentTextures(),
+      );
+      this.materialManager.environmentTexturesNeedsUpdate = false;
+    }
+
+    // ── Main encoder ─────────────────────────────────────────────────────────
+    // Created only after all shadow submissions are done.
     const commandEncoder = this.device.createCommandEncoder();
 
     // Single G-buffer render pass shared by GeometryPass and all GBufferPasses —
@@ -449,30 +486,6 @@ export class Renderer {
     }
 
     gBufferPassEncoder.end();
-
-    this.lightManager.update(directionalLights, camera);
-    if (spotLights.length > 0) {
-      this.lightManager.updateSpotLights(spotLights);
-    }
-
-    this.renderShadowAndOcclusion(
-      commandEncoder,
-      directionalLights,
-      spotLights,
-      opaqueMeshes,
-      [...alphaTestMeshes, ...ditherMeshes],
-      blendMeshes,
-      camera,
-    );
-
-    this.lightManager.updateLightingBindGroup(directionalLights, spotLights);
-
-    if (this.materialManager.environmentTexturesNeedsUpdate) {
-      this.sceneUniforms.setEnvironmentTextures(
-        this.materialManager.getEnvironmentTextures(),
-      );
-      this.materialManager.environmentTexturesNeedsUpdate = false;
-    }
 
     // Lighting Pass
     this.lightingPass.render(
@@ -547,7 +560,6 @@ export class Renderer {
   }
 
   private renderShadowAndOcclusion(
-    _commandEncoder: GPUCommandEncoder,
     directionalLights: DirectionalLight[],
     spotLights: SpotLight[],
     opaqueMeshes: Mesh[],
@@ -555,10 +567,39 @@ export class Renderer {
     blendMeshes: Mesh[],
     camera: Camera,
   ): void {
+    // On Safari/Metal, a texture that is rendered into as a render attachment
+    // cannot be used as a shader resource (texture binding) inside the same
+    // command buffer — the Metal driver requires explicit barriers that
+    // WebKit's WebGPU does not always insert.  The fix is to keep all shadow
+    // and occlusion passes in a single *separate* command encoder that is
+    // submitted and fully committed before the main encoder is even created.
+    // The GPU queue's FIFO ordering then guarantees the main encoder's lighting
+    // pass sees the completed shadow maps without any cross-buffer hazard.
+    const hasShadowWork =
+      directionalLights.length > 0 || spotLights.length > 0;
+    const occlusionEnabledDirectionalLights = directionalLights.filter(
+      (l) => l.occlusionEnabled,
+    );
+    const occlusionEnabledSpotLights = spotLights.filter(
+      (l) => l.occlusionEnabled,
+    );
+    const hasOcclusionWork =
+      occlusionEnabledDirectionalLights.length > 0 ||
+      occlusionEnabledSpotLights.length > 0;
+
+    if (!hasShadowWork && !hasOcclusionWork) {
+      this.lightManager.setShadowTexture(null, null);
+      return;
+    }
+
+    const shadowEncoder = this.device.createCommandEncoder({
+      label: "Shadow & Occlusion Encoder",
+    });
+
     // Shadow Pass - Directional Lights
     if (directionalLights.length > 0) {
       this.shadowPassDirectionalLight.render(
-        this.device,
+        shadowEncoder,
         directionalLights,
         opaqueMeshes,
         alphaMeshes,
@@ -576,7 +617,7 @@ export class Renderer {
     // Shadow Pass - Spot Lights
     if (spotLights.length > 0) {
       this.shadowPassSpotLight.render(
-        this.device,
+        shadowEncoder,
         spotLights,
         opaqueMeshes,
         alphaMeshes,
@@ -589,9 +630,6 @@ export class Renderer {
     }
 
     // Occlusion Pass - Directional Lights
-    const occlusionEnabledDirectionalLights = directionalLights.filter(
-      (l) => l.occlusionEnabled,
-    );
     if (occlusionEnabledDirectionalLights.length > 0) {
       for (const light of occlusionEnabledDirectionalLights) {
         light.updateOcclusionMatrixFromFrustum(
@@ -605,30 +643,32 @@ export class Renderer {
       }
 
       this.occlusionPassDirectionalLight.render(
+        shadowEncoder,
         occlusionEnabledDirectionalLights,
         opaqueMeshes,
         alphaMeshes,
         blendMeshes,
       );
 
-      // Restore shadow matrices overwritten by occlusion pass
-      for (const light of occlusionEnabledDirectionalLights) {
-        light.updateShadowBuffer();
-      }
+      // No shadow-buffer restoration needed: the occlusion pass now uses a
+      // dedicated occlusionBuffer / occlusionBindGroup that is fully separate
+      // from the cascade shadow buffers. Both sets of buffers are stable for
+      // the entire duration of the command encoder.
     }
 
     // Occlusion Pass - Spot Lights
-    const occlusionEnabledSpotLights = spotLights.filter(
-      (l) => l.occlusionEnabled,
-    );
     if (occlusionEnabledSpotLights.length > 0) {
       this.occlusionPassSpotLight.render(
+        shadowEncoder,
         occlusionEnabledSpotLights,
         opaqueMeshes,
         alphaMeshes,
         blendMeshes,
       );
     }
+
+    // Commit the shadow encoder before the main encoder is created.
+    this.device.queue.submit([shadowEncoder.finish()]);
   }
 
   private renderPostProcessing(

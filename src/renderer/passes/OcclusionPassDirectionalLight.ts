@@ -164,6 +164,7 @@ export class OcclusionPassDirectionalLight {
   }
 
   public render(
+    encoder: GPUCommandEncoder,
     directionalLights: DirectionalLight[],
     opaqueMeshes: Mesh[],
     alphaTestMeshes: Mesh[] = [],
@@ -190,10 +191,6 @@ export class OcclusionPassDirectionalLight {
     ) {
       const light = directionalLights[lightIndex];
 
-      const encoder = this.device.createCommandEncoder({
-        label: `Occlusion Pass Encoder Light ${lightIndex}`,
-      });
-
       const passEncoder = encoder.beginRenderPass({
         label: `Occlusion Pass Light ${lightIndex}`,
         colorAttachments: [],
@@ -207,7 +204,7 @@ export class OcclusionPassDirectionalLight {
 
       // Render opaque meshes (no fragment shader)
       passEncoder.setPipeline(this.pipeline);
-      passEncoder.setBindGroup(0, light.shadowBindGroup);
+      passEncoder.setBindGroup(0, light.occlusionBindGroup);
 
       for (const group of opaqueGroups) {
         if (!group.instanceBuffer || group.instanceCount === 0) continue;
@@ -221,20 +218,18 @@ export class OcclusionPassDirectionalLight {
       // Render alpha-tested meshes (with fragment shader for alpha discard)
       if (alphaTestGroups.length > 0) {
         passEncoder.setPipeline(this.transparentPipeline);
-        passEncoder.setBindGroup(0, light.shadowBindGroup);
+        passEncoder.setBindGroup(0, light.occlusionBindGroup);
         this.drawMaskedGroups(passEncoder, alphaTestGroups);
       }
 
       // Render transparent meshes (with fragment shader for alpha discard)
       if (transparentGroups.length > 0) {
         passEncoder.setPipeline(this.transparentPipeline);
-        passEncoder.setBindGroup(0, light.shadowBindGroup);
+        passEncoder.setBindGroup(0, light.occlusionBindGroup);
         this.drawMaskedGroups(passEncoder, transparentGroups);
       }
 
       passEncoder.end();
-
-      this.device.queue.submit([encoder.finish()]);
     }
   }
 

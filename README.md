@@ -14,6 +14,10 @@ npm install @digitalmeadow/webgpu-renderer
 - Dependency-free
 - Minimal API
 
+## Decisions
+- Left-handed coordinate system (CW winding order)
+- Y-axis up
+
 ## Usage
 
 ```typescript

@@ -50,8 +50,20 @@ export class DirectionalLight extends Light {
   // Occlusion matrix (will overwrite view_projection_matrices[0] during occlusion pass)
   public occlusionViewProjectionMatrix: Mat4 = Mat4.create();
 
+  // Per-cascade shadow buffers — each has its cascade index baked in as a u32 at
+  // byte offset 240 so that all writeBuffer calls for a frame complete before the
+  // command encoder is submitted (no more setActiveCascadeIndex race).
+  public shadowBuffers: GPUBuffer[] = [];
+  public shadowBindGroups: GPUBindGroup[] = [];
+
+  // Legacy aliases kept for LightManager's `!light.shadowBuffer` guard.
   public shadowBuffer: GPUBuffer | null = null;
   public shadowBindGroup: GPUBindGroup | null = null;
+
+  // Dedicated buffer for the occlusion pass so it is never overwritten by
+  // updateShadowBuffer() before the encoder is submitted.
+  public occlusionBuffer: GPUBuffer | null = null;
+  public occlusionBindGroup: GPUBindGroup | null = null;
 
   private _device: GPUDevice | null = null;
 
@@ -66,21 +78,40 @@ export class DirectionalLight extends Light {
   public initShadowResources(device: GPUDevice): void {
     this._device = device;
 
-    this.shadowBuffer = device.createBuffer({
-      label: "DirectionalLight Shadow Buffer",
+    this.shadowBuffers = [];
+    this.shadowBindGroups = [];
+
+    // One buffer + bind-group per cascade, each pre-baked with its cascade index.
+    for (let cascadeIndex = 0; cascadeIndex < SHADOW_MAP_CASCADES_COUNT; cascadeIndex++) {
+      const buf = device.createBuffer({
+        label: `DirectionalLight Shadow Buffer Cascade ${cascadeIndex}`,
+        size: 256,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      const bg = device.createBindGroup({
+        label: `DirectionalLight Shadow BindGroup Cascade ${cascadeIndex}`,
+        layout: getDirectionalLightShadowBindGroupLayout(device),
+        entries: [{ binding: 0, resource: { buffer: buf } }],
+      });
+      this.shadowBuffers.push(buf);
+      this.shadowBindGroups.push(bg);
+    }
+
+    // Keep legacy aliases so LightManager's `!light.shadowBuffer` guard still works.
+    this.shadowBuffer = this.shadowBuffers[0];
+    this.shadowBindGroup = this.shadowBindGroups[0];
+
+    // Dedicated buffer for the occlusion pass — completely separate from the
+    // cascade buffers so occlusion matrix writes are never overwritten.
+    this.occlusionBuffer = device.createBuffer({
+      label: "DirectionalLight Occlusion Buffer",
       size: 256,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-
-    this.shadowBindGroup = device.createBindGroup({
-      label: "DirectionalLight Shadow BindGroup",
+    this.occlusionBindGroup = device.createBindGroup({
+      label: "DirectionalLight Occlusion BindGroup",
       layout: getDirectionalLightShadowBindGroupLayout(device),
-      entries: [
-        {
-          binding: 0,
-          resource: { buffer: this.shadowBuffer },
-        },
-      ],
+      entries: [{ binding: 0, resource: { buffer: this.occlusionBuffer } }],
     });
   }
 
@@ -314,7 +345,7 @@ export class DirectionalLight extends Light {
     cameraPosition: Vec3,
     cameraDirection: Vec3,
   ): void {
-    if (!this.shadowBuffer || !this._device) {
+    if (!this.occlusionBuffer || !this._device) {
       return;
     }
 
@@ -351,11 +382,14 @@ export class DirectionalLight extends Light {
     // Store as view-projection matrix
     Mat4.multiply(projMatrix, viewMatrix, this.occlusionViewProjectionMatrix);
 
-    // Temporarily overwrite view_projection_matrices[0] in shadow buffer
-    // This will be used during occlusion rendering
-    const data = new Float32Array(16);
-    data.set(this.occlusionViewProjectionMatrix.data, 0);
-    this._device.queue.writeBuffer(this.shadowBuffer, 0, data); // Offset 0 = first matrix
+    // Write to the dedicated occlusion buffer (not the cascade shadow buffers).
+    // The OcclusionPassDirectionalLight WGSL hardcodes view_projection_matrices[0],
+    // so we only need to populate matrix[0] plus the direction for billboard support.
+    const data = new Float32Array(64); // 256 bytes — full buffer
+    data.set(this.occlusionViewProjectionMatrix.data, 0); // matrix[0]
+    data.set(this.direction.data, 52); // direction field
+    // active_view_projection_index = 0 at byte 240 (already zero from initialization)
+    this._device.queue.writeBuffer(this.occlusionBuffer!, 0, data);
   }
 
   /**
@@ -497,11 +531,14 @@ export class DirectionalLight extends Light {
     // Store as view-projection matrix
     Mat4.multiply(projMatrix, viewMatrix, this.occlusionViewProjectionMatrix);
 
-    // Temporarily overwrite view_projection_matrices[0] in shadow buffer
-    // This will be used during occlusion rendering
-    const data = new Float32Array(16);
-    data.set(this.occlusionViewProjectionMatrix.data, 0);
-    this._device.queue.writeBuffer(this.shadowBuffer, 0, data); // Offset 0 = first matrix
+    // Write to the dedicated occlusion buffer (not the cascade shadow buffers).
+    // The OcclusionPassDirectionalLight WGSL hardcodes view_projection_matrices[0],
+    // so we only need to populate matrix[0] plus the direction for billboard support.
+    const data = new Float32Array(64); // 256 bytes — full buffer
+    data.set(this.occlusionViewProjectionMatrix.data, 0); // matrix[0]
+    data.set(this.direction.data, 52); // direction field
+    // active_view_projection_index = 0 at byte 240 (already zero from initialization)
+    this._device.queue.writeBuffer(this.occlusionBuffer!, 0, data);
   }
 
   private lerp(a: number, b: number, t: number): number {
@@ -509,34 +546,45 @@ export class DirectionalLight extends Light {
   }
 
   public updateShadowBuffer(): void {
-    if (!this.shadowBuffer || !this._device) return;
+    if (!this._device || this.shadowBuffers.length === 0) return;
 
-    const data = new Float32Array(64); // 256 bytes
+    // Write once per cascade buffer with the cascade index baked in as a u32.
+    // This avoids the writeBuffer-ordering race: all writes happen together here,
+    // before the command encoder is created, so each buffer permanently holds the
+    // correct active_view_projection_index for its cascade.
+    for (let cascadeIndex = 0; cascadeIndex < SHADOW_MAP_CASCADES_COUNT; cascadeIndex++) {
+      const buf = this.shadowBuffers[cascadeIndex];
+      if (!buf) continue;
 
-    // view_projection_matrices (3 matrices)
-    for (let i = 0; i < SHADOW_MAP_CASCADES_COUNT; i++) {
-      data.set(this.viewProjectionMatrices[i].data, i * 16);
+      const data = new Float32Array(64); // 256 bytes
+
+      // view_projection_matrices (3 matrices, offsets 0–47)
+      for (let i = 0; i < SHADOW_MAP_CASCADES_COUNT; i++) {
+        data.set(this.viewProjectionMatrices[i].data, i * 16);
+      }
+
+      // cascade_splits (offset 48)
+      data.set(this.cascadeActualDepths.slice(0, 4), 48);
+
+      // direction (offset 52)
+      data.set(this.direction.data, 52);
+
+      // color.rgb + intensity (offset 56)
+      data.set([...this.color.data, this.intensity], 56);
+
+      // active_view_projection_index at byte 240 — must be a u32, not float.
+      // Use a Uint32Array view into the same ArrayBuffer to write the correct bits.
+      new Uint32Array(data.buffer, 240, 1)[0] = cascadeIndex;
+
+      this._device.queue.writeBuffer(buf, 0, data);
     }
-
-    // cascade_splits
-    data.set(this.cascadeActualDepths.slice(0, 4), 48);
-
-    // direction
-    data.set(this.direction.data, 52);
-
-    // color.rgb + intensity in alpha to match the lighting shader contract
-    data.set([...this.color.data, this.intensity], 56);
-
-    // light_index (stored at offset 240, same as active_view_projection_index)
-    data[60] = this.lightIndex;
-
-    this._device.queue.writeBuffer(this.shadowBuffer, 0, data);
   }
 
-  public setActiveCascadeIndex(index: number): void {
-    if (!this.shadowBuffer || !this._device) return;
-    const indexData = new Uint32Array([index]);
-    this._device.queue.writeBuffer(this.shadowBuffer, 240, indexData); // offset 240 = 60 * 4 bytes
+  /** @deprecated No longer needed — cascade index is baked into per-cascade buffers. */
+  public setActiveCascadeIndex(_index: number): void {
+    // No-op: the active_view_projection_index is now pre-baked into each
+    // cascade's own GPU buffer inside updateShadowBuffer(), eliminating the
+    // writeBuffer-ordering race that caused all cascades to use index 2.
   }
 
   public getShadowBindGroup(): GPUBindGroup | null {

@@ -141,7 +141,7 @@ export class ShadowPassSpotLight {
   }
 
   public render(
-    device: GPUDevice,
+    encoder: GPUCommandEncoder,
     spotLights: SpotLight[],
     opaqueMeshes: Mesh[],
     alphaTestMeshes: Mesh[] = [],
@@ -172,24 +172,20 @@ export class ShadowPassSpotLight {
 
       // Build instance groups
       const opaqueGroups = this.instanceGroupManager.buildGroups(
-        device,
+        this.device,
         visibleOpaqueMeshes,
         camera.transform.getWorldPosition(),
       );
       const alphaTestGroups = this.instanceGroupManager.buildGroups(
-        device,
+        this.device,
         visibleAlphaTestMeshes,
         camera.transform.getWorldPosition(),
       );
       const transparentGroups = this.instanceGroupManager.buildGroups(
-        device,
+        this.device,
         visibleTransparentMeshes,
         camera.transform.getWorldPosition(),
       );
-
-      const encoder = device.createCommandEncoder({
-        label: `Shadow Pass SpotLight Encoder Light ${lightIndex}`,
-      });
 
       const passEncoder = encoder.beginRenderPass({
         label: `Shadow Pass SpotLight Light ${lightIndex}`,
@@ -264,8 +260,6 @@ export class ShadowPassSpotLight {
       }
 
       passEncoder.end();
-
-      device.queue.submit([encoder.finish()]);
     }
   }
 
