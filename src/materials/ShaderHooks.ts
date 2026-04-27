@@ -1,6 +1,8 @@
 export interface ShaderHooks {
-  // Inject WGSL helper functions/declarations before the main hook functions
+  // Inject WGSL binding declarations (@group/@binding/var<uniform> etc.) before helper functions
   uniforms?: string;
+  // Inject WGSL helper fn definitions available to the hookable functions below
+  functions?: string;
   // Replace fn get_albedo_color(uv: vec2<f32>) -> vec4<f32>
   albedo?: string;
   // Replace fn modify_albedo(color: vec4<f32>, uv: vec2<f32>) -> vec4<f32>

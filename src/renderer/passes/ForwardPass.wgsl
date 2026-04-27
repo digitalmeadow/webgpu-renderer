@@ -158,6 +158,8 @@ fn compute_billboard_orientation(mesh_pos: vec3<f32>, axisVec: vec3<f32>) -> mat
 
 //--HOOK_PLACEHOLDER_UNIFORMS--//
 
+//--HOOK_PLACEHOLDER_FUNCTIONS--//
+
 fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
     return textureSample(albedoTexture, nearestSampler, uv);
 }

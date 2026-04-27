@@ -28,13 +28,13 @@ const UV_DEBUG_ALBEDO_HOOK = `fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
   return vec4<f32>(uv.x, uv.y, 0.0, 1.0);
 }`;
 
-const UV_DEBUG_UNIFORMS_HOOK = `fn material_albedo_color() -> vec4<f32> {
+const UV_DEBUG_FUNCTIONS_HOOK = `fn material_albedo_color() -> vec4<f32> {
   return vec4<f32>(1.0, 1.0, 1.0, 1.0);
 }`;
 
 // Hook showcase sphere — exercises all four ShaderHooks
 
-const HOOK_SHOWCASE_UNIFORMS = `fn stripe(v: f32, freq: f32) -> f32 {
+const HOOK_SHOWCASE_FUNCTIONS = `fn stripe(v: f32, freq: f32) -> f32 {
   return sin(v * freq * 6.28318) * 0.5 + 0.5;
 }`;
 
@@ -255,18 +255,18 @@ async function main() {
     color: [1, 1, 1, 1],
     hooks: {
       albedo: UV_DEBUG_ALBEDO_HOOK,
-      uniforms: UV_DEBUG_UNIFORMS_HOOK,
+      functions: UV_DEBUG_FUNCTIONS_HOOK,
     },
   });
   const uvSphere = new Mesh(device, "uv-sphere", sphereGeo, uvDebugMat);
   uvSphere.transform.setPosition(3.5, 1, 0);
   scene.add(uvSphere);
 
-  // Hook showcase sphere — exercises all four hooks: uniforms, albedo, albedo_logic, vertex_post_process
+  // Hook showcase sphere — exercises all four hooks: functions, albedo, albedo_logic, vertex_post_process
   const hookShowcaseMat = new MaterialBasic(device, "hook-showcase", {
     color: [1, 1, 1, 1],
     hooks: {
-      uniforms: HOOK_SHOWCASE_UNIFORMS,
+      functions: HOOK_SHOWCASE_FUNCTIONS,
       albedo: HOOK_SHOWCASE_ALBEDO,
       albedo_logic: HOOK_SHOWCASE_ALBEDO_LOGIC,
       vertex_post_process: HOOK_SHOWCASE_VERTEX,
@@ -314,6 +314,10 @@ async function main() {
   customSphere.transform.setPosition(10.5, 1, 0);
   scene.add(customSphere);
 
+  const sceneUniforms = renderer.getSceneUniforms();
+  const ambient = 0.95;
+  sceneUniforms.ambientLightColor = new Vec3(ambient, ambient, ambient);
+  sceneUniforms.iblIntensity = 0.0;
   // Directional light — cascading shadow maps
   const sun = new DirectionalLight("sun");
   sun.transform.setPosition(-4, 8, 10);
@@ -370,14 +374,13 @@ async function main() {
   scene.add(smokeEmitter);
 
   // Fog
-  const fog = renderer.getSceneUniforms();
-  fog.fogEnabled = true;
-  fog.fogColorBase = new Vec3(0.55, 0.58, 0.62);
-  fog.fogColorSun = new Vec3(0.98, 0.78, 0.48);
-  fog.fogExtinction = new Vec3(0.004, 0.004, 0.004);
-  fog.fogInscattering = new Vec3(0.006, 0.006, 0.006);
-  fog.fogSunExponent = 12.0;
-  fog.update();
+  sceneUniforms.fogEnabled = true;
+  sceneUniforms.fogColorBase = new Vec3(0.55, 0.58, 0.62);
+  sceneUniforms.fogColorSun = new Vec3(0.98, 0.78, 0.48);
+  sceneUniforms.fogExtinction = new Vec3(0.004, 0.004, 0.004);
+  sceneUniforms.fogInscattering = new Vec3(0.006, 0.006, 0.006);
+  sceneUniforms.fogSunExponent = 12.0;
+  sceneUniforms.update();
 
   // Skybox
   const skybox = new CubeTexture(

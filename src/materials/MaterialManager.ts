@@ -243,6 +243,12 @@ export class MaterialManager {
         hooks.uniforms,
       );
     }
+    if (hooks.functions) {
+      shader = shader.replace(
+        "//--HOOK_PLACEHOLDER_FUNCTIONS--//",
+        hooks.functions,
+      );
+    }
     if (hooks.albedo) {
       const albedoFunctionRegex =
         /fn\s+get_albedo_color\s*\([^)]*\)\s*->\s*vec4<f32>\s*\{[^}]*}/;

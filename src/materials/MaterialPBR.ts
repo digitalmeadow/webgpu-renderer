@@ -54,6 +54,7 @@ export class MaterialPBR extends MaterialBase {
   get hasHooks(): boolean {
     return !!(
       this.hooks.uniforms ||
+      this.hooks.functions ||
       this.hooks.albedo ||
       this.hooks.albedo_logic ||
       this.hooks.vertex_post_process

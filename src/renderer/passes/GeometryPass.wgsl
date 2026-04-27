@@ -29,6 +29,8 @@ fn get_dither_threshold(screen_pos: vec2<f32>) -> f32 {
 
 //--HOOK_PLACEHOLDER_UNIFORMS--//
 
+//--HOOK_PLACEHOLDER_FUNCTIONS--//
+
 // Replaceable via ShaderHooks.albedo. Signature must match exactly.
 fn get_albedo_color(uv: vec2<f32>) -> vec4<f32> {
     return textureSample(albedoTexture, nearestSampler, uv);
