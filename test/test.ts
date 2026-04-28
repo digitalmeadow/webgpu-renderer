@@ -341,7 +341,7 @@ async function main() {
 
   // Smoke particles
   const smokeTex = new Texture("./assets/smoke.png");
-  const gradientTex = new Texture("./assets/gradient_map_smoke.png");
+  const gradientTex = new Texture("./assets/gradient-map--smoke.png");
   const smokeMat = new MaterialParticle();
   smokeMat.spriteTexture = smokeTex;
   smokeMat.gradientMapTexture = gradientTex;
@@ -363,7 +363,7 @@ async function main() {
       spawnScales: [1.5],
       spawnRotations: [new Quat()],
       spawnVelocities: [new Vec3(0, 0, 0)],
-      spawnLifetimes: [4.0],
+      spawnLifetimes: [2.0],
       spawnAlphas: [0.8],
       spawnBillboards: [1],
     },
