@@ -1,6 +1,5 @@
 import {
   Camera,
-  OrthographicCamera,
   CubeTexture,
   DirectionalLight,
   FlyControls,
@@ -192,20 +191,9 @@ async function main() {
 
   // Camera
   const cameraFar = 100.0;
-  // const camera = new Camera(device, "main", {
-  //   fov: Math.PI / 4,
-  //   aspect: canvas.clientWidth / canvas.clientHeight,
-  //   near: 0.1,
-  //   far: cameraFar,
-  // });
-  // camera.transform.setPosition(0, 4, -12);
-  // camera.transform.lookAt(new Vec3(0, 1, 0));
-  // scene.add(camera);
-
-  // To use orthographic camera: comment out the Camera block above and uncomment below.
-  // Also comment out `flyControls` and update `camera.resize()` and `renderer.render()` calls.
-  const camera = new OrthographicCamera(device, "main", {
-    size: 20,
+  const camera = new Camera(device, "main", {
+    fov: Math.PI / 4,
+    aspect: canvas.clientWidth / canvas.clientHeight,
     near: 0.1,
     far: cameraFar,
   });
@@ -213,7 +201,7 @@ async function main() {
   camera.transform.lookAt(new Vec3(0, 1, 0));
   scene.add(camera);
 
-  // const flyControls = new FlyControls(canvas, camera);
+  const flyControls = new FlyControls(canvas, camera);
   const time = new Time();
 
   // Floor
@@ -416,7 +404,7 @@ async function main() {
   function loop() {
     time.update();
 
-    // flyControls.update(time.delta);
+    flyControls.update(time.delta);
     pbrSphere.transform.setRotation(0, time.elapsed * 0.2, 0);
     world.step(time.delta);
     world.updateWorldMatrices();

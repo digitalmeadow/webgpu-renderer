@@ -1,4 +1,4 @@
-import type { BaseCamera } from "../../camera";
+import type { Camera } from "../../camera";
 import type { Time } from "../../time";
 
 /**
@@ -7,6 +7,6 @@ import type { Time } from "../../time";
  * renderer.addGBufferPass(pass)
  */
 export interface GBufferPass {
-  render(passEncoder: GPURenderPassEncoder, camera: BaseCamera, time: Time): void;
+  render(passEncoder: GPURenderPassEncoder, camera: Camera, time: Time): void;
   destroy(): void;
 }

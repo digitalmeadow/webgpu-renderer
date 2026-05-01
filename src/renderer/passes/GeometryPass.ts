@@ -1,7 +1,7 @@
 import shader from "./GeometryPass.wgsl?raw";
 import { Mesh } from "../../mesh";
 import { Vertex } from "../../geometries";
-import { BaseCamera } from "../../camera";
+import { Camera } from "../../camera";
 import { GeometryBuffer } from "../GeometryBuffer";
 import { MaterialManager } from "../../materials";
 import {
@@ -74,7 +74,7 @@ export class GeometryPass {
     encoder: GPUCommandEncoder,
     geometryBuffer: GeometryBuffer,
     meshes: Mesh[],
-    camera: BaseCamera,
+    camera: Camera,
     materialManager: MaterialManager,
     // External manager lets callers (e.g. ReflectionProbePass) own buffer lifetime.
     // When provided, beginFrame() is skipped — caller is responsible for cleanup.
@@ -96,7 +96,7 @@ export class GeometryPass {
     device: GPUDevice,
     passEncoder: GPURenderPassEncoder,
     meshes: Mesh[],
-    camera: BaseCamera,
+    camera: Camera,
     materialManager: MaterialManager,
     // External manager lets callers (e.g. ReflectionProbePass) own buffer lifetime.
     // When provided, beginFrame() is skipped — caller is responsible for cleanup.

@@ -8,7 +8,7 @@ import {
 } from "../../materials";
 import { LightManager } from "../../lights/LightManager";
 import { SceneUniforms } from "../../uniforms";
-import { BaseCamera } from "../../camera";
+import { Camera } from "../../camera";
 import { Vertex } from "../../geometries";
 import { Vec3 } from "../../math";
 import shader from "./ForwardPass.wgsl?raw";
@@ -150,7 +150,7 @@ export class ForwardPass {
   render(
     encoder: GPUCommandEncoder,
     meshes: Mesh[],
-    camera: BaseCamera,
+    camera: Camera,
     outputView: GPUTextureView,
     depthView: GPUTextureView,
   ): void {
