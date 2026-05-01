@@ -5,7 +5,7 @@ import { Vertex } from "../../geometries";
 import { MaterialManager } from "../../materials";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
 import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
-import { Camera } from "../../camera";
+import { BaseCamera } from "../../camera";
 
 export class ShadowPassSpotLight {
   private device: GPUDevice;
@@ -146,7 +146,7 @@ export class ShadowPassSpotLight {
     opaqueMeshes: Mesh[],
     alphaTestMeshes: Mesh[] = [],
     transparentMeshes: Mesh[] = [],
-    camera: Camera,
+    camera: BaseCamera,
   ): void {
     this.instanceGroupManager.beginFrame();
     for (let lightIndex = 0; lightIndex < spotLights.length; lightIndex++) {

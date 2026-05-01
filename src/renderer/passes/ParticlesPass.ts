@@ -1,5 +1,5 @@
 import { ParticleEmitter } from "../../particles/ParticleEmitter";
-import { Camera } from "../../camera";
+import { BaseCamera } from "../../camera";
 import { getParticleVertexBufferLayout } from "../../particles/VertexParticle";
 import { getParticleInstanceBufferLayout } from "../../particles/ParticleInstanceLayout";
 import { Texture } from "../../textures";
@@ -143,7 +143,7 @@ export class ParticlesPass {
 
   render(
     encoder: GPUCommandEncoder,
-    camera: Camera,
+    camera: BaseCamera,
     emitters: ParticleEmitter[],
     swapChainView: GPUTextureView,
     depthTextureView: GPUTextureView,

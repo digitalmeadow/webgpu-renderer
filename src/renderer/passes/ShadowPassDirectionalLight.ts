@@ -9,7 +9,7 @@ import { Vertex } from "../../geometries";
 import { frustumPlanesFromMatrix, aabbInFrustum } from "../../math";
 import { MaterialManager } from "../../materials";
 import { InstanceGroupManager, getInstanceBufferLayout } from "../../scene";
-import { Camera } from "../../camera";
+import { BaseCamera } from "../../camera";
 
 export class ShadowPassDirectionalLight {
   private device: GPUDevice;
@@ -169,7 +169,7 @@ export class ShadowPassDirectionalLight {
     opaqueMeshes: Mesh[],
     alphaTestMeshes: Mesh[] = [],
     transparentMeshes: Mesh[] = [],
-    camera: Camera,
+    camera: BaseCamera,
   ): void {
     this.instanceGroupManager.beginFrame();
     const cameraPos = camera.transform.getWorldPosition();

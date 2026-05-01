@@ -1,4 +1,5 @@
-import { Camera } from "../camera";
+import { BaseCamera } from "../camera";
+import type { Camera } from "../camera";
 import { DirectionalLight, SpotLight, SHADOW_MAP_CASCADES_COUNT } from ".";
 import { Vec3 } from "../math";
 import { SceneUniforms } from "../uniforms";
@@ -423,7 +424,7 @@ export class LightManager {
     this.lightingBindGroupNeedsUpdate = false;
   }
 
-  public update(directionalLights: DirectionalLight[], camera: Camera): void {
+  public update(directionalLights: DirectionalLight[], camera: BaseCamera): void {
     const activeLights = directionalLights.slice(0, this.maxDirectionalLights);
 
     if (activeLights.length > 0) {
@@ -440,14 +441,18 @@ export class LightManager {
           light.lightIndex = i;
           light.direction = light.transform.getForward();
 
-          light.updateCascadeMatrices(
-            camera.transform.getWorldPosition(),
-            cameraDirection,
-            camera.near,
-            camera.far,
-            camera.fov,
-            camera.aspect,
-          );
+          if (camera.cameraType === "perspective") {
+            const perspCamera = camera as Camera;
+            light.updateCascadeMatrices(
+              camera.transform.getWorldPosition(),
+              cameraDirection,
+              camera.near,
+              camera.far,
+              perspCamera.fov,
+              perspCamera.aspect,
+            );
+          }
+          // TODO: implement ortho shadow frustum cascade computation
 
           const lightData = this.createLightData(light, i);
           this.device.queue.writeBuffer(

@@ -1,6 +1,5 @@
 import { Mat4 } from "../math";
-import { Entity, EntityType } from "../scene/Entity";
-import { CameraUniforms } from "./CameraUniforms";
+import { BaseCamera } from "./BaseCamera";
 
 export interface CameraDesc {
   fov: number;
@@ -16,15 +15,10 @@ export const DEFAULT_CAMERA_DESC: CameraDesc = {
   far: 100,
 };
 
-export class Camera extends Entity {
-  readonly type = EntityType.Camera;
-  readonly uniforms: CameraUniforms;
+export class Camera extends BaseCamera {
+  readonly cameraType = "perspective" as const;
 
   private desc: CameraDesc;
-  private viewMatrix: Mat4 = Mat4.create();
-  private projectionMatrix: Mat4 = Mat4.create();
-  public viewProjectionMatrix: Mat4 = Mat4.create();
-  private projectionNeedsUpdate: boolean = true;
 
   get fov(): number {
     return this.desc.fov;
@@ -40,10 +34,8 @@ export class Camera extends Entity {
   }
 
   constructor(device: GPUDevice, name?: string, desc?: Partial<CameraDesc>) {
-    super(name);
+    super(device, name);
     this.desc = { ...DEFAULT_CAMERA_DESC, ...desc };
-    this.uniforms = new CameraUniforms(device);
-    this.needsUpdate = true;
   }
 
   updateDesc(partial: Partial<CameraDesc>): void {
@@ -56,29 +48,7 @@ export class Camera extends Entity {
     this.updateDesc({ aspect: width / height });
   }
 
-  update(): void {
-    if (!this.needsUpdate && !this.transform.needsUpdate) return;
-
-    if (this.projectionNeedsUpdate) {
-      this.updateProjection();
-      this.projectionNeedsUpdate = false;
-    }
-
-    this.updateViewMatrices();
-
-    this.uniforms.update(
-      this.viewMatrix,
-      this.projectionMatrix,
-      this.viewProjectionMatrix,
-      this.transform.getWorldPosition(),
-      this.desc.near,
-      this.desc.far,
-    );
-
-    this.needsUpdate = false;
-  }
-
-  private updateProjection(): void {
+  protected updateProjection(): void {
     Mat4.perspective(
       this.desc.fov,
       this.desc.aspect,
@@ -86,18 +56,5 @@ export class Camera extends Entity {
       this.desc.far,
       this.projectionMatrix,
     );
-  }
-
-  private updateViewMatrices(): void {
-    Mat4.invert(this.transform.worldMatrix, this.viewMatrix);
-    Mat4.multiply(
-      this.projectionMatrix,
-      this.viewMatrix,
-      this.viewProjectionMatrix,
-    );
-  }
-
-  destroy(): void {
-    this.uniforms.destroy();
   }
 }

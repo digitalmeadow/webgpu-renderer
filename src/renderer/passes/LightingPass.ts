@@ -1,6 +1,6 @@
 import shader from "./LightingPass.wgsl?raw";
 import { GeometryBuffer } from "../GeometryBuffer";
-import { Camera } from "../../camera";
+import { BaseCamera } from "../../camera";
 
 export class LightingPass {
   private device: GPUDevice;
@@ -87,7 +87,7 @@ export class LightingPass {
   render(
     encoder: GPUCommandEncoder,
     geometryBuffer: GeometryBuffer,
-    camera: Camera,
+    camera: BaseCamera,
     lightingBindGroup: GPUBindGroup,
     sceneBindGroup: GPUBindGroup,
   ): void {

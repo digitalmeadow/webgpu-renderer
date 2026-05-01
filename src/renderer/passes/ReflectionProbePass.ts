@@ -1,4 +1,4 @@
-import { Camera } from "../../camera";
+import { BaseCamera, Camera } from "../../camera";
 import { Mesh } from "../../mesh";
 import { Vec3, Mat4 } from "../../math";
 import { ReflectionProbe } from "../../scene/ReflectionProbe";
@@ -345,7 +345,7 @@ export class ReflectionProbePass {
    */
   private collectVisibleMeshes(
     allMeshes: Mesh[],
-    camera: Camera,
+    camera: BaseCamera,
     probe: ReflectionProbe,
   ): Mesh[] {
     const visibleMeshes: Mesh[] = [];

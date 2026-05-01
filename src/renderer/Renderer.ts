@@ -1,7 +1,7 @@
 import { ParticlesPass } from "./passes/ParticlesPass";
 import { GBufferPass } from "./passes/GBufferPass";
 import { World, EntityType } from "../scene";
-import { Camera } from "../camera";
+import { Camera, BaseCamera } from "../camera";
 import { Time } from "../time";
 import { GeometryBuffer } from "./GeometryBuffer";
 import { GeometryPass } from "./passes/GeometryPass";
@@ -85,7 +85,7 @@ export class Renderer {
   private devicePixelRatio: number;
   private antiAliasingScale: number;
   private textureSettings: ResolvedTextureSettings;
-  private cameras: Set<Camera> = new Set();
+  private cameras: Set<BaseCamera> = new Set();
 
   public frustumCulling: boolean = true;
   public skyboxTexture: CubeTexture | null = null;
@@ -365,7 +365,7 @@ export class Renderer {
     this.recreateRenderTargets();
   }
 
-  public registerCamera(camera: Camera): void {
+  public registerCamera(camera: BaseCamera): void {
     this.cameras.add(camera);
     if (this.device) {
       camera.resize(this.canvas.width, this.canvas.height);
@@ -373,7 +373,7 @@ export class Renderer {
     }
   }
 
-  public unregisterCamera(camera: Camera): void {
+  public unregisterCamera(camera: BaseCamera): void {
     this.cameras.delete(camera);
   }
 
@@ -381,7 +381,7 @@ export class Renderer {
     this.cameras.clear();
   }
 
-  render(world: World, camera: Camera, time: Time): void {
+  render(world: World, camera: BaseCamera, time: Time): void {
     camera.update();
 
     const meshes = this.collectVisibleMeshes(world, camera);
@@ -564,7 +564,7 @@ export class Renderer {
     opaqueMeshes: Mesh[],
     alphaMeshes: Mesh[],
     blendMeshes: Mesh[],
-    camera: Camera,
+    camera: BaseCamera,
   ): void {
     // On Safari/Metal, a texture that is rendered into as a render attachment
     // cannot be used as a shader resource (texture binding) inside the same
@@ -629,24 +629,29 @@ export class Renderer {
 
     // Occlusion Pass - Directional Lights
     if (occlusionEnabledDirectionalLights.length > 0) {
-      for (const light of occlusionEnabledDirectionalLights) {
-        light.updateOcclusionMatrixFromFrustum(
-          camera.transform.getWorldPosition(),
-          camera.transform.getWorldForward(),
-          camera.near,
-          camera.far,
-          camera.fov,
-          camera.aspect,
+      if (camera.cameraType === "perspective") {
+        const perspCamera = camera as Camera;
+        for (const light of occlusionEnabledDirectionalLights) {
+          light.updateOcclusionMatrixFromFrustum(
+            camera.transform.getWorldPosition(),
+            camera.transform.getWorldForward(),
+            camera.near,
+            camera.far,
+            perspCamera.fov,
+            perspCamera.aspect,
+          );
+        }
+
+        this.occlusionPassDirectionalLight.render(
+          shadowEncoder,
+          occlusionEnabledDirectionalLights,
+          opaqueMeshes,
+          alphaMeshes,
+          blendMeshes,
         );
       }
-
-      this.occlusionPassDirectionalLight.render(
-        shadowEncoder,
-        occlusionEnabledDirectionalLights,
-        opaqueMeshes,
-        alphaMeshes,
-        blendMeshes,
-      );
+      // TODO: implement ortho occlusion frustum computation — skip render for
+      // ortho cameras until then to avoid stale matrices producing incorrect results.
 
       // No shadow-buffer restoration needed: the occlusion pass now uses a
       // dedicated occlusionBuffer / occlusionBindGroup that is fully separate
@@ -671,7 +676,7 @@ export class Renderer {
 
   private renderPostProcessing(
     encoder: GPUCommandEncoder,
-    camera: Camera,
+    camera: BaseCamera,
   ): GPUTextureView {
     let lastOutputView: GPUTextureView = this.lightingPass.outputView;
 
@@ -936,7 +941,7 @@ export class Renderer {
     return this.cachedMeshes;
   }
 
-  private collectVisibleMeshes(world: World, camera: Camera): Mesh[] {
+  private collectVisibleMeshes(world: World, camera: BaseCamera): Mesh[] {
     const allMeshes = this.collectMeshes(world);
 
     if (!this.frustumCulling) {
