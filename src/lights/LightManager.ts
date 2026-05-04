@@ -445,8 +445,7 @@ export class LightManager {
             cameraDirection,
             camera.near,
             camera.far,
-            camera.fov,
-            camera.aspect,
+            camera,
           );
 
           const lightData = this.createLightData(light, i);

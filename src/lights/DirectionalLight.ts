@@ -1,6 +1,7 @@
 import { Vec3, Mat4 } from "../math";
 import { Light } from ".";
 import { EntityType } from "../scene/Entity";
+import type { Camera } from "../camera";
 
 export const SHADOW_MAP_CASCADES_COUNT = 3;
 export const DEFAULT_SHADOW_CASCADE_SPLITS = [0.0, 0.33, 0.66, 1.0];
@@ -120,8 +121,7 @@ export class DirectionalLight extends Light {
     cameraDirection: Vec3,
     cameraNear: number,
     cameraFar: number,
-    cameraFov: number,
-    cameraAspect: number,
+    camera: Camera,
   ): void {
     if (!this.shadowBuffer || !this._device) {
       return;
@@ -144,8 +144,6 @@ export class DirectionalLight extends Light {
         : Vec3.normalize(Vec3.cross(Vec3.create(1, 0, 0), forward));
     const cameraUp = Vec3.cross(forward, right);
 
-    const tanHalfFov = Math.tan(cameraFov / 2);
-
     const actualSplits: number[] = [cameraNear];
 
     for (
@@ -167,12 +165,11 @@ export class DirectionalLight extends Light {
 
       // Compute frustum corners at both splitNear and splitFar (8 corners total)
       // This ensures proper depth extent even when camera aligns with light direction
-      const halfHeightFar = splitFar * tanHalfFov;
-      const halfWidthFar = halfHeightFar * cameraAspect;
+      const { halfWidth: halfWidthFar, halfHeight: halfHeightFar } =
+        camera.getFrustumHalfExtents(splitFar);
 
-      // Use splitNear for near plane extent (smaller frustum for closer cascade)
-      const halfHeightNear = splitNear * tanHalfFov;
-      const halfWidthNear = halfHeightNear * cameraAspect;
+      const { halfWidth: halfWidthNear, halfHeight: halfHeightNear } =
+        camera.getFrustumHalfExtents(splitNear);
 
       const corners: Vec3[] = [];
 
@@ -402,8 +399,7 @@ export class DirectionalLight extends Light {
     cameraDirection: Vec3,
     cameraNear: number,
     cameraFar: number,
-    cameraFov: number,
-    cameraAspect: number,
+    camera: Camera,
   ): void {
     if (!this.shadowBuffer || !this._device) {
       return;
@@ -426,19 +422,17 @@ export class DirectionalLight extends Light {
         : Vec3.normalize(Vec3.cross(forward, Vec3.create(1, 0, 0)));
     const cameraUp = Vec3.cross(right, forward);
 
-    const tanHalfFov = Math.tan(cameraFov / 2);
-
     // Calculate frustum extent based on percentage of camera far plane
     const occlusionNear = cameraNear;
     const occlusionFar =
       cameraNear + (cameraFar - cameraNear) * this.occlusionFrustumPercentage;
 
     // Compute frustum corners at both occlusionNear and occlusionFar (8 corners total)
-    const halfHeightFar = occlusionFar * tanHalfFov;
-    const halfWidthFar = halfHeightFar * cameraAspect;
+    const { halfWidth: halfWidthFar, halfHeight: halfHeightFar } =
+      camera.getFrustumHalfExtents(occlusionFar);
 
-    const halfHeightNear = occlusionNear * tanHalfFov;
-    const halfWidthNear = halfHeightNear * cameraAspect;
+    const { halfWidth: halfWidthNear, halfHeight: halfHeightNear } =
+      camera.getFrustumHalfExtents(occlusionNear);
 
     const corners: Vec3[] = [];
 

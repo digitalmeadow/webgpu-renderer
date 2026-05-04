@@ -2,59 +2,31 @@ import { Mat4 } from "../math";
 import { Entity, EntityType } from "../scene/Entity";
 import { CameraUniforms } from "./CameraUniforms";
 
-export interface CameraDesc {
-  fov: number;
-  aspect: number;
-  near: number;
-  far: number;
-}
-
-export const DEFAULT_CAMERA_DESC: CameraDesc = {
-  fov: Math.PI / 4,
-  aspect: 16 / 9,
-  near: 0.1,
-  far: 100,
-};
-
-export class Camera extends Entity {
+export abstract class Camera extends Entity {
   readonly type = EntityType.Camera;
   readonly uniforms: CameraUniforms;
 
-  private desc: CameraDesc;
-  private viewMatrix: Mat4 = Mat4.create();
-  private projectionMatrix: Mat4 = Mat4.create();
+  protected viewMatrix: Mat4 = Mat4.create();
+  protected projectionMatrix: Mat4 = Mat4.create();
   public viewProjectionMatrix: Mat4 = Mat4.create();
-  private projectionNeedsUpdate: boolean = true;
+  protected projectionNeedsUpdate: boolean = true;
 
-  get fov(): number {
-    return this.desc.fov;
-  }
-  get aspect(): number {
-    return this.desc.aspect;
-  }
-  get near(): number {
-    return this.desc.near;
-  }
-  get far(): number {
-    return this.desc.far;
-  }
+  abstract get near(): number;
+  abstract get far(): number;
 
-  constructor(device: GPUDevice, name?: string, desc?: Partial<CameraDesc>) {
+  constructor(device: GPUDevice, name?: string) {
     super(name);
-    this.desc = { ...DEFAULT_CAMERA_DESC, ...desc };
     this.uniforms = new CameraUniforms(device);
     this.needsUpdate = true;
   }
 
-  updateDesc(partial: Partial<CameraDesc>): void {
-    this.desc = { ...this.desc, ...partial };
-    this.projectionNeedsUpdate = true;
-    this.needsUpdate = true;
-  }
-
-  resize(width: number, height: number): void {
-    this.updateDesc({ aspect: width / height });
-  }
+  abstract updateDesc(partial: Record<string, unknown>): void;
+  abstract resize(width: number, height: number): void;
+  abstract updateProjection(): void;
+  abstract getFrustumHalfExtents(distance: number): {
+    halfWidth: number;
+    halfHeight: number;
+  };
 
   update(): void {
     if (!this.needsUpdate && !this.transform.needsUpdate) return;
@@ -71,21 +43,11 @@ export class Camera extends Entity {
       this.projectionMatrix,
       this.viewProjectionMatrix,
       this.transform.getWorldPosition(),
-      this.desc.near,
-      this.desc.far,
+      this.near,
+      this.far,
     );
 
     this.needsUpdate = false;
-  }
-
-  private updateProjection(): void {
-    Mat4.perspective(
-      this.desc.fov,
-      this.desc.aspect,
-      this.desc.near,
-      this.desc.far,
-      this.projectionMatrix,
-    );
   }
 
   private updateViewMatrices(): void {

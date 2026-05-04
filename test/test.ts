@@ -1,5 +1,6 @@
 import {
-  Camera,
+  PerspectiveCamera,
+  OrthoCamera,
   CubeTexture,
   DirectionalLight,
   FlyControls,
@@ -191,7 +192,7 @@ async function main() {
 
   // Camera
   const cameraFar = 100.0;
-  const camera = new Camera(device, "main", {
+  const camera = new PerspectiveCamera(device, "main", {
     fov: Math.PI / 4,
     aspect: canvas.clientWidth / canvas.clientHeight,
     near: 0.1,
@@ -199,6 +200,15 @@ async function main() {
   });
   camera.transform.setPosition(0, 4, -12);
   camera.transform.lookAt(new Vec3(0, 1, 0));
+  // Orthographic camera test
+  // const camera = new OrthoCamera(device, "ortho", {
+  //   aspect: canvas.clientWidth / canvas.clientHeight,
+  //   size: 10,
+  //   near: 0.1,
+  //   far: cameraFar,
+  // });
+  // camera.transform.setPosition(0, 4, -12);
+  // camera.transform.lookAt(new Vec3(0, 1, 0));
   scene.add(camera);
 
   const flyControls = new FlyControls(canvas, camera);

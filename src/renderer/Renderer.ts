@@ -635,8 +635,7 @@ export class Renderer {
           camera.transform.getWorldForward(),
           camera.near,
           camera.far,
-          camera.fov,
-          camera.aspect,
+          camera,
         );
       }
 

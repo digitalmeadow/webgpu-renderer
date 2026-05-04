@@ -1,4 +1,4 @@
-import { Camera } from "../../camera";
+import { Camera, PerspectiveCamera } from "../../camera";
 import { Mesh } from "../../mesh";
 import { Vec3, Mat4 } from "../../math";
 import { ReflectionProbe } from "../../scene/ReflectionProbe";
@@ -309,7 +309,7 @@ export class ReflectionProbePass {
       );
 
       // Create camera with 90 degree FOV and 1:1 aspect ratio
-      const camera = new Camera(this.device, `ReflectionProbe_Face${i}`, {
+      const camera = new PerspectiveCamera(this.device, `ReflectionProbe_Face${i}`, {
         fov: Math.PI / 2,
         aspect: 1.0,
         near,
