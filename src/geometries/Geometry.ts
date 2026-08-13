@@ -40,13 +40,19 @@ export class Geometry {
   private computeAABB(): AABB {
     const aabb = new AABB();
     for (const vertex of this.vertices) {
-      aabb.expandByPoint(vertex.position[0], vertex.position[1], vertex.position[2]);
+      aabb.expandByPoint(
+        vertex.position[0],
+        vertex.position[1],
+        vertex.position[2],
+      );
     }
     return aabb;
   }
 
   private getVertexData(): Float32Array<ArrayBuffer> {
-    const data = new Float32Array(this.vertices.length * VERTEX_FLOAT_COUNT) as Float32Array<ArrayBuffer>;
+    const data = new Float32Array(
+      this.vertices.length * VERTEX_FLOAT_COUNT,
+    ) as Float32Array<ArrayBuffer>;
     this.vertices.forEach((v, i) => {
       data.set(v.toArray(), i * VERTEX_FLOAT_COUNT);
     });

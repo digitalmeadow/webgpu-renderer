@@ -6,10 +6,15 @@ export class ConvexHull {
   public vertexIndices: Uint32Array;
 
   constructor(vertexPositions: Float32Array, vertexIndices: Uint32Array) {
-    const { positions, indices } = ConvexHull.weldVertices(vertexPositions, vertexIndices);
+    const { positions, indices } = ConvexHull.weldVertices(
+      vertexPositions,
+      vertexIndices,
+    );
 
     if (!ConvexHull.isManifold(indices)) {
-      throw new Error("Invalid mesh: not closed or non-manifold edges detected.");
+      throw new Error(
+        "Invalid mesh: not closed or non-manifold edges detected.",
+      );
     }
 
     this.vertexPositions = positions;
@@ -35,7 +40,11 @@ export class ConvexHull {
       if (newIndex === undefined) {
         newIndex = uniqueCount++;
         keyToNewIndex.set(key, newIndex);
-        uniquePositions.push(vertexPositions[i], vertexPositions[i + 1], vertexPositions[i + 2]);
+        uniquePositions.push(
+          vertexPositions[i],
+          vertexPositions[i + 1],
+          vertexPositions[i + 2],
+        );
       }
       oldToNewIndex[i / 3] = newIndex;
     }
