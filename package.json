@@ -34,7 +34,7 @@
     "dev": "vite",
     "build": "vite build && tsc",
     "preview": "vite preview",
-    "publish": "npm run build && npm publish"
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@types/node": "26.2.0",
