@@ -38,9 +38,17 @@ const MIPMAP_SHADER_CODE = `
 `;
 
 // Cached per format — pipeline creation is expensive and format is the only variant.
-// Caveat: cache persists across device resets; invalidate if device loss recovery is added.
 const _pipelineCache = new Map<GPUTextureFormat, GPURenderPipeline>();
 let _sampler: GPUSampler | null = null;
+// Renderer.destroy() destroys its device; a new device must not reuse its cache
+let _cacheDevice: GPUDevice | null = null;
+
+function invalidateCacheOnDeviceChange(device: GPUDevice): void {
+  if (_cacheDevice === device) return;
+  _cacheDevice = device;
+  _pipelineCache.clear();
+  _sampler = null;
+}
 
 // Per-texture caches for views and bind groups.
 // WeakMap keys on GPUTexture so entries are evicted when the texture is GC'd.
@@ -58,6 +66,7 @@ const _cubeMipCache = new WeakMap<GPUTexture, CubeMipCache>();
 const _2dMipCache = new WeakMap<GPUTexture, Mip2DCache>();
 
 function getMipmapSampler(device: GPUDevice): GPUSampler {
+  invalidateCacheOnDeviceChange(device);
   if (!_sampler) {
     _sampler = device.createSampler({
       label: "Mipmap Blit Sampler",
@@ -72,6 +81,7 @@ function getMipmapPipeline(
   device: GPUDevice,
   format: GPUTextureFormat,
 ): GPURenderPipeline {
+  invalidateCacheOnDeviceChange(device);
   const cached = _pipelineCache.get(format);
   if (cached) return cached;
 

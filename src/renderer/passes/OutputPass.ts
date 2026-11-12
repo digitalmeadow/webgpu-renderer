@@ -114,4 +114,9 @@ export class OutputPass {
     passEncoder.draw(3);
     passEncoder.end();
   }
+
+  destroy(): void {
+    this.bindGroup = null;
+    this.lastInputView = null;
+  }
 }

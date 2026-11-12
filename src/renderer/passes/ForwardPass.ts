@@ -335,4 +335,13 @@ export class ForwardPass {
 
     passEncoder.end();
   }
+
+  destroy(): void {
+    this.instanceGroupManager.clear();
+    this.lightSceneBindGroup = null;
+    this.lastShadowTextureView = null;
+    this.lastSpotShadowTextureView = null;
+    this.lastSkyboxTextureView = null;
+    this.lastSkyboxSampler = null;
+  }
 }

@@ -8,11 +8,14 @@ export const DEFAULT_SHADOW_CASCADE_SPLITS = [0.0, 0.33, 0.66, 1.0];
 
 // Module-level cache — layout descriptor is identical for all instances
 let _shadowBindGroupLayout: GPUBindGroupLayout | null = null;
+// Renderer.destroy() destroys its device; a new Renderer must not reuse its layout
+let _shadowBindGroupLayoutDevice: GPUDevice | null = null;
 
 export function getDirectionalLightShadowBindGroupLayout(
   device: GPUDevice,
 ): GPUBindGroupLayout {
-  if (!_shadowBindGroupLayout) {
+  if (!_shadowBindGroupLayout || _shadowBindGroupLayoutDevice !== device) {
+    _shadowBindGroupLayoutDevice = device;
     _shadowBindGroupLayout = device.createBindGroupLayout({
       label: "DirectionalLight Shadow BindGroup Layout",
       entries: [

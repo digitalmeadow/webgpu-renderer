@@ -34,3 +34,5 @@ function animate() {
 
 animate();
 ```
+
+`renderer.destroy()` frees all renderer-owned GPU resources and the device; user-owned meshes, materials, cameras and textures are not destroyed.

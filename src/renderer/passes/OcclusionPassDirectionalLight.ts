@@ -243,4 +243,10 @@ export class OcclusionPassDirectionalLight {
   public getOcclusionTextureArrayView(): GPUTextureView {
     return this.occlusionTextureView;
   }
+
+  destroy(): void {
+    this.occlusionTexture.destroy();
+    this.occlusionTextureViews = [];
+    this.instanceGroupManager.clear();
+  }
 }

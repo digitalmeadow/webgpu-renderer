@@ -42,6 +42,7 @@ export class MaterialManager {
   private placeholderEnvTexture: GPUTexture;
   private placeholderEnvView: GPUTextureView;
   private placeholderEnvSampler: GPUSampler;
+  private fallbackUniformBuffer: GPUBuffer;
   public readonly fallbackBindGroup: GPUBindGroup;
   private textureSettings: ResolvedTextureSettings;
 
@@ -187,6 +188,8 @@ export class MaterialManager {
       ],
     });
 
+    this.fallbackUniformBuffer = this.createFallbackUniformBuffer();
+
     this.fallbackBindGroup = device.createBindGroup({
       label: "Fallback Material Bind Group",
       layout: this.materialBindGroupLayout,
@@ -200,7 +203,7 @@ export class MaterialManager {
         },
         {
           binding: 4,
-          resource: { buffer: this.createFallbackUniformBuffer() },
+          resource: { buffer: this.fallbackUniformBuffer },
         },
         { binding: 5, resource: this.placeholderEnvView },
         { binding: 6, resource: this.placeholderEnvSampler },
@@ -770,5 +773,30 @@ export class MaterialManager {
 
   setGlobalSkybox(skybox: CubeTexture | CubeRenderTarget | null): void {
     this.environmentTextures[0] = skybox;
+  }
+
+  // Material uniform buffers belong to the materials; only uploads and caches made here are destroyed
+  destroy(): void {
+    for (const gpuTexture of this.textureCache.values()) {
+      gpuTexture.destroy();
+    }
+    this.textureCache.clear();
+    for (const cubeTexture of this.cubeTextureCache.values()) {
+      cubeTexture.destroy();
+    }
+    this.cubeTextureCache.clear();
+    this.placeholderNormalTexture.destroy();
+    this.placeholderMetalRoughnessTexture.destroy();
+    this.placeholderAlbedoTexture.destroy();
+    this.placeholderEmissiveTexture.destroy();
+    this.placeholderEnvTexture.destroy();
+    this.fallbackUniformBuffer.destroy();
+    this.bindGroupCache = new WeakMap();
+    this.bindGroupEnvTextureCache = new WeakMap();
+    this.customPipelineCache.clear();
+    this.hookInstancedPipelineCache.clear();
+    this.hookForwardInstancedPipelineCache.clear();
+    this.environmentTextures = [null];
+    this.environmentTextureMap.clear();
   }
 }

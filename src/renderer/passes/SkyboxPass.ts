@@ -3,11 +3,14 @@ import { CubeTexture } from "../../textures/CubeTexture";
 import { GeometryBuffer } from "../GeometryBuffer";
 
 let _skyboxBindGroupLayout: GPUBindGroupLayout | null = null;
+// Renderer.destroy() destroys its device; a new Renderer must not reuse its layout
+let _skyboxBindGroupLayoutDevice: GPUDevice | null = null;
 
 export function createSkyboxBindGroupLayout(
   device: GPUDevice,
 ): GPUBindGroupLayout {
-  if (!_skyboxBindGroupLayout) {
+  if (!_skyboxBindGroupLayout || _skyboxBindGroupLayoutDevice !== device) {
+    _skyboxBindGroupLayoutDevice = device;
     _skyboxBindGroupLayout = device.createBindGroupLayout({
       label: "Skybox Bind Group Layout",
       entries: [
@@ -145,5 +148,6 @@ export class SkyboxPass {
 
   destroy(): void {
     this.skyboxBindGroup = null;
+    this.skyboxTexture = null;
   }
 }

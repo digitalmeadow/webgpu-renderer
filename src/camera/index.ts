@@ -3,3 +3,4 @@ export * from "./PerspectiveCamera";
 export * from "./OrthoCamera";
 export * from "./CameraUniforms";
 export * from "./FlyControls";
+export * from "./OrbitControls";

@@ -20,11 +20,14 @@ const FLOAT_COUNT = alignVec4(OFFSET_FOG_ENABLED + GpuFloats.f32); // = 24
 const BUFFER_SIZE = floatByteSize(FLOAT_COUNT); // = 96
 
 let _layout: GPUBindGroupLayout | null = null;
+// Renderer.destroy() destroys its device; a new Renderer must not reuse its layout
+let _layoutDevice: GPUDevice | null = null;
 
 export function createSceneBindGroupLayout(
   device: GPUDevice,
 ): GPUBindGroupLayout {
-  if (!_layout) {
+  if (!_layout || _layoutDevice !== device) {
+    _layoutDevice = device;
     _layout = device.createBindGroupLayout({
       label: "Scene Bind Group Layout",
       entries: [
@@ -78,6 +81,7 @@ export class SceneUniforms {
   // u32 view — fogEnabled must not be written as float32
   private u32Data = new Uint32Array(1);
   private skyboxTexture: CubeTexture | null = null;
+  private placeholderTexture: GPUTexture;
   private placeholderTextureView: GPUTextureView;
   private placeholderSampler: GPUSampler;
   private environmentTextures: Array<CubeTexture | CubeRenderTarget | null> =
@@ -87,13 +91,13 @@ export class SceneUniforms {
   constructor(device: GPUDevice) {
     this.device = device;
 
-    const placeholderTexture = device.createTexture({
+    this.placeholderTexture = device.createTexture({
       label: "Scene Uniforms Placeholder Cube Texture",
       size: { width: 1, height: 1, depthOrArrayLayers: 6 },
       format: "rgba8unorm",
       usage: GPUTextureUsage.TEXTURE_BINDING,
     });
-    this.placeholderTextureView = placeholderTexture.createView({
+    this.placeholderTextureView = this.placeholderTexture.createView({
       dimension: "cube",
     });
     this.placeholderSampler = device.createSampler({
@@ -227,5 +231,14 @@ export class SceneUniforms {
       this.probeBindGroup = this.createProbeRenderingBindGroup();
     }
     return this.probeBindGroup;
+  }
+
+  // Skybox and environment textures are user-owned
+  destroy(): void {
+    this.buffer.destroy();
+    this.placeholderTexture.destroy();
+    this.skyboxTexture = null;
+    this.environmentTextures = [];
+    this.probeBindGroup = null;
   }
 }

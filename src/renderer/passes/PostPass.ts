@@ -21,4 +21,6 @@ export abstract class PostPass {
   resize(width: number, height: number): void {
     // Override in subclass if needed
   }
+
+  destroy?(): void;
 }

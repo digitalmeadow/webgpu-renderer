@@ -122,6 +122,7 @@ export class Renderer {
   private highResViewA: GPUTextureView | null = null;
   private highResViewB: GPUTextureView | null = null;
   private currentFrame: number = 0;
+  private destroyed: boolean = false;
 
   // Scene collection cache
   private cachedMeshes: Mesh[] = [];
@@ -320,7 +321,7 @@ export class Renderer {
   }
 
   resize(width: number, height: number): void {
-    if (!this.device || !this.context) return;
+    if (this.destroyed || !this.device || !this.context) return;
 
     const dpr = this.devicePixelRatio;
     const w = Math.round(width * dpr);
@@ -382,6 +383,8 @@ export class Renderer {
   }
 
   render(world: World, camera: Camera, time: Time): void {
+    if (this.destroyed) return;
+
     camera.update();
 
     const meshes = this.collectVisibleMeshes(world, camera);
@@ -872,6 +875,8 @@ export class Renderer {
     this.lightingPass.resize(this.renderWidth, this.renderHeight);
 
     if (this.postPassTextureA) {
+      this.postPassTextureA.destroy();
+      this.postPassTextureB?.destroy();
       this.postPassTextureA = null;
       this.postPassTextureB = null;
       this.createPostPassTextures();
@@ -882,6 +887,8 @@ export class Renderer {
     }
 
     if (this.highResTextureA) {
+      this.highResTextureA.destroy();
+      this.highResTextureB?.destroy();
       this.highResTextureA = null;
       this.highResTextureB = null;
       this.createHighResTextures();
@@ -896,12 +903,57 @@ export class Renderer {
     this.shadowPassSpotLight.resize(shadowMapSize);
   }
 
+  // Cameras, meshes, materials and the skybox are user-owned; device.destroy() frees anything left
   public destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+
+    for (const pass of this.gBufferPasses) pass.destroy();
+    for (const pass of this.postPasses) pass.destroy?.();
+    for (const pass of this.highResPostPasses) pass.destroy?.();
+    this.gBufferPasses = [];
+    this.postPasses = [];
+    this.highResPostPasses = [];
+
     this.postPassTextureA?.destroy();
     this.postPassTextureB?.destroy();
     this.highResTextureA?.destroy();
     this.highResTextureB?.destroy();
+    this.postPassTextureA = null;
+    this.postPassTextureB = null;
+    this.highResTextureA = null;
+    this.highResTextureB = null;
+    this.postPassViewA = null;
+    this.postPassViewB = null;
+    this.highResViewA = null;
+    this.highResViewB = null;
+
+    this.reflectionProbePass.destroy();
+    this.geometryPass.destroy();
+    this.lightingPass.destroy();
+    this.skyboxPass.destroy();
+    this.forwardPass.destroy();
+    this.particlesPass.destroy();
+    this.shadowPassDirectionalLight.destroy();
+    this.shadowPassSpotLight.destroy();
+    this.occlusionPassDirectionalLight.destroy();
+    this.occlusionPassSpotLight.destroy();
+    this.outputPass.destroy();
     this.geometryBuffer.destroy();
+
+    this.materialManager.destroy();
+    this.lightManager.destroy();
+    this.sceneUniforms.destroy();
+
+    this.skyboxTexture = null;
+    this.cameras.clear();
+    this.cachedMeshes = [];
+    this.cachedLights = [];
+    this.cachedEmitters = [];
+    this.cachedReflectionProbes = [];
+
+    this.context.unconfigure();
+    this.device.destroy();
   }
 
   // Update all scene caches atomically when scene version changes

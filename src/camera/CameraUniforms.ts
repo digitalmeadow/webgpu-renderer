@@ -15,11 +15,14 @@ const FLOAT_COUNT = alignVec4(OFFSET_NEAR_FAR + GpuFloats.vec2); // pad to vec4 
 const BUFFER_SIZE = floatByteSize(FLOAT_COUNT);
 
 let _cameraBindGroupLayout: GPUBindGroupLayout | null = null;
+// A destroyed renderer's device can't be reused: a new device needs its own layout.
+let _cameraBindGroupLayoutDevice: GPUDevice | null = null;
 
 export function createCameraBindGroupLayout(
   device: GPUDevice,
 ): GPUBindGroupLayout {
-  if (!_cameraBindGroupLayout) {
+  if (!_cameraBindGroupLayout || _cameraBindGroupLayoutDevice !== device) {
+    _cameraBindGroupLayoutDevice = device;
     _cameraBindGroupLayout = device.createBindGroupLayout({
       label: "Camera Bind Group Layout",
       entries: [

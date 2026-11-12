@@ -17,6 +17,7 @@ export class ParticlesPass {
 
   private textureCache: Map<Texture, GPUTexture> = new Map();
   private textureViewCache: Map<GPUTexture, GPUTextureView> = new Map();
+  private placeholderTexture: GPUTexture;
   private placeholderTextureView: GPUTextureView;
 
   private particlesPassBindGroup: GPUBindGroup | null = null;
@@ -138,7 +139,8 @@ export class ParticlesPass {
       },
     });
 
-    this.placeholderTextureView = this.createPlaceholderTextureView();
+    this.placeholderTexture = this.createPlaceholderTexture();
+    this.placeholderTextureView = this.placeholderTexture.createView();
   }
 
   render(
@@ -261,7 +263,7 @@ export class ParticlesPass {
     return this.textureViewCache.get(gpuTexture)!;
   }
 
-  private createPlaceholderTextureView(): GPUTextureView {
+  private createPlaceholderTexture(): GPUTexture {
     const texture = this.device.createTexture({
       label: "Placeholder Particle Texture",
       size: { width: 1, height: 1, depthOrArrayLayers: 1 },
@@ -280,6 +282,18 @@ export class ParticlesPass {
       { width: 1, height: 1 },
     );
 
-    return texture.createView();
+    return texture;
+  }
+
+  destroy(): void {
+    // Cached textures are uploads made by this pass, not the user's Texture objects
+    for (const gpuTexture of this.textureCache.values()) {
+      gpuTexture.destroy();
+    }
+    this.textureCache.clear();
+    this.textureViewCache.clear();
+    this.placeholderTexture.destroy();
+    this.particlesPassBindGroup = null;
+    this.emitterBindGroupCache = new WeakMap();
   }
 }

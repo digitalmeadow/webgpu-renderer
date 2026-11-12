@@ -270,4 +270,10 @@ export class ShadowPassSpotLight {
   public getShadowTextureViews(): GPUTextureView[] {
     return this.shadowTextureViews;
   }
+
+  destroy(): void {
+    this.shadowTexture.destroy();
+    this.shadowTextureViews = [];
+    this.instanceGroupManager.clear();
+  }
 }

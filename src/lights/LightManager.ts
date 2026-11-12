@@ -533,4 +533,16 @@ export class LightManager {
 
     return lightData;
   }
+
+  // Per-light shadow/occlusion buffers belong to the lights themselves
+  destroy(): void {
+    this.lightBuffer.destroy();
+    this.spotLightBuffer.destroy();
+    this.dummyShadowBuffer.destroy();
+    this.dummyShadowTexture.destroy();
+    this.shadowTextureView = null;
+    this.shadowTextureViewArray = null;
+    this.spotShadowTextureView = null;
+    this.sceneLightBindGroup = null;
+  }
 }

@@ -408,13 +408,16 @@ export class ReflectionProbePass {
     return false;
   }
 
-  /**
-   * Destroy resources
-   */
+  // Probe cube render targets belong to the probe entity (ReflectionProbe.destroy)
   destroy(): void {
-    if (this.geometryBuffer) {
-      // GeometryBuffer doesn't have a destroy method, but we should clean up if needed
-      this.geometryBuffer = null;
-    }
+    this.geometryBuffer?.destroy();
+    this.geometryBuffer = null;
+    this.skyboxPass?.destroy();
+    this.skyboxPass = null;
+    for (const cam of this.faceCameras) cam.destroy();
+    this.faceCameras = [];
+    this.instanceGroupManager.clear();
+    this.skyboxTexture = null;
+    this.cachedProbeResolution = 0;
   }
 }

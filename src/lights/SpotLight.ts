@@ -6,11 +6,14 @@ export const SPOT_SHADOW_MAP_SIZE = 1024;
 
 // Module-level cache — layout descriptor is identical for all instances
 let _shadowBindGroupLayout: GPUBindGroupLayout | null = null;
+// Renderer.destroy() destroys its device; a new Renderer must not reuse its layout
+let _shadowBindGroupLayoutDevice: GPUDevice | null = null;
 
 export function getSpotLightShadowBindGroupLayout(
   device: GPUDevice,
 ): GPUBindGroupLayout {
-  if (!_shadowBindGroupLayout) {
+  if (!_shadowBindGroupLayout || _shadowBindGroupLayoutDevice !== device) {
+    _shadowBindGroupLayoutDevice = device;
     _shadowBindGroupLayout = device.createBindGroupLayout({
       label: "SpotLight Shadow BindGroup Layout",
       entries: [

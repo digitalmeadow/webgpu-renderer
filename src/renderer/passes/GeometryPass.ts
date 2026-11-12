@@ -175,4 +175,8 @@ export class GeometryPass {
       passEncoder.drawIndexed(group.geometry.indexCount, group.instanceCount);
     }
   }
+
+  destroy(): void {
+    this.instanceGroupManager.clear();
+  }
 }

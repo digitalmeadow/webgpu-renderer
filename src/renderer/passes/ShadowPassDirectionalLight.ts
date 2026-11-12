@@ -312,4 +312,10 @@ export class ShadowPassDirectionalLight {
   public getShadowTextureViews(): GPUTextureView[] {
     return this.shadowTextureViews;
   }
+
+  destroy(): void {
+    this.shadowTexture.destroy();
+    this.shadowTextureViews = [];
+    this.instanceGroupManager.clear();
+  }
 }

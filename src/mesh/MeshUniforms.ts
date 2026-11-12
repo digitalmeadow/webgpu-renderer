@@ -12,11 +12,14 @@ const FLOAT_COUNT = alignVec4(OFFSET_BILLBOARD_AXIS + 1);
 const BUFFER_SIZE = floatByteSize(FLOAT_COUNT);
 
 let _meshBindGroupLayout: GPUBindGroupLayout | null = null;
+// Renderer.destroy() destroys its device; a new Renderer must not reuse its layout
+let _meshBindGroupLayoutDevice: GPUDevice | null = null;
 
 export function createMeshBindGroupLayout(
   device: GPUDevice,
 ): GPUBindGroupLayout {
-  if (!_meshBindGroupLayout) {
+  if (!_meshBindGroupLayout || _meshBindGroupLayoutDevice !== device) {
+    _meshBindGroupLayoutDevice = device;
     _meshBindGroupLayout = device.createBindGroupLayout({
       label: "Mesh Uniforms Bind Group Layout",
       entries: [
